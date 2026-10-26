@@ -7,45 +7,62 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 p-4 md:p-8 min-h-screen">
-  <div class="max-w-4xl mx-auto space-y-6">
+  <div class="max-w-5xl mx-auto space-y-6">
     
-    <!-- 상단 헤더: 실시간 환율 -->
+    <!-- 상단 헤더: 실시간 환율 (USD 메인 표기) -->
     <header class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
         <div class="flex items-center gap-2">
           <span class="text-xs font-bold uppercase tracking-wider bg-slate-800 text-white px-2 py-0.5 rounded">Semiconductor FX</span>
-          <h1 class="text-xl font-bold text-slate-900">반도체 고객사 납품 마진 방어 견적기</h1>
+          <h1 class="text-xl font-bold text-slate-900">반도체 부품 재고 관리 & 마진 방어 견적기</h1>
         </div>
-        <p class="text-sm text-slate-500 mt-1">실시간 환율 변동 반영 | 고객사 납품 단가(EA) 및 총 수주 견적 하한선 자동 산출</p>
+        <p class="text-sm text-slate-500 mt-1">실시간 환율 변동 반영 | 라인별 선적 재고 기록 및 고객사 납품 하한선 자동 산출</p>
       </div>
       <div class="text-left md:text-right">
-        <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">실시간 USD/KRW</span>
-        <div id="liveFx" class="text-2xl font-black text-slate-900 mt-1">로딩 중...</div>
+        <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">실시간 FX Rate (USD Base)</span>
+        <div id="liveFx" class="text-2xl font-black text-slate-900 mt-1">$1.00 = -</div>
       </div>
     </header>
 
+    <!-- 견적 시뮬레이터 메인 그리드 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       
       <!-- 1. 매입 조건 및 납품 수량 입력 -->
       <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 md:col-span-1 space-y-4">
-        <div class="border-b pb-2">
-          <h2 class="font-bold text-base text-slate-900">견적 파라미터</h2>
-          <p class="text-xs text-slate-400 mt-0.5">매입 단가와 고객사 납품 수량을 입력하세요.</p>
+        <div class="border-b pb-2 flex justify-between items-center">
+          <div>
+            <h2 class="font-bold text-base text-slate-900">견적 파라미터</h2>
+            <p class="text-xs text-slate-400">직접 입력하거나 아래 목록에서 선택</p>
+          </div>
+          <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-2.5 py-1.5 rounded-lg transition-colors">
+            현재 조건 저장
+          </button>
         </div>
 
         <div class="space-y-3 text-xs font-medium">
+          <div>
+            <label class="text-slate-600 block mb-1">제품명 / Part Number</label>
+            <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+
           <div>
             <label class="text-slate-600 block mb-1">개당 선적 매입가 (USD, $/EA)</label>
             <input type="number" id="inputUsd" value="2.50" step="0.001" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
 
-          <div>
-            <label class="text-slate-600 block mb-1">고객사 납품 수량 (Quantity, EA/PCS)</label>
-            <input type="number" id="inputQty" value="1000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-slate-600 block mb-1">견적 수량 (EA)</label>
+              <input type="number" id="inputQty" value="1000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+              <label class="text-slate-600 block mb-1">현재 창고 재고 (EA)</label>
+              <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
           </div>
 
           <div>
-            <label class="text-slate-600 block mb-1">기존 선적 당시 환율 (KRW)</label>
+            <label class="text-slate-600 block mb-1">선적 당시 적용 환율 ($1.00 기준 KRW)</label>
             <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
 
@@ -58,13 +75,13 @@
         <!-- 원가 비교 요약 -->
         <div class="pt-4 border-t space-y-3 text-xs text-slate-500">
           <div>
-            <div class="text-[11px] font-semibold text-slate-400 mb-1">현재 창고 재고 매입원가 (기존 선적분)</div>
+            <div class="text-[11px] font-semibold text-slate-400 mb-1">창고 재고 원가 (선적일 기준)</div>
             <div class="flex justify-between items-center">
               <span>개당(EA):</span>
               <span id="actualCostUnit" class="font-bold text-slate-700">-</span>
             </div>
             <div class="flex justify-between items-center text-slate-400">
-              <span>총 매입액:</span>
+              <span>견적분 총 매입액:</span>
               <span id="actualCostTotal">-</span>
             </div>
           </div>
@@ -76,7 +93,7 @@
               <span id="replaceCostUnit" class="font-bold text-slate-700">-</span>
             </div>
             <div class="flex justify-between items-center text-slate-400">
-              <span>총 발주액:</span>
+              <span>견적분 총 발주액:</span>
               <span id="replaceCostTotal">-</span>
             </div>
           </div>
@@ -90,7 +107,7 @@
           <span class="text-xs text-slate-400">마진 방어 기준</span>
         </div>
 
-        <!-- 환율 변동 상태 배너 -->
+        <!-- 환율 상태 배너 -->
         <div id="fxNoticeBox" class="p-4 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900">
           <div class="text-xl">ℹ️</div>
           <div class="text-sm font-semibold" id="fxNoticeMsg">환율 분석 중...</div>
@@ -145,26 +162,165 @@
       </div>
 
     </div>
+
+    <!-- 3. 등록된 제품 및 재고 현황 관리 테이블 -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <div>
+          <h2 class="font-bold text-base text-slate-900">등록된 반도체 재고 품목 리스트</h2>
+          <p class="text-xs text-slate-400 mt-0.5">품목을 클릭하면 상단 견적기에 데이터가 즉시 반영됩니다.</p>
+        </div>
+        <span id="itemCount" class="text-xs font-semibold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">총 0개 등록됨</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-50 text-slate-500 border-b uppercase font-semibold">
+            <tr>
+              <th class="py-3 px-3">제품명 (Part Number)</th>
+              <th class="py-3 px-3">매입 단가 (USD)</th>
+              <th class="py-3 px-3">선적 환율</th>
+              <th class="py-3 px-3">창고 재고 수량</th>
+              <th class="py-3 px-3">목표 마진</th>
+              <th class="py-3 px-3">현재 재고 가치 (USD)</th>
+              <th class="py-3 px-3 text-right">관리</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryTableBody" class="divide-y divide-slate-100 font-medium">
+            <!-- 동적 렌더링 -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
   <script>
     let currentFxRate = 1380.0;
+    const STORAGE_KEY = "semiconductor_inventory_items";
+
+    const initialItems = [
+      { id: "1", partName: "GD32F303CGT6", unitUsd: 2.50, shipFx: 1350, stock: 5000, margin: 20 },
+      { id: "2", partName: "W25Q128JVSJQ", unitUsd: 0.85, shipFx: 1320, stock: 12000, margin: 25 },
+      { id: "3", partName: "IS31FL3731-QFLS2-TR", unitUsd: 1.15, shipFx: 1365, stock: 3500, margin: 20 }
+    ];
 
     async function init() {
       try {
         const fxRes = await fetch('/api/fx-rate');
         const fxData = await fxRes.json();
         currentFxRate = fxData.current_rate;
-        document.getElementById('liveFx').innerText = `${Math.round(currentFxRate).toLocaleString()} 원`;
+        // USD 기준 환율 먼저 표기 ($1.00 = 1,324원)
+        document.getElementById('liveFx').innerText = `$1.00 (₩${Math.round(currentFxRate).toLocaleString()})`;
       } catch (err) {
         console.warn("환율 조회 실패, 기본값 유지", err);
       }
 
-      ['inputUsd', 'inputQty', 'inputShipFx', 'inputTargetMargin'].forEach(id => {
+      ['inputUsd', 'inputQty', 'inputShipFx', 'inputTargetMargin', 'inputStock'].forEach(id => {
         document.getElementById(id).addEventListener('input', runCalculation);
       });
 
+      document.getElementById('saveItemBtn').addEventListener('click', saveCurrentItem);
+
+      renderTable();
       runCalculation();
+    }
+
+    function getItems() {
+      const data = localStorage.getItem(STORAGE_KEY);
+      if (!data) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(initialItems));
+        return initialItems;
+      }
+      return JSON.parse(data);
+    }
+
+    function saveCurrentItem() {
+      const partName = document.getElementById('inputPartName').value.trim();
+      const unitUsd = parseFloat(document.getElementById('inputUsd').value) || 0;
+      const shipFx = parseFloat(document.getElementById('inputShipFx').value) || 0;
+      const stock = parseFloat(document.getElementById('inputStock').value) || 0;
+      const margin = parseFloat(document.getElementById('inputTargetMargin').value) || 0;
+
+      if (!partName) {
+        alert("제품명을 입력해주세요.");
+        return;
+      }
+
+      let items = getItems();
+      const existingIdx = items.findIndex(item => item.partName.toUpperCase() === partName.toUpperCase());
+
+      const newItem = {
+        id: existingIdx >= 0 ? items[existingIdx].id : Date.now().toString(),
+        partName,
+        unitUsd,
+        shipFx,
+        stock,
+        margin
+      };
+
+      if (existingIdx >= 0) {
+        items[existingIdx] = newItem;
+      } else {
+        items.push(newItem);
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      renderTable();
+      alert(`[${partName}] 품목이 안전하게 저장되었습니다.`);
+    }
+
+    function deleteItem(id, event) {
+      event.stopPropagation();
+      if (!confirm("해당 품목을 삭제하시겠습니까?")) return;
+      let items = getItems().filter(item => item.id !== id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      renderTable();
+    }
+
+    function loadItem(id) {
+      const items = getItems();
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+
+      document.getElementById('inputPartName').value = item.partName;
+      document.getElementById('inputUsd').value = item.unitUsd;
+      document.getElementById('inputShipFx').value = item.shipFx;
+      document.getElementById('inputStock').value = item.stock;
+      document.getElementById('inputTargetMargin').value = item.margin;
+
+      runCalculation();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function renderTable() {
+      const items = getItems();
+      const tbody = document.getElementById('inventoryTableBody');
+      document.getElementById('itemCount').innerText = `총 ${items.length}개 등록됨`;
+
+      if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400">등록된 제품이 없습니다. 상단에서 품목을 입력하고 저장해보세요.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map(item => {
+        const totalStockValUsd = item.unitUsd * item.stock;
+        return `
+          <tr class="hover:bg-indigo-50/50 cursor-pointer transition-colors" onclick="loadItem('${item.id}')">
+            <td class="py-3 px-3 font-bold text-slate-800">${item.partName}</td>
+            <td class="py-3 px-3 text-slate-700">$${item.unitUsd.toFixed(3)}</td>
+            <td class="py-3 px-3 text-slate-600">$1.00 (₩${item.shipFx.toLocaleString()})</td>
+            <td class="py-3 px-3 font-semibold text-slate-800">${item.stock.toLocaleString()} EA</td>
+            <td class="py-3 px-3 text-indigo-600 font-semibold">${item.margin}%</td>
+            <td class="py-3 px-3 text-slate-700">$${totalStockValUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+            <td class="py-3 px-3 text-right">
+              <button onclick="deleteItem('${item.id}', event)" class="text-red-500 hover:text-red-700 font-semibold text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 transition-colors">
+                삭제
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
     function runCalculation() {
