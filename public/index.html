@@ -14,9 +14,9 @@
       <div>
         <div class="flex items-center gap-2">
           <span class="text-xs font-bold uppercase tracking-wider bg-slate-800 text-white px-2 py-0.5 rounded">Semiconductor FX</span>
-          <h1 class="text-xl font-bold text-slate-900">반도체 부품 마진 방어 견적기</h1>
+          <h1 class="text-xl font-bold text-slate-900">반도체 고객사 납품 마진 방어 견적기</h1>
         </div>
-        <p class="text-sm text-slate-500 mt-1">실시간 환율 변동 반영 | 개당(EA) 단가 및 총 견적 하한선 (USD 기준 산출)</p>
+        <p class="text-sm text-slate-500 mt-1">실시간 환율 변동 반영 | 고객사 납품 단가(EA) 및 총 수주 견적 하한선 자동 산출</p>
       </div>
       <div class="text-left md:text-right">
         <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">실시간 USD/KRW</span>
@@ -26,11 +26,11 @@
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       
-      <!-- 1. 매입 조건 및 견적 수량 입력 -->
+      <!-- 1. 매입 조건 및 납품 수량 입력 -->
       <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 md:col-span-1 space-y-4">
         <div class="border-b pb-2">
           <h2 class="font-bold text-base text-slate-900">견적 파라미터</h2>
-          <p class="text-xs text-slate-400 mt-0.5">개당 매입 단가와 발주 수량을 입력하세요.</p>
+          <p class="text-xs text-slate-400 mt-0.5">매입 단가와 고객사 납품 수량을 입력하세요.</p>
         </div>
 
         <div class="space-y-3 text-xs font-medium">
@@ -40,57 +40,57 @@
           </div>
 
           <div>
-            <label class="text-slate-600 block mb-1">견적 수량 (Quantity, EA/PCS)</label>
+            <label class="text-slate-600 block mb-1">고객사 납품 수량 (Quantity, EA/PCS)</label>
             <input type="number" id="inputQty" value="1000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
 
           <div>
-            <label class="text-slate-600 block mb-1">선적 당시 환율 (KRW)</label>
+            <label class="text-slate-600 block mb-1">기존 선적 당시 환율 (KRW)</label>
             <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
 
           <div>
-            <label class="text-slate-600 block mb-1">필수 최소 마진율 (%)</label>
+            <label class="text-slate-600 block mb-1">사내 필수 최소 마진율 (%)</label>
             <input type="number" id="inputTargetMargin" value="20" min="1" max="90" step="1" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
         </div>
 
-        <!-- 원가 요약 (USD 메인) -->
+        <!-- 원가 비교 요약 -->
         <div class="pt-4 border-t space-y-3 text-xs text-slate-500">
           <div>
-            <div class="text-[11px] font-semibold text-slate-400 mb-1">선적 당시 매입원가</div>
+            <div class="text-[11px] font-semibold text-slate-400 mb-1">현재 창고 재고 매입원가 (기존 선적분)</div>
             <div class="flex justify-between items-center">
               <span>개당(EA):</span>
               <span id="actualCostUnit" class="font-bold text-slate-700">-</span>
             </div>
             <div class="flex justify-between items-center text-slate-400">
-              <span>총액(Total):</span>
+              <span>총 매입액:</span>
               <span id="actualCostTotal">-</span>
             </div>
           </div>
 
           <div class="pt-2 border-t border-dashed">
-            <div class="text-[11px] font-semibold text-slate-400 mb-1">현재 환율 기준 대체원가</div>
+            <div class="text-[11px] font-semibold text-slate-400 mb-1">해당 라인 재발주 원가 (현재 환율 기준)</div>
             <div class="flex justify-between items-center">
               <span>개당(EA):</span>
               <span id="replaceCostUnit" class="font-bold text-slate-700">-</span>
             </div>
             <div class="flex justify-between items-center text-slate-400">
-              <span>총액(Total):</span>
+              <span>총 발주액:</span>
               <span id="replaceCostTotal">-</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 2. 영업팀 권고 판매 단가 & 총 견적 대시보드 (USD 메인) -->
+      <!-- 2. 영업팀 권고 고객사 견적가 대시보드 -->
       <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 md:col-span-2 space-y-5">
         <div class="border-b pb-2 flex justify-between items-center">
-          <h2 class="font-bold text-base text-slate-900">권고 판매 견적가 (USD)</h2>
+          <h2 class="font-bold text-base text-slate-900">고객사 제시 권고 견적가 (USD)</h2>
           <span class="text-xs text-slate-400">마진 방어 기준</span>
         </div>
 
-        <!-- 환율 상태 배너 -->
+        <!-- 환율 변동 상태 배너 -->
         <div id="fxNoticeBox" class="p-4 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900">
           <div class="text-xl">ℹ️</div>
           <div class="text-sm font-semibold" id="fxNoticeMsg">환율 분석 중...</div>
@@ -99,47 +99,47 @@
         <!-- 2가지 기준 카드 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           
-          <!-- 카드 1: 선적 원가 기준 최소 하한가 -->
+          <!-- 카드 1: 현재 재고 기준 절대 하한선 -->
           <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
             <div class="flex justify-between items-center">
-              <span class="text-xs font-bold text-slate-500">① 절대 판매 하한선 (선적 기준)</span>
-              <span class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold">최저선</span>
+              <span class="text-xs font-bold text-slate-500">① 재고 소진용 최저 납품선</span>
+              <span class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold">선적원가 기준</span>
             </div>
             <div>
-              <div class="text-xs text-slate-400">개당 최소 견적 단가 (EA)</div>
+              <div class="text-xs text-slate-400">고객사 개당 최소 견적 (EA)</div>
               <div id="minSaleUnitActualUsd" class="text-2xl font-extrabold text-slate-900 mt-0.5">$0.0000</div>
               <div id="minSaleUnitActualKrw" class="text-sm font-semibold text-indigo-600">(₩0 / EA)</div>
             </div>
             <div class="pt-2 border-t text-xs flex justify-between text-slate-500">
-              <span>총 견적 하한가:</span>
+              <span>총 납품 견적 최저선:</span>
               <span id="minSaleTotalActual" class="font-bold text-slate-800">$0.00</span>
             </div>
           </div>
 
-          <!-- 카드 2: 현재 환율 반영 권장가 -->
+          <!-- 카드 2: 라인 재발주 방어 권장선 -->
           <div class="p-4 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-2">
             <div class="flex justify-between items-center">
-              <span class="text-xs font-bold text-indigo-800">② 재구매 방어 권장가 (현재 환율)</span>
-              <span class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">안전선</span>
+              <span class="text-xs font-bold text-indigo-800">② 라인 재발주 방어 권장선</span>
+              <span class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">현재환율 안전선</span>
             </div>
             <div>
-              <div class="text-xs text-indigo-600/80">개당 권장 견적 단가 (EA)</div>
+              <div class="text-xs text-indigo-600/80">고객사 개당 권장 견적 (EA)</div>
               <div id="minSaleUnitReplaceUsd" class="text-2xl font-extrabold text-indigo-950 mt-0.5">$0.0000</div>
               <div id="minSaleUnitReplaceKrw" class="text-sm font-semibold text-indigo-600">(₩0 / EA)</div>
             </div>
             <div class="pt-2 border-t border-indigo-100 text-xs flex justify-between text-indigo-950">
-              <span>총 견적 권장액:</span>
+              <span>총 권장 견적액:</span>
               <span id="minSaleTotalReplace" class="font-bold text-indigo-900">$0.00</span>
             </div>
           </div>
 
         </div>
 
-        <!-- 영업 가이드 -->
+        <!-- 실무 가이드 -->
         <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1.5">
-          <div class="font-bold text-slate-800">💡 반도체 견적 시 체크포인트</div>
-          <div>• <strong>달러($) 단가 제시 시:</strong> 해외 수입 부품 특성상 개당 단가는 소수점 4자리($0.0000)까지 오차 없이 확인하여 견적서에 반영하세요.</div>
-          <div>• <strong>마진 방어:</strong> 거래처 단가 협상 시에도 최소한 ①번 최저 달러 단가($) 밑으로 내려가지 않아야 사내 마진이 보전됩니다.</div>
+          <div class="font-bold text-slate-800">💡 영업 견적 가이드</div>
+          <div>• <strong>지속 공급 제품:</strong> 고객사에 납품 후 해당 라인에서 재고를 다시 수입(재발주)해야 한다면, 반드시 ②번 <strong>'라인 재발주 방어 권장선'</strong> 이상으로 견적서를 발행해야 현금 유동성 및 마진이 보전됩니다.</div>
+          <div>• <strong>단종/재고 소진 견적:</strong> 더 이상 추가 발주 없이 창고 재고만 털어내는 일회성 납품인 경우에 한하여 ①번 <strong>'최저 납품선'</strong>까지 네고 여지를 둘 수 있습니다.</div>
         </div>
 
       </div>
@@ -173,37 +173,37 @@
       const shipFx = parseFloat(document.getElementById('inputShipFx').value) || 0;
       const targetMargin = (parseFloat(document.getElementById('inputTargetMargin').value) || 0) / 100;
 
-      // 1. 개당 원가 계산
+      // 1. 개당 원가
       const unitActualCostKrw = unitUsd * shipFx;
       const unitReplaceCostKrw = unitUsd * currentFxRate;
 
-      // 2. 총 원가 계산
+      // 2. 총 원가
       const totalActualCostKrw = unitActualCostKrw * qty;
       const totalReplaceCostKrw = unitReplaceCostKrw * qty;
       const totalUsdCost = unitUsd * qty;
 
-      // 3. 개당 최소 판매가 계산 (원가 / (1 - 목표마진))
+      // 3. 개당 최소 판매가 (원가 / (1 - 마진율))
       const unitMinPriceActualKrw = targetMargin < 1 ? (unitActualCostKrw / (1 - targetMargin)) : 0;
       const unitMinPriceReplaceKrw = targetMargin < 1 ? (unitReplaceCostKrw / (1 - targetMargin)) : 0;
 
-      // 4. 달러 단가 계산 (현재 환율 기준)
+      // 4. 달러 단가
       const unitMinPriceActualUsd = currentFxRate > 0 ? (unitMinPriceActualKrw / currentFxRate) : 0;
       const unitMinPriceReplaceUsd = currentFxRate > 0 ? (unitMinPriceReplaceKrw / currentFxRate) : 0;
 
-      // 5. 총 판매 견적가 계산
+      // 5. 총 견적가
       const totalMinPriceActualKrw = unitMinPriceActualKrw * qty;
       const totalMinPriceReplaceKrw = unitMinPriceReplaceKrw * qty;
       const totalMinPriceActualUsd = unitMinPriceActualUsd * qty;
       const totalMinPriceReplaceUsd = unitMinPriceReplaceUsd * qty;
 
-      // 6. UI 반영 - 원가 요약 (USD 메인)
+      // 6. UI 반영 - 원가 요약
       document.getElementById('actualCostUnit').innerText = `$${unitUsd.toFixed(3)} (₩${unitActualCostKrw.toFixed(1)})`;
       document.getElementById('actualCostTotal').innerText = `$${totalUsdCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalActualCostKrw).toLocaleString()})`;
 
       document.getElementById('replaceCostUnit').innerText = `$${unitUsd.toFixed(3)} (₩${unitReplaceCostKrw.toFixed(1)})`;
       document.getElementById('replaceCostTotal').innerText = `$${totalUsdCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalReplaceCostKrw).toLocaleString()})`;
 
-      // 7. UI 반영 - 권고 판매가 (USD 메인 표기)
+      // 7. UI 반영 - 견적 단가 및 총액 (USD 메인)
       document.getElementById('minSaleUnitActualUsd').innerText = `$${unitMinPriceActualUsd.toFixed(4)}`;
       document.getElementById('minSaleUnitActualKrw').innerText = `(₩${unitMinPriceActualKrw.toFixed(1)} / EA)`;
       document.getElementById('minSaleTotalActual').innerText = `$${totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalMinPriceActualKrw).toLocaleString()})`;
@@ -219,10 +219,10 @@
 
       if (fxDiff > 0) {
         noticeBox.className = "p-4 rounded-xl border flex items-center gap-3 bg-amber-50 border-amber-300 text-amber-900";
-        noticeMsg.innerText = `⚠️ 선적 당시보다 환율이 +${Math.round(fxDiff)}원 상승했습니다. 다음 재구매 시 역마진 방지를 위해 개당 $${unitMinPriceReplaceUsd.toFixed(4)} (₩${unitMinPriceReplaceKrw.toFixed(1)}) 이상으로 견적을 제시하세요.`;
+        noticeMsg.innerText = `⚠️ 선적 당시 대비 환율 +${Math.round(fxDiff)}원 상승: 해당 라인 추가 재발주 시 역마진을 방지하려면 고객사에 개당 $${unitMinPriceReplaceUsd.toFixed(4)} (₩${unitMinPriceReplaceKrw.toFixed(1)}) 이상으로 견적을 제시하세요.`;
       } else if (fxDiff < 0) {
         noticeBox.className = "p-4 rounded-xl border flex items-center gap-3 bg-green-50 border-green-200 text-green-800";
-        noticeMsg.innerText = `✅ 선적 당시보다 환율이 ${Math.round(fxDiff)}원 하락하여 안정권입니다.`;
+        noticeMsg.innerText = `✅ 선적 당시 대비 환율 ${Math.round(fxDiff)}원 안정: 현재 마진 확보 여력이 양호한 상태입니다.`;
       } else {
         noticeBox.className = "p-4 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900";
         noticeMsg.innerText = "선적 당시 환율과 현재 환율이 동일합니다.";
