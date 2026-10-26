@@ -12,7 +12,7 @@
     <header class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
         <h1 class="text-xl font-bold text-slate-900">영업 마진 & 환율 시뮬레이터</h1>
-        <p class="text-sm text-slate-500">실시간 환율 기반 세일 하한선 및 마진 방어 가이드</p>
+        <p class="text-sm text-slate-500">실시간 환율 기반 세일 하한선 및 마진 방어 가이드 (KRW / USD 병기)</p>
       </div>
       <div class="text-left md:text-right">
         <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">실시간 USD/KRW</span>
@@ -39,10 +39,25 @@
           <input type="range" id="discountSlider" min="0" max="50" step="1" value="0" class="w-full accent-indigo-600 cursor-pointer">
         </div>
 
-        <div class="pt-4 border-t space-y-2 text-xs text-slate-500">
-          <div class="flex justify-between"><span>선적 당시 환율:</span> <span id="shipFx" class="font-bold text-slate-700">-</span></div>
-          <div class="flex justify-between"><span>선적 매입원가:</span> <span id="shipCost" class="font-bold text-slate-700">-</span></div>
-          <div class="flex justify-between"><span>현재 대체원가:</span> <span id="replaceCost" class="font-bold text-slate-700">-</span></div>
+        <div class="pt-4 border-t space-y-2.5 text-xs text-slate-500">
+          <div class="flex justify-between items-center">
+            <span>선적 당시 환율:</span>
+            <span id="shipFx" class="font-bold text-slate-700">-</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span>선적 매입원가:</span>
+            <div class="text-right">
+              <span id="shipCostKrw" class="font-bold text-slate-700">-</span>
+              <span id="shipCostUsd" class="block text-[11px] text-slate-400 font-medium">($0.00)</span>
+            </div>
+          </div>
+          <div class="flex justify-between items-center">
+            <span>현재 대체원가:</span>
+            <div class="text-right">
+              <span id="replaceCostKrw" class="font-bold text-slate-700">-</span>
+              <span id="replaceCostUsd" class="block text-[11px] text-slate-400 font-medium">($0.00)</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -57,12 +72,14 @@
 
         <div class="grid grid-cols-2 gap-4">
           <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <span class="text-xs text-slate-500">최종 세일 판매가</span>
-            <div id="salePrice" class="text-2xl font-extrabold text-slate-900 mt-1">₩0</div>
+            <span class="text-xs text-slate-500 font-medium">최종 세일 판매가</span>
+            <div id="salePriceKrw" class="text-2xl font-extrabold text-slate-900 mt-1">₩0</div>
+            <div id="salePriceUsd" class="text-sm font-semibold text-indigo-600 mt-0.5">($0.00)</div>
           </div>
           <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <span class="text-xs text-slate-500">확보 마진율 (선적 기준)</span>
+            <span class="text-xs text-slate-500 font-medium">확보 마진율 (선적 기준)</span>
             <div id="actualMargin" class="text-2xl font-extrabold text-slate-900 mt-1">0%</div>
+            <div class="text-xs text-slate-400 mt-1">목표 마진율 대비 검증</div>
           </div>
         </div>
 
@@ -84,18 +101,23 @@
 
   <script>
     let currentDiscount = 0;
+    let currentFxRate = 1380.0;
 
     async function init() {
       try {
         const fxRes = await fetch('/api/fx-rate');
         const fxData = await fxRes.json();
-        document.getElementById('liveFx').innerText = `${Math.round(fxData.current_rate).toLocaleString()} 원`;
+        currentFxRate = fxData.current_rate;
+        document.getElementById('liveFx').innerText = `${Math.round(currentFxRate).toLocaleString()} 원`;
 
         const prodRes = await fetch('/api/products');
         const products = await prodRes.json();
 
         const select = document.getElementById('productSelect');
-        select.innerHTML = products.map(p => `<option value="${p.part_number}">${p.part_number} (정가: ₩${p.msrp_krw.toLocaleString()})</option>`).join('');
+        select.innerHTML = products.map(p => {
+          const usdEst = (p.msrp_krw / currentFxRate).toFixed(2);
+          return `<option value="${p.part_number}">${p.part_number} (정가: ₩${p.msrp_krw.toLocaleString()} / $${usdEst})</option>`;
+        }).join('');
         
         select.addEventListener('change', runSimulation);
         document.getElementById('discountSlider').addEventListener('input', (e) => {
@@ -117,10 +139,21 @@
       const res = await fetch(`/api/simulate?part_number=${encodeURIComponent(partNumber)}&sale_discount_rate=${currentDiscount}`);
       const data = await res.json();
 
+      // 달러($) 환산 계산
+      const shipCostUsd = (data.actual_cost_krw / data.shipping_fx_rate).toFixed(2);
+      const replaceCostUsd = (data.replacement_cost_krw / data.current_fx_rate).toFixed(2);
+      const salePriceUsd = (data.applied_sale_price / data.current_fx_rate).toFixed(2);
+
+      // 화면 반영 (원화 및 달러)
       document.getElementById('shipFx').innerText = `${data.shipping_fx_rate.toLocaleString()} 원`;
-      document.getElementById('shipCost').innerText = `₩${data.actual_cost_krw.toLocaleString()}`;
-      document.getElementById('replaceCost').innerText = `₩${data.replacement_cost_krw.toLocaleString()}`;
-      document.getElementById('salePrice').innerText = `₩${data.applied_sale_price.toLocaleString()}`;
+      document.getElementById('shipCostKrw').innerText = `₩${data.actual_cost_krw.toLocaleString()}`;
+      document.getElementById('shipCostUsd').innerText = `($${shipCostUsd})`;
+
+      document.getElementById('replaceCostKrw').innerText = `₩${data.replacement_cost_krw.toLocaleString()}`;
+      document.getElementById('replaceCostUsd').innerText = `($${replaceCostUsd})`;
+
+      document.getElementById('salePriceKrw').innerText = `₩${data.applied_sale_price.toLocaleString()}`;
+      document.getElementById('salePriceUsd').innerText = `($${salePriceUsd})`;
       
       const marginEl = document.getElementById('actualMargin');
       marginEl.innerText = `${data.actual_margin_rate}%`;
