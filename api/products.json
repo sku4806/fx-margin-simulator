@@ -1,0 +1,16 @@
+[
+  {
+    "part_number": "SAMPLE-ITEM-A",
+    "unit_price_usd": 50.0,
+    "shipping_fx_rate": 1350.0,
+    "target_margin_rate": 0.20,
+    "msrp_krw": 100000
+  },
+  {
+    "part_number": "SAMPLE-ITEM-B",
+    "unit_price_usd": 120.0,
+    "shipping_fx_rate": 1320.0,
+    "target_margin_rate": 0.25,
+    "msrp_krw": 250000
+  }
+]
