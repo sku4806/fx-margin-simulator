@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>반도체 영업 마진 방어 견적 시스템 (Cloud Edition)</title>
+  <title>BIGSHINE KOREA - 반도체 영업 마진 방어 & 재고 관리 시스템</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Supabase JS Client -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -15,67 +15,112 @@
 <body class="bg-slate-100 text-slate-800 p-3 sm:p-6 md:p-8 min-h-screen font-sans">
   <div class="max-w-6xl mx-auto space-y-4 sm:space-y-6">
     
-    <!-- 1. 상단 글로벌 헤더 -->
-    <header class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-slate-800 text-white px-2 py-0.5 rounded">Semiconductor FX</span>
-          <h1 class="text-lg sm:text-xl font-bold text-slate-900">반도체 영업 마진 방어 견적</h1>
+    <!-- 1. 상단 글로벌 헤더 (Bigshine Korea 공식 심볼 로고) -->
+    <header class="bg-[#0b2046] text-white p-4 sm:p-6 rounded-2xl shadow-md border border-slate-700/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div class="flex items-center gap-3.5">
+        <!-- BSK 심볼 로고 SVG -->
+        <div class="w-12 h-12 bg-white rounded-lg p-1.5 flex items-center justify-center shrink-0 shadow-sm">
+          <svg viewBox="0 0 100 100" class="w-full h-full text-[#0b2046] fill-current">
+            <path d="M12 12 h20 v76 h-20 z" opacity="0.95"/>
+            <path d="M38 12 c0 40 18 65 50 76 h-18 c-30 -12 -44 -38 -44 -76 z"/>
+            <path d="M52 24 c0 32 15 52 42 64 h-16 c-24 -11 -36 -32 -36 -64 z"/>
+            <path d="M66 38 c0 24 12 40 32 50 h-14 c-18 -9 -26 -25 -26 -50 z"/>
+          </svg>
         </div>
-        <p class="text-xs text-slate-500 mt-1 word-keep">실시간 환율 변동 연동 · 클라우드 재고 동기화 · 마진 역산</p>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl sm:text-2xl font-black tracking-wider text-white">BIGSHINE KOREA</h1>
+            <span class="text-[10px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded">FX Cloud</span>
+          </div>
+          <p class="text-xs text-slate-300 font-medium tracking-tight mt-0.5">Better Future Starts here &gt;&gt;</p>
+        </div>
       </div>
 
-      <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-2 sm:gap-4 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-        <div class="bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
-          <span class="text-[9px] font-semibold text-slate-400 block">안전 환율 버퍼</span>
-          <select id="fxBufferSelect" class="bg-transparent text-xs font-bold text-indigo-600 outline-none cursor-pointer">
-            <option value="0">버퍼 없음 (+0원)</option>
-            <option value="10">보수적 (+10원)</option>
-            <option value="20">안전 (+20원)</option>
-            <option value="30">초안전 (+30원)</option>
+      <!-- 환율 및 안전 버퍼 카드 -->
+      <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-3 sm:gap-4 pt-3 md:pt-0 border-t md:border-t-0 border-slate-700/60">
+        <div class="bg-slate-900/60 border border-slate-700 px-3 py-1.5 rounded-xl">
+          <span class="text-[9px] font-semibold text-slate-400 block">안전 환율 버퍼 (FX Buffer)</span>
+          <select id="fxBufferSelect" class="bg-transparent text-xs font-bold text-amber-400 outline-none cursor-pointer">
+            <option value="0" class="text-slate-800">버퍼 없음 (+0원)</option>
+            <option value="10" class="text-slate-800">보수적 (+10원)</option>
+            <option value="20" class="text-slate-800">안전 (+20원)</option>
+            <option value="30" class="text-slate-800">초안전 (+30원)</option>
           </select>
         </div>
 
         <div class="text-right">
-          <span class="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">실시간 FX Rate</span>
-          <div id="liveFx" class="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">$1.00 = -</div>
+          <span class="text-[10px] font-semibold text-indigo-300 bg-indigo-900/50 border border-indigo-500/30 px-2 py-0.5 rounded-full">실시간 FX Rate</span>
+          <div id="liveFx" class="text-xl sm:text-2xl font-black text-white mt-0.5">$1.00 = -</div>
         </div>
       </div>
     </header>
 
-    <!-- 2. 메인 견적 엔진 레이아웃 -->
+    <!-- 2. 메인 견적 엔진 그리드 -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
       
-      <!-- 파라미터 입력 -->
+      <!-- 좌측: 견적 파라미터 입력 -->
       <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-1 space-y-3 sm:space-y-4">
         <div class="border-b pb-2 flex justify-between items-center">
           <div>
             <h2 class="font-bold text-sm sm:text-base text-slate-900">견적 파라미터</h2>
             <p class="text-[11px] text-slate-400">직접 입력 또는 하단 목록 선택</p>
           </div>
-          <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold px-3 py-1.5 rounded-lg transition-transform">
+          <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold px-3 py-1.5 rounded-lg transition-transform shadow-sm">
             클라우드 저장
           </button>
         </div>
 
         <div class="space-y-2.5 sm:space-y-3 text-xs font-medium">
-          <!-- 제품 기본 정보 -->
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-slate-600 block mb-1">제조사 (Line)</label>
-              <input type="text" id="inputMaker" placeholder="예: GigaDevice" value="GigaDevice" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div>
-              <label class="text-slate-600 block mb-1">제품명 / Part Number</label>
-              <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+          <!-- BSK 공식 17개 라인카드 드롭다운 -->
+          <div>
+            <label class="text-slate-600 block mb-1">제조사 라인 (BSK Line)</label>
+            <div class="grid grid-cols-1 gap-1.5">
+              <select id="selectMaker" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+                <option value="GigaDevice">GigaDevice</option>
+                <option value="ISSI">ISSI</option>
+                <option value="Lumissil">Lumissil</option>
+                <option value="XMOS">XMOS</option>
+                <option value="Silicon Motion">Silicon Motion</option>
+                <option value="ESMT">ESMT</option>
+                <option value="Innodisk">Innodisk</option>
+                <option value="SSSTC">SSSTC (Kioxia Group)</option>
+                <option value="Giantec">Giantec</option>
+                <option value="WIZnet">WIZnet</option>
+                <option value="Intelligent Memory">Intelligent Memory (I'M)</option>
+                <option value="Chiplus">Chiplus</option>
+                <option value="Bel Fuse">Bel Fuse</option>
+                <option value="Link-PP">Link-PP</option>
+                <option value="Eta-Semi">Eta-Semi (Nanowatt)</option>
+                <option value="AMS">AMS</option>
+                <option value="Belling">Belling</option>
+                <option value="__CUSTOM_MAKER__">기타 (직접 입력)</option>
+              </select>
+              <input type="text" id="inputCustomMaker" placeholder="제조사명 직접 입력..." class="hidden w-full p-2 border rounded-lg bg-amber-50/50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
           </div>
 
-          <!-- 입고 명의 및 입고일자 -->
+          <div>
+            <label class="text-slate-600 block mb-1">제품명 / Part Number</label>
+            <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+
+          <!-- BSK Sales 입고 명의 및 입고일자 -->
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label class="text-slate-600 block mb-1">입고 명의 / 배정처</label>
-              <input type="text" id="inputOwner" placeholder="예: 본사 일반재고" value="본사 일반재고" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+              <label class="text-slate-600 block mb-1">입고 명의 / Sales</label>
+              <select id="selectOwner" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+                <option value="본사 일반재고">본사 일반재고</option>
+                <option value="Dustin">Dustin</option>
+                <option value="Steve">Steve</option>
+                <option value="Eric">Eric</option>
+                <option value="William">William</option>
+                <option value="Allen">Allen</option>
+                <option value="Kelly">Kelly</option>
+                <option value="Joye">Joye</option>
+                <option value="Paul">Paul</option>
+                <option value="__CUSTOM_OWNER__">기타 (직접 입력)</option>
+              </select>
+              <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1.5 p-2 border rounded-lg bg-amber-50/50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
             <div>
               <label class="text-slate-600 block mb-1">등록 / 입고 일자</label>
@@ -194,7 +239,7 @@
           </div>
         </div>
 
-        <!-- 고객사 타겟단가 검증 -->
+        <!-- 고객사 타겟단가 역산기 -->
         <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
           <div class="flex justify-between items-center">
             <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -243,7 +288,7 @@
 
     </div>
 
-    <!-- 3. 재고 관리 테이블 (모바일 카드 뷰 + 데스크톱 테이블 듀얼 모드) -->
+    <!-- 3. 재고 관리 테이블 & 스마트 다중 필터 검색창 -->
     <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
         <div>
@@ -252,7 +297,7 @@
             <span id="cloudStatusBadge" class="text-[10px] font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">☁️ 동기화</span>
             <span id="lockStatusBadge" class="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">🔒 잠김</span>
           </div>
-          <p class="text-[11px] text-slate-400 mt-0.5">클라우드 DB에 안전 보관되며 모든 기기에서 공유됩니다.</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">BIGSHINE KOREA 클라우드에 실시간 동기화되는 재고입니다.</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-end pt-1 sm:pt-0">
@@ -282,14 +327,57 @@
         </button>
       </div>
 
-      <!-- 언락 콘텐츠 영역 -->
+      <!-- 언락 콘텐츠 영역 (다중 필터 검색 바) -->
       <div id="unlockedContent" class="hidden space-y-3">
-        <div class="flex justify-between items-center gap-2">
-          <div class="relative w-full max-w-xs">
-            <input type="text" id="searchInput" placeholder="Part Number, 제조사, 명의 검색..." class="w-full pl-7 pr-3 py-1.5 border rounded-lg bg-slate-50 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
+        <!-- 스마트 검색 & 다중 필터 바 -->
+        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 grid grid-cols-1 sm:grid-cols-4 gap-2 items-center">
+          <div class="sm:col-span-2 relative">
+            <input type="text" id="searchInput" placeholder="Part Number, 라인, 비고 검색..." class="w-full pl-7 pr-3 py-1.5 border rounded-lg bg-white text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
             <span class="absolute left-2 top-1.5 text-slate-400 text-xs">🔍</span>
           </div>
-          <span id="itemCount" class="text-[11px] font-semibold text-slate-500 shrink-0">총 0개 동기화됨</span>
+
+          <div>
+            <select id="filterMaker" class="w-full p-1.5 border rounded-lg bg-white text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <option value="">라인 전체 (Maker: All)</option>
+              <option value="GigaDevice">GigaDevice</option>
+              <option value="ISSI">ISSI</option>
+              <option value="Lumissil">Lumissil</option>
+              <option value="XMOS">XMOS</option>
+              <option value="Silicon Motion">Silicon Motion</option>
+              <option value="ESMT">ESMT</option>
+              <option value="Innodisk">Innodisk</option>
+              <option value="SSSTC">SSSTC (Kioxia Group)</option>
+              <option value="Giantec">Giantec</option>
+              <option value="WIZnet">WIZnet</option>
+              <option value="Intelligent Memory">Intelligent Memory (I'M)</option>
+              <option value="Chiplus">Chiplus</option>
+              <option value="Bel Fuse">Bel Fuse</option>
+              <option value="Link-PP">Link-PP</option>
+              <option value="Eta-Semi">Eta-Semi</option>
+              <option value="AMS">AMS</option>
+              <option value="Belling">Belling</option>
+            </select>
+          </div>
+
+          <div>
+            <select id="filterOwner" class="w-full p-1.5 border rounded-lg bg-white text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <option value="">담당자 전체 (Sales: All)</option>
+              <option value="본사 일반재고">본사 일반재고</option>
+              <option value="Dustin">Dustin</option>
+              <option value="Steve">Steve</option>
+              <option value="Eric">Eric</option>
+              <option value="William">William</option>
+              <option value="Allen">Allen</option>
+              <option value="Kelly">Kelly</option>
+              <option value="Joye">Joye</option>
+              <option value="Paul">Paul</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center text-[11px] text-slate-500 px-1">
+          <span>※ 조건을 조합하여 원하는 재고를 쉽게 필터링할 수 있습니다.</span>
+          <span id="itemCount" class="font-bold text-indigo-700">총 0개 동기화됨</span>
         </div>
 
         <!-- 📱 모바일 전용 카드 뷰 -->
@@ -301,9 +389,9 @@
           <table class="w-full text-left text-xs">
             <thead class="bg-slate-50 text-slate-500 border-b uppercase font-semibold">
               <tr>
-                <th class="py-3 px-3">제조사</th>
+                <th class="py-3 px-3">라인 (Maker)</th>
                 <th class="py-3 px-3">제품명 (Part Number)</th>
-                <th class="py-3 px-3">입고 명의/배정처</th>
+                <th class="py-3 px-3">입고 명의/Sales</th>
                 <th class="py-3 px-3">입고일자</th>
                 <th class="py-3 px-3">매입단가</th>
                 <th class="py-3 px-3">선적환율</th>
@@ -354,8 +442,29 @@
     async function init() {
       initSupabase();
 
-      // 오늘 날짜 기본 세팅
       document.getElementById('inputEntryDate').value = new Date().toISOString().slice(0, 10);
+
+      const selectMaker = document.getElementById('selectMaker');
+      const inputCustomMaker = document.getElementById('inputCustomMaker');
+      selectMaker.addEventListener('change', () => {
+        if (selectMaker.value === '__CUSTOM_MAKER__') {
+          inputCustomMaker.classList.remove('hidden');
+          inputCustomMaker.focus();
+        } else {
+          inputCustomMaker.classList.add('hidden');
+        }
+      });
+
+      const selectOwner = document.getElementById('selectOwner');
+      const inputCustomOwner = document.getElementById('inputCustomOwner');
+      selectOwner.addEventListener('change', () => {
+        if (selectOwner.value === '__CUSTOM_OWNER__') {
+          inputCustomOwner.classList.remove('hidden');
+          inputCustomOwner.focus();
+        } else {
+          inputCustomOwner.classList.add('hidden');
+        }
+      });
 
       try {
         const fxRes = await fetch('/api/fx-rate');
@@ -375,15 +484,68 @@
       document.getElementById('saveItemBtn').addEventListener('click', saveCurrentItem);
       document.getElementById('adminAuthBtn').addEventListener('click', toggleAdminAuth);
       document.getElementById('copyQuoteBtn').addEventListener('click', copyQuotation);
-      document.getElementById('searchInput').addEventListener('input', filterAndRender);
-      document.getElementById('changePinBtn').addEventListener('click', changeAdminPin);
 
+      document.getElementById('searchInput').addEventListener('input', filterAndRender);
+      document.getElementById('filterMaker').addEventListener('change', filterAndRender);
+      document.getElementById('filterOwner').addEventListener('change', filterAndRender);
+
+      document.getElementById('changePinBtn').addEventListener('click', changeAdminPin);
       document.getElementById('exportCsvBtn').addEventListener('click', exportToCsv);
       document.getElementById('importCsvBtn').addEventListener('click', () => document.getElementById('csvFileInput').click());
       document.getElementById('csvFileInput').addEventListener('change', importFromCsv);
 
       updateSecurityUI();
       runCalculation();
+    }
+
+    function getSelectedMaker() {
+      const select = document.getElementById('selectMaker');
+      if (select.value === '__CUSTOM_MAKER__') {
+        const custom = document.getElementById('inputCustomMaker').value.trim();
+        return custom || "기타";
+      }
+      return select.value;
+    }
+
+    function setSelectedMaker(makerName) {
+      const select = document.getElementById('selectMaker');
+      const inputCustom = document.getElementById('inputCustomMaker');
+      
+      const found = Array.from(select.options).some(opt => opt.value === makerName);
+      if (found && makerName !== '__CUSTOM_MAKER__') {
+        select.value = makerName;
+        inputCustom.classList.add('hidden');
+        inputCustom.value = "";
+      } else {
+        select.value = '__CUSTOM_MAKER__';
+        inputCustom.classList.remove('hidden');
+        inputCustom.value = makerName || "";
+      }
+    }
+
+    function getSelectedOwner() {
+      const select = document.getElementById('selectOwner');
+      if (select.value === '__CUSTOM_OWNER__') {
+        const custom = document.getElementById('inputCustomOwner').value.trim();
+        return custom || "기타";
+      }
+      return select.value;
+    }
+
+    function setSelectedOwner(ownerName) {
+      const select = document.getElementById('selectOwner');
+      const inputCustom = document.getElementById('inputCustomOwner');
+      
+      const found = Array.from(select.options).some(opt => opt.value === ownerName);
+      if (found && ownerName !== '__CUSTOM_OWNER__') {
+        select.value = ownerName;
+        inputCustom.classList.add('hidden');
+        inputCustom.value = "";
+      } else {
+        select.value = '__CUSTOM_OWNER__';
+        inputCustom.classList.remove('hidden');
+        inputCustom.value = ownerName || "";
+      }
     }
 
     function updateAppliedFxRate() {
@@ -505,9 +667,9 @@
         return;
       }
 
-      const maker = document.getElementById('inputMaker').value.trim() || "기타";
+      const maker = getSelectedMaker();
       const partName = document.getElementById('inputPartName').value.trim();
-      const owner = document.getElementById('inputOwner').value.trim() || "본사 일반재고";
+      const owner = getSelectedOwner();
       const entryDate = document.getElementById('inputEntryDate').value || new Date().toISOString().slice(0, 10);
       const memo = document.getElementById('inputMemo').value.trim();
       const unitUsd = parseFloat(document.getElementById('inputUsd').value) || 0;
@@ -520,7 +682,6 @@
         return;
       }
 
-      // 동일 부품명 및 동일 명의 여부 확인
       const existing = cachedItems.find(i => 
         i.partName.toUpperCase() === partName.toUpperCase() && 
         i.owner.toUpperCase() === owner.toUpperCase()
@@ -553,7 +714,7 @@
         if (error) { alert("저장 실패: " + error.message); return; }
       }
 
-      alert(`[${partName}] (${owner}) 품목이 안전하게 저장되었습니다.`);
+      alert(`[${maker}] ${partName} (${owner}) 품목이 안전하게 저장되었습니다.`);
       await loadItemsFromCloud();
     }
 
@@ -573,9 +734,9 @@
       const item = cachedItems.find(i => i.id === id);
       if (!item) return;
 
-      document.getElementById('inputMaker').value = item.maker;
+      setSelectedMaker(item.maker);
       document.getElementById('inputPartName').value = item.partName;
-      document.getElementById('inputOwner').value = item.owner;
+      setSelectedOwner(item.owner);
       document.getElementById('inputEntryDate').value = item.entryDate;
       document.getElementById('inputMemo').value = item.memo;
       document.getElementById('inputUsd').value = item.unitUsd;
@@ -591,18 +752,28 @@
       if (!isAdminAuthenticated) return;
 
       const q = (document.getElementById('searchInput').value || "").trim().toUpperCase();
-      const filtered = cachedItems.filter(i => 
-        i.partName.toUpperCase().includes(q) || 
-        i.maker.toUpperCase().includes(q) || 
-        i.owner.toUpperCase().includes(q)
-      );
+      const filterMaker = document.getElementById('filterMaker').value.toUpperCase();
+      const filterOwner = document.getElementById('filterOwner').value.toUpperCase();
+
+      const filtered = cachedItems.filter(i => {
+        const matchesQuery = !q || (
+          i.partName.toUpperCase().includes(q) || 
+          i.maker.toUpperCase().includes(q) || 
+          i.owner.toUpperCase().includes(q) ||
+          i.memo.toUpperCase().includes(q)
+        );
+        const matchesMaker = !filterMaker || i.maker.toUpperCase() === filterMaker;
+        const matchesOwner = !filterOwner || i.owner.toUpperCase() === filterOwner;
+
+        return matchesQuery && matchesMaker && matchesOwner;
+      });
       
       document.getElementById('itemCount').innerText = `총 ${filtered.length}개 동기화됨`;
 
       // 1. 모바일 카드 뷰
       const cardContainer = document.getElementById('inventoryCardContainer');
       if (filtered.length === 0) {
-        cardContainer.innerHTML = `<div class="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">일치하는 재고가 없습니다.</div>`;
+        cardContainer.innerHTML = `<div class="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">조건과 일치하는 재고가 없습니다.</div>`;
       } else {
         cardContainer.innerHTML = filtered.map(item => {
           const totalStockValUsd = item.unitUsd * item.stock;
@@ -610,28 +781,28 @@
             <div onclick="loadItemToInputs('${item.id}')" class="p-3 bg-slate-50 hover:bg-indigo-50/50 active:scale-[0.99] rounded-xl border border-slate-200 transition-all cursor-pointer space-y-2">
               <div class="flex justify-between items-start">
                 <div>
-                  <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">${item.maker}</span>
-                  <div class="font-bold text-slate-900 text-sm tracking-tight">${item.partName}</div>
+                  <span class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">${item.maker}</span>
+                  <div class="font-bold text-slate-900 text-sm tracking-tight mt-1">${item.partName}</div>
                 </div>
                 <div class="text-right">
-                  <span class="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded block">마진 ${item.margin}%</span>
+                  <span class="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded block">마진 ${item.margin}%</span>
                   <span class="text-[10px] text-slate-400 mt-0.5 block">${item.entryDate || '-'}</span>
                 </div>
               </div>
               
-              <div class="bg-white/80 p-2 rounded-lg border border-slate-200/50 space-y-1 text-xs">
+              <div class="bg-white/90 p-2 rounded-lg border border-slate-200/60 space-y-1 text-xs">
                 <div class="flex justify-between items-center text-slate-600">
-                  <span>명의/배정: <strong class="text-slate-800">${item.owner}</strong></span>
-                  <span>보관: <strong class="text-slate-700">${item.memo || '일반'}</strong></span>
+                  <span>Sales/명의: <strong class="text-indigo-900 font-bold">${item.owner}</strong></span>
+                  <span>위치: <strong class="text-slate-700">${item.memo || '일반'}</strong></span>
                 </div>
                 <div class="grid grid-cols-2 gap-1 text-[11px] text-slate-500 pt-1 border-t border-slate-100">
                   <div>매입: $${item.unitUsd.toFixed(3)} (₩${item.shipFx.toLocaleString()})</div>
-                  <div class="text-right">재고: <strong class="text-indigo-900">${item.stock.toLocaleString()} EA</strong></div>
+                  <div class="text-right">재고: <strong class="text-indigo-900 font-bold">${item.stock.toLocaleString()} EA</strong></div>
                 </div>
               </div>
 
               <div class="flex justify-between items-center text-[11px] pt-0.5">
-                <span class="text-slate-500">재고가치: <strong>$${totalStockValUsd.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</strong></span>
+                <span class="text-slate-500">재고가치: <strong class="text-slate-800">$${totalStockValUsd.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</strong></span>
                 <button onclick="deleteItem('${item.id}', event)" class="text-[11px] text-red-500 hover:text-red-700 font-semibold px-2 py-0.5 rounded bg-red-50 hover:bg-red-100">
                   삭제
                 </button>
@@ -644,7 +815,7 @@
       // 2. 데스크톱 테이블 뷰
       const tbody = document.getElementById('inventoryTableBody');
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-slate-400">등록된 제품이 없습니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-slate-400">조건과 일치하는 재고가 없습니다.</td></tr>`;
         return;
       }
 
@@ -652,9 +823,9 @@
         const totalStockValUsd = item.unitUsd * item.stock;
         return `
           <tr class="hover:bg-indigo-50/50 cursor-pointer transition-colors" onclick="loadItemToInputs('${item.id}')">
-            <td class="py-3 px-3 text-slate-500 font-semibold">${item.maker}</td>
+            <td class="py-3 px-3"><span class="font-semibold text-indigo-800 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded">${item.maker}</span></td>
             <td class="py-3 px-3 font-bold text-slate-800">${item.partName}</td>
-            <td class="py-3 px-3 text-indigo-700 font-semibold">${item.owner}</td>
+            <td class="py-3 px-3 text-indigo-900 font-bold">${item.owner}</td>
             <td class="py-3 px-3 text-slate-500 text-[11px]">${item.entryDate || '-'}</td>
             <td class="py-3 px-3 text-slate-700">$${item.unitUsd.toFixed(3)}</td>
             <td class="py-3 px-3 text-slate-600">₩${item.shipFx.toLocaleString()}</td>
@@ -681,7 +852,7 @@
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `cloud_inventory_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("download", `bsk_inventory_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -845,7 +1016,7 @@
     }
 
     function copyQuotation() {
-      const maker = document.getElementById('inputMaker').value.trim();
+      const maker = getSelectedMaker();
       const partName = document.getElementById('inputPartName').value.trim();
       const qty = parseFloat(document.getElementById('inputQty').value) || 0;
       const unitUsd = document.getElementById('minSaleUnitReplaceUsd').innerText;
