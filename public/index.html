@@ -3,39 +3,54 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>반도체 영업 마진 방어 견적기 (보안 모드)</title>
+  <title>반도체 영업 마진 방어 견적 시스템 (Professional)</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 p-4 md:p-8 min-h-screen">
-  <div class="max-w-5xl mx-auto space-y-6">
+  <div class="max-w-6xl mx-auto space-y-6">
     
-    <!-- 상단 헤더: 실시간 환율 -->
+    <!-- 1. 상단 글로벌 헤더 -->
     <header class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
         <div class="flex items-center gap-2">
-          <span class="text-xs font-bold uppercase tracking-wider bg-slate-800 text-white px-2 py-0.5 rounded">Semiconductor FX</span>
-          <h1 class="text-xl font-bold text-slate-900">반도체 부품 재고 관리 & 마진 방어 견적기</h1>
+          <span class="text-xs font-bold uppercase tracking-wider bg-slate-800 text-white px-2 py-0.5 rounded">Semiconductor FX Pro</span>
+          <h1 class="text-xl font-bold text-slate-900">반도체 영업 마진 방어 & 재고 견적 시스템</h1>
         </div>
-        <p class="text-sm text-slate-500 mt-1">실시간 환율 변동 반영 | 라인별 선적 재고 기록 및 고객사 납품 하한선 자동 산출</p>
+        <p class="text-sm text-slate-500 mt-1">실시간 환율 변동 연동 | 라인별 재발주 방어선 | 수량 구간별(Tier) 견적 산출</p>
       </div>
-      <div class="text-left md:text-right">
-        <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">실시간 FX Rate (USD Base)</span>
-        <div id="liveFx" class="text-2xl font-black text-slate-900 mt-1">$1.00 = -</div>
+
+      <div class="flex items-center gap-4">
+        <!-- 환변동 버퍼 셀렉터 -->
+        <div class="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-right">
+          <span class="text-[10px] font-semibold text-slate-500 block">안전 환율 버퍼 (FX Buffer)</span>
+          <select id="fxBufferSelect" class="bg-transparent text-xs font-bold text-indigo-600 outline-none cursor-pointer">
+            <option value="0">버퍼 없음 (+0원)</option>
+            <option value="10">보수적 (+10원)</option>
+            <option value="20">안전 (+20원)</option>
+            <option value="30">초안전 (+30원)</option>
+          </select>
+        </div>
+
+        <!-- 실시간 환율 카드 -->
+        <div class="text-right">
+          <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">실시간 FX Rate</span>
+          <div id="liveFx" class="text-2xl font-black text-slate-900 mt-1">$1.00 = -</div>
+        </div>
       </div>
     </header>
 
-    <!-- 견적 시뮬레이터 메인 그리드 -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- 2. 메인 견적 엔진 레이아웃 -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      <!-- 1. 매입 조건 및 납품 수량 입력 -->
-      <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 md:col-span-1 space-y-4">
+      <!-- 좌측: 견적 입력 폼 -->
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-1 space-y-4">
         <div class="border-b pb-2 flex justify-between items-center">
           <div>
             <h2 class="font-bold text-base text-slate-900">견적 파라미터</h2>
-            <p class="text-xs text-slate-400">직접 입력하거나 하단 목록에서 로드</p>
+            <p class="text-xs text-slate-400">직접 입력하거나 하단 목록에서 선택</p>
           </div>
           <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-2.5 py-1.5 rounded-lg transition-colors">
-            현재 조건 저장
+            조건 저장
           </button>
         </div>
 
@@ -52,11 +67,11 @@
 
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label class="text-slate-600 block mb-1">견적 수량 (EA)</label>
+              <label class="text-slate-600 block mb-1">고객사 견적 수량 (EA)</label>
               <input type="number" id="inputQty" value="1000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
             <div>
-              <label class="text-slate-600 block mb-1">창고 재고 수량 (EA)</label>
+              <label class="text-slate-600 block mb-1">현재 창고 재고 (EA)</label>
               <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
           </div>
@@ -73,9 +88,9 @@
         </div>
 
         <!-- 원가 요약 -->
-        <div class="pt-4 border-t space-y-3 text-xs text-slate-500">
+        <div class="pt-3 border-t space-y-2.5 text-xs text-slate-500">
           <div>
-            <div class="text-[11px] font-semibold text-slate-400 mb-1">창고 재고 원가 (선적일 기준)</div>
+            <div class="text-[11px] font-semibold text-slate-400 mb-0.5">창고 재고 원가 (선적일 기준)</div>
             <div class="flex justify-between items-center">
               <span>개당(EA):</span>
               <span id="actualCostUnit" class="font-bold text-slate-700">-</span>
@@ -87,7 +102,7 @@
           </div>
 
           <div class="pt-2 border-t border-dashed">
-            <div class="text-[11px] font-semibold text-slate-400 mb-1">해당 라인 재발주 원가 (현재 환율 기준)</div>
+            <div class="text-[11px] font-semibold text-slate-400 mb-0.5">라인 재발주 원가 (현재 환율 기준)</div>
             <div class="flex justify-between items-center">
               <span>개당(EA):</span>
               <span id="replaceCostUnit" class="font-bold text-slate-700">-</span>
@@ -100,22 +115,28 @@
         </div>
       </div>
 
-      <!-- 2. 권고 견적가 대시보드 -->
-      <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 md:col-span-2 space-y-5">
+      <!-- 우측: 권고 견적 및 분석 대시보드 -->
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2 space-y-5">
         <div class="border-b pb-2 flex justify-between items-center">
-          <h2 class="font-bold text-base text-slate-900">고객사 제시 권고 견적가 (USD)</h2>
-          <span class="text-xs text-slate-400">마진 방어 기준</span>
+          <div>
+            <h2 class="font-bold text-base text-slate-900">고객사 제시 권고 견적가 (USD)</h2>
+            <span class="text-xs text-slate-400">마진 방어 및 유효 견적 산출</span>
+          </div>
+          <button id="copyQuoteBtn" class="text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+            <span>📋</span> 견적서 양식 복사
+          </button>
         </div>
 
-        <!-- 환율 변동 상태 안내 -->
-        <div id="fxNoticeBox" class="p-4 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900">
+        <!-- 환율 변동 상태 배너 -->
+        <div id="fxNoticeBox" class="p-3.5 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900">
           <div class="text-xl">ℹ️</div>
-          <div class="text-sm font-semibold" id="fxNoticeMsg">환율 분석 중...</div>
+          <div class="text-xs font-semibold leading-relaxed" id="fxNoticeMsg">환율 분석 중...</div>
         </div>
 
         <!-- 2가지 기준 카드 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           
+          <!-- 카드 1: 재고 소진용 최저선 -->
           <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
             <div class="flex justify-between items-center">
               <span class="text-xs font-bold text-slate-500">① 재고 소진용 최저 납품선</span>
@@ -132,6 +153,7 @@
             </div>
           </div>
 
+          <!-- 카드 2: 라인 재발주 방어 권장선 -->
           <div class="p-4 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-2">
             <div class="flex justify-between items-center">
               <span class="text-xs font-bold text-indigo-800">② 라인 재발주 방어 권장선</span>
@@ -150,34 +172,64 @@
 
         </div>
 
-        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1.5">
-          <div class="font-bold text-slate-800">💡 영업 견적 가이드</div>
-          <div>• <strong>지속 공급 제품:</strong> 고객사 납품 후 해당 라인 재발주 시 역마진을 막으려면 반드시 ②번 <strong>'라인 재발주 방어 권장선'</strong> 이상으로 견적을 제시하세요.</div>
-          <div>• <strong>재고 털기/소진 견적:</strong> 더 이상 추가 발주가 없는 잔여 재고 처분의 경우에만 ①번 <strong>'최저 납품선'</strong>까지 네고가 가능합니다.</div>
+        <!-- 수량 구간별(Tier) 견적 비교 테이블 -->
+        <div class="border border-slate-200 rounded-xl overflow-hidden text-xs">
+          <div class="bg-slate-50 px-3.5 py-2 font-bold text-slate-700 border-b flex justify-between items-center">
+            <span>수량별(Volume Tier Break) 권고 납품선 비교</span>
+            <span class="text-[10px] text-slate-400 font-normal">재발주 안전선 기준</span>
+          </div>
+          <table class="w-full text-center">
+            <thead class="bg-slate-50/50 text-slate-500 border-b">
+              <tr>
+                <th class="py-2">구간 수량</th>
+                <th class="py-2">개당 권장 단가 (USD)</th>
+                <th class="py-2">개당 원화 환산 (KRW)</th>
+                <th class="py-2">총 견적 합계 (USD)</th>
+              </tr>
+            </thead>
+            <tbody id="tierTableBody" class="divide-y divide-slate-100 font-medium">
+              <!-- Tier 렌더링 -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 영업 가이드 팁 -->
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 space-y-1">
+          <div>• <strong>견적 유효기간:</strong> 환율 급변 리스크 방지를 위해 고객사 제출 견적서에는 <strong>[발행일 기준 3영업일 유효]</strong> 조건을 명시하는 것을 권장합니다.</div>
+          <div>• <strong>클립보드 복사:</strong> 우측 상단 복사 버튼을 누르면 고객사 이메일/메신저 전달용 표준 텍스트가 복사됩니다.</div>
         </div>
 
       </div>
 
     </div>
 
-    <!-- 3. 등록된 제품 및 재고 현황 관리 테이블 (보안 보호 영역) -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 relative">
-      <div class="flex justify-between items-center border-b pb-3">
+    <!-- 3. 등록된 반도체 재고 관리 테이블 (보안 & 검색 & 백업) -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-3">
         <div>
           <div class="flex items-center gap-2">
             <h2 class="font-bold text-base text-slate-900">등록된 반도체 재고 품목 리스트</h2>
             <span id="lockStatusBadge" class="text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">🔒 잠김 (인증 필요)</span>
           </div>
-          <p class="text-xs text-slate-400 mt-0.5">사내 보안 품목 정보는 관리자 인증 후 열람 및 수정이 가능합니다.</p>
+          <p class="text-xs text-slate-400 mt-0.5">사내 보안 품목 정보는 관리자 인증 후 열람, 검색, 백업이 가능합니다.</p>
         </div>
+
+        <!-- 상단 액션 바 -->
         <div class="flex items-center gap-2">
+          <input type="file" id="csvFileInput" accept=".csv" class="hidden">
+          <button id="importCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300">
+            📥 CSV 가져오기
+          </button>
+          <button id="exportCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300">
+            📤 CSV 백업
+          </button>
           <button id="adminAuthBtn" class="text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
             🔑 관리자 인증
           </button>
         </div>
       </div>
 
-      <!-- 잠금 시 오버레이 화면 -->
+      <!-- 잠금 상태 오버레이 -->
       <div id="lockedOverlay" class="p-8 text-center bg-slate-50/90 rounded-xl border border-dashed border-slate-300 space-y-3">
         <div class="text-3xl">🔒</div>
         <div class="font-bold text-slate-700 text-sm">보안을 위해 재고 품목 리스트가 잠겨 있습니다.</div>
@@ -187,34 +239,47 @@
         </button>
       </div>
 
-      <!-- 실제 테이블 영역 (기본 hidden) -->
-      <div id="unlockedContent" class="hidden overflow-x-auto">
-        <table class="w-full text-left text-xs">
-          <thead class="bg-slate-50 text-slate-500 border-b uppercase font-semibold">
-            <tr>
-              <th class="py-3 px-3">제품명 (Part Number)</th>
-              <th class="py-3 px-3">매입 단가 (USD)</th>
-              <th class="py-3 px-3">선적 환율</th>
-              <th class="py-3 px-3">창고 재고 수량</th>
-              <th class="py-3 px-3">목표 마진</th>
-              <th class="py-3 px-3">현재 재고 가치 (USD)</th>
-              <th class="py-3 px-3 text-right">관리</th>
-            </tr>
-          </thead>
-          <tbody id="inventoryTableBody" class="divide-y divide-slate-100 font-medium">
-            <!-- 동적 렌더링 -->
-          </tbody>
-        </table>
+      <!-- 잠금 해제 콘텐츠 영역 -->
+      <div id="unlockedContent" class="hidden space-y-3">
+        <!-- 검색창 -->
+        <div class="flex justify-between items-center gap-3">
+          <div class="relative w-full max-w-xs">
+            <input type="text" id="searchInput" placeholder="Part Number 검색..." class="w-full pl-8 pr-3 py-1.5 border rounded-lg bg-slate-50 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
+            <span class="absolute left-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
+          </div>
+          <span id="itemCount" class="text-xs font-semibold text-slate-500">총 0개 등록됨</span>
+        </div>
+
+        <!-- 테이블 -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-500 border-b uppercase font-semibold">
+              <tr>
+                <th class="py-3 px-3">제품명 (Part Number)</th>
+                <th class="py-3 px-3">매입 단가 (USD)</th>
+                <th class="py-3 px-3">선적 환율</th>
+                <th class="py-3 px-3">창고 재고 수량</th>
+                <th class="py-3 px-3">목표 마진</th>
+                <th class="py-3 px-3">현재 재고 가치 (USD)</th>
+                <th class="py-3 px-3 text-right">관리</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryTableBody" class="divide-y divide-slate-100 font-medium">
+              <!-- 동적 렌더링 -->
+            </tbody>
+          </table>
+        </div>
       </div>
+
     </div>
 
   </div>
 
   <script>
-    let currentFxRate = 1380.0;
+    let rawFxRate = 1380.0;
+    let appliedFxRate = 1380.0;
     let isAdminAuthenticated = false;
 
-    // PIN 번호 관리 (기본값: 1234, LocalStorage에 저장되어 변경 가능)
     const PIN_STORAGE_KEY = "admin_pin_code";
     const STORAGE_KEY = "semiconductor_inventory_items";
 
@@ -232,27 +297,43 @@
       try {
         const fxRes = await fetch('/api/fx-rate');
         const fxData = await fxRes.json();
-        currentFxRate = fxData.current_rate;
-        document.getElementById('liveFx').innerText = `$1.00 (₩${Math.round(currentFxRate).toLocaleString()})`;
+        rawFxRate = fxData.current_rate;
+        updateAppliedFxRate();
       } catch (err) {
         console.warn("환율 조회 실패, 기본값 유지", err);
+        updateAppliedFxRate();
       }
 
+      // 이벤트 리스너 바인딩
       ['inputUsd', 'inputQty', 'inputShipFx', 'inputTargetMargin', 'inputStock'].forEach(id => {
         document.getElementById(id).addEventListener('input', runCalculation);
       });
 
+      document.getElementById('fxBufferSelect').addEventListener('change', updateAppliedFxRate);
       document.getElementById('saveItemBtn').addEventListener('click', saveCurrentItem);
       document.getElementById('adminAuthBtn').addEventListener('click', toggleAdminAuth);
+      document.getElementById('copyQuoteBtn').addEventListener('click', copyQuotation);
+      document.getElementById('searchInput').addEventListener('input', renderTable);
+
+      // CSV 백업 및 가져오기 바인딩
+      document.getElementById('exportCsvBtn').addEventListener('click', exportToCsv);
+      document.getElementById('importCsvBtn').addEventListener('click', () => document.getElementById('csvFileInput').click());
+      document.getElementById('csvFileInput').addEventListener('change', importFromCsv);
 
       updateSecurityUI();
       runCalculation();
     }
 
-    // 관리자 인증 토글 처리
+    function updateAppliedFxRate() {
+      const buffer = parseFloat(document.getElementById('fxBufferSelect').value) || 0;
+      appliedFxRate = rawFxRate + buffer;
+      const bufferText = buffer > 0 ? ` (버퍼 +${buffer}원 포함)` : "";
+      document.getElementById('liveFx').innerText = `$1.00 (₩${Math.round(appliedFxRate).toLocaleString()})${bufferText}`;
+      runCalculation();
+    }
+
     function toggleAdminAuth() {
       if (isAdminAuthenticated) {
-        // 로그아웃 (잠금)
         isAdminAuthenticated = false;
         updateSecurityUI();
       } else {
@@ -269,7 +350,7 @@
         updateSecurityUI();
         renderTable();
       } else {
-        alert("PIN 번호가 일치하지 않습니다. 접근이 거부되었습니다.");
+        alert("PIN 번호가 일치하지 않습니다.");
       }
     }
 
@@ -278,10 +359,14 @@
       const content = document.getElementById('unlockedContent');
       const badge = document.getElementById('lockStatusBadge');
       const authBtn = document.getElementById('adminAuthBtn');
+      const exportBtn = document.getElementById('exportCsvBtn');
+      const importBtn = document.getElementById('importCsvBtn');
 
       if (isAdminAuthenticated) {
         overlay.classList.add('hidden');
         content.classList.remove('hidden');
+        exportBtn.classList.remove('hidden');
+        importBtn.classList.remove('hidden');
         badge.className = "text-[11px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full flex items-center gap-1";
         badge.innerHTML = "🔓 관리자 인증됨";
         authBtn.className = "text-xs bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1";
@@ -289,6 +374,8 @@
       } else {
         overlay.classList.remove('hidden');
         content.classList.add('hidden');
+        exportBtn.classList.add('hidden');
+        importBtn.classList.add('hidden');
         badge.className = "text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1";
         badge.innerHTML = "🔒 잠김 (인증 필요)";
         authBtn.className = "text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1";
@@ -374,15 +461,19 @@
     function renderTable() {
       if (!isAdminAuthenticated) return;
 
-      const items = getItems();
+      const filterText = (document.getElementById('searchInput').value || "").trim().toUpperCase();
+      const allItems = getItems();
+      const filtered = allItems.filter(i => i.partName.toUpperCase().includes(filterText));
+      
       const tbody = document.getElementById('inventoryTableBody');
+      document.getElementById('itemCount').innerText = `총 ${filtered.length}개 표시됨`;
 
-      if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400">등록된 제품이 없습니다.</td></tr>`;
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400">일치하는 제품이 없습니다.</td></tr>`;
         return;
       }
 
-      tbody.innerHTML = items.map(item => {
+      tbody.innerHTML = filtered.map(item => {
         const totalStockValUsd = item.unitUsd * item.stock;
         return `
           <tr class="hover:bg-indigo-50/50 cursor-pointer transition-colors" onclick="loadItem('${item.id}')">
@@ -402,6 +493,69 @@
       }).join('');
     }
 
+    // CSV 백업 및 가져오기 로직
+    function exportToCsv() {
+      const items = getItems();
+      if (items.length === 0) {
+        alert("내보낼 품목 데이터가 없습니다.");
+        return;
+      }
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+      csvContent += "PartNumber,UnitPriceUSD,ShippingFX,StockQty,TargetMargin\n";
+      items.forEach(i => {
+        csvContent += `"${i.partName}",${i.unitUsd},${i.shipFx},${i.stock},${i.margin}\n`;
+      });
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `semiconductor_inventory_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function importFromCsv(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const text = evt.target.result;
+        const lines = text.split(/\r\n|\n/);
+        let items = getItems();
+        let importedCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          const parts = line.split(',');
+          if (parts.length >= 5) {
+            const partName = parts[0].replace(/\"/g, '').trim();
+            const unitUsd = parseFloat(parts[1]) || 0;
+            const shipFx = parseFloat(parts[2]) || 1350;
+            const stock = parseFloat(parts[3]) || 0;
+            const margin = parseFloat(parts[4]) || 20;
+
+            const existingIdx = items.findIndex(it => it.partName.toUpperCase() === partName.toUpperCase());
+            const newItem = { id: Date.now() + Math.random().toString(), partName, unitUsd, shipFx, stock, margin };
+
+            if (existingIdx >= 0) {
+              items[existingIdx] = newItem;
+            } else {
+              items.push(newItem);
+            }
+            importedCount++;
+          }
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        renderTable();
+        alert(`${importedCount}건의 품목 데이터가 CSV에서 성공적으로 가져와졌습니다.`);
+        e.target.value = "";
+      };
+      reader.readAsText(file);
+    }
+
+    // 핵심 계산 엔진
     function runCalculation() {
       const unitUsd = parseFloat(document.getElementById('inputUsd').value) || 0;
       const qty = parseFloat(document.getElementById('inputQty').value) || 0;
@@ -410,7 +564,7 @@
 
       // 1. 개당 원가
       const unitActualCostKrw = unitUsd * shipFx;
-      const unitReplaceCostKrw = unitUsd * currentFxRate;
+      const unitReplaceCostKrw = unitUsd * appliedFxRate;
 
       // 2. 총 원가
       const totalActualCostKrw = unitActualCostKrw * qty;
@@ -422,8 +576,8 @@
       const unitMinPriceReplaceKrw = targetMargin < 1 ? (unitReplaceCostKrw / (1 - targetMargin)) : 0;
 
       // 4. 달러 단가
-      const unitMinPriceActualUsd = currentFxRate > 0 ? (unitMinPriceActualKrw / currentFxRate) : 0;
-      const unitMinPriceReplaceUsd = currentFxRate > 0 ? (unitMinPriceReplaceKrw / currentFxRate) : 0;
+      const unitMinPriceActualUsd = appliedFxRate > 0 ? (unitMinPriceActualKrw / appliedFxRate) : 0;
+      const unitMinPriceReplaceUsd = appliedFxRate > 0 ? (unitMinPriceReplaceKrw / appliedFxRate) : 0;
 
       // 5. 총 견적가
       const totalMinPriceActualKrw = unitMinPriceActualKrw * qty;
@@ -438,7 +592,7 @@
       document.getElementById('replaceCostUnit').innerText = `$${unitUsd.toFixed(3)} (₩${unitReplaceCostKrw.toFixed(1)})`;
       document.getElementById('replaceCostTotal').innerText = `$${totalUsdCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalReplaceCostKrw).toLocaleString()})`;
 
-      // 7. UI 반영 - 견적 단가 및 총액 (USD 메인)
+      // 7. UI 반영 - 권고 견적가 (USD 메인)
       document.getElementById('minSaleUnitActualUsd').innerText = `$${unitMinPriceActualUsd.toFixed(4)}`;
       document.getElementById('minSaleUnitActualKrw').innerText = `(₩${unitMinPriceActualKrw.toFixed(1)} / EA)`;
       document.getElementById('minSaleTotalActual').innerText = `$${totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalMinPriceActualKrw).toLocaleString()})`;
@@ -447,21 +601,80 @@
       document.getElementById('minSaleUnitReplaceKrw').innerText = `(₩${unitMinPriceReplaceKrw.toFixed(1)} / EA)`;
       document.getElementById('minSaleTotalReplace').innerText = `$${totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalMinPriceReplaceKrw).toLocaleString()})`;
 
-      // 8. 환율 상태 안내
+      // 8. 수량 구간별(Tier) 테이블 렌더링 (1k, 5k, 10k 및 현재 수량)
+      renderTierTable(unitMinPriceReplaceUsd, unitMinPriceReplaceKrw, qty);
+
+      // 9. 환율 상태 안내 및 변동 배지
       const noticeBox = document.getElementById('fxNoticeBox');
       const noticeMsg = document.getElementById('fxNoticeMsg');
-      const fxDiff = currentFxRate - shipFx;
+      const fxDiff = appliedFxRate - shipFx;
+      const fxPercent = ((fxDiff / shipFx) * 100).toFixed(1);
 
       if (fxDiff > 0) {
-        noticeBox.className = "p-4 rounded-xl border flex items-center gap-3 bg-amber-50 border-amber-300 text-amber-900";
-        noticeMsg.innerText = `⚠️ 선적 당시 대비 환율 +${Math.round(fxDiff)}원 상승: 해당 라인 추가 재발주 시 역마진을 방지하려면 고객사에 개당 $${unitMinPriceReplaceUsd.toFixed(4)} (₩${unitMinPriceReplaceKrw.toFixed(1)}) 이상으로 견적을 제시하세요.`;
+        noticeBox.className = "p-3.5 rounded-xl border flex items-center gap-3 bg-amber-50 border-amber-300 text-amber-900";
+        noticeMsg.innerHTML = `⚠️ <strong>선적 대비 환율 +${Math.round(fxDiff)}원 (+${fxPercent}%) 상승:</strong> 다음 라인 재발주 역마진을 막기 위해 최소 <strong>$${unitMinPriceReplaceUsd.toFixed(4)} / EA</strong> (₩${unitMinPriceReplaceKrw.toFixed(1)}) 이상으로 견적서를 제출하세요.`;
       } else if (fxDiff < 0) {
-        noticeBox.className = "p-4 rounded-xl border flex items-center gap-3 bg-green-50 border-green-200 text-green-800";
-        noticeMsg.innerText = `✅ 선적 당시 대비 환율 ${Math.round(fxDiff)}원 안정: 현재 마진 확보 여력이 양호한 상태입니다.`;
+        noticeBox.className = "p-3.5 rounded-xl border flex items-center gap-3 bg-green-50 border-green-200 text-green-800";
+        noticeMsg.innerHTML = `✅ <strong>선적 대비 환율 ${Math.round(fxDiff)}원 (${fxPercent}%) 안정:</strong> 마진 확보 여력이 비교적 양호합니다.`;
       } else {
-        noticeBox.className = "p-4 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900";
-        noticeMsg.innerText = "선적 당시 환율과 현재 환율이 동일합니다.";
+        noticeBox.className = "p-3.5 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900";
+        noticeMsg.innerText = "선적 당시 환율과 현재 적용 환율이 동일합니다.";
       }
+    }
+
+    function renderTierTable(unitUsd, unitKrw, currentQty) {
+      const tiers = [
+        { label: "1,000 EA", qty: 1000 },
+        { label: "5,000 EA", qty: 5000 },
+        { label: "10,000 EA", qty: 10000 }
+      ];
+
+      // 현재 수량이 기본 티어에 없으면 추가
+      if (![1000, 5000, 10000].includes(currentQty) && currentQty > 0) {
+        tiers.push({ label: `${currentQty.toLocaleString()} EA (견적)`, qty: currentQty, isCurrent: true });
+        tiers.sort((a, b) => a.qty - b.qty);
+      }
+
+      const tbody = document.getElementById('tierTableBody');
+      tbody.innerHTML = tiers.map(t => {
+        const totalUsd = unitUsd * t.qty;
+        const totalKrw = unitKrw * t.qty;
+        const highlight = t.isCurrent ? "bg-indigo-50/70 font-bold text-indigo-900" : "";
+        return `
+          <tr class="${highlight}">
+            <td class="py-2 px-2">${t.label}</td>
+            <td class="py-2 px-2 text-indigo-600 font-semibold">$${unitUsd.toFixed(4)}</td>
+            <td class="py-2 px-2 text-slate-600">₩${unitKrw.toFixed(1)}</td>
+            <td class="py-2 px-2 text-slate-800">$${totalUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // 원클릭 견적서 양식 복사
+    function copyQuotation() {
+      const partName = document.getElementById('inputPartName').value.trim();
+      const qty = parseFloat(document.getElementById('inputQty').value) || 0;
+      const unitUsd = document.getElementById('minSaleUnitReplaceUsd').innerText;
+      const unitKrw = document.getElementById('minSaleUnitReplaceKrw').innerText;
+      const totalUsd = document.getElementById('minSaleTotalReplace').innerText;
+      const fxRateText = document.getElementById('liveFx').innerText;
+
+      const quoteTemplate = `[견적 안내] ${partName}
+----------------------------------------
+- 품목명: ${partName}
+- 견적 수량: ${qty.toLocaleString()} EA
+- 공급 단가: ${unitUsd} / EA ${unitKrw}
+- 총 견적액: ${totalUsd}
+----------------------------------------
+* 기준 환율: ${fxRateText}
+* 유효 기간: 견적 발행일 기준 3영업일 유효 (이후 환율 재정산)`;
+
+      navigator.clipboard.writeText(quoteTemplate).then(() => {
+        alert("고객사용 견적서 텍스트가 클립보드에 복사되었습니다.\n이메일이나 메신저에 바로 붙여넣어 사용하세요!");
+      }).catch(err => {
+        console.error("복사 실패", err);
+      });
     }
 
     window.onload = init;
