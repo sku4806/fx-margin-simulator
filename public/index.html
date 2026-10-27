@@ -15,17 +15,12 @@
 <body class="bg-slate-100 text-slate-800 p-3 sm:p-6 md:p-8 min-h-screen font-sans">
   <div class="max-w-6xl mx-auto space-y-4 sm:space-y-6">
     
-    <!-- 1. 상단 글로벌 헤더 (Bigshine Korea 공식 심볼 로고) -->
+    <!-- 1. 상단 글로벌 헤더 (Bigshine Korea 공식 로고 이미지 탑재) -->
     <header class="bg-[#0b2046] text-white p-4 sm:p-6 rounded-2xl shadow-md border border-slate-700/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div class="flex items-center gap-3.5">
-        <!-- BSK 심볼 로고 SVG -->
-        <div class="w-12 h-12 bg-white rounded-lg p-1.5 flex items-center justify-center shrink-0 shadow-sm">
-          <svg viewBox="0 0 100 100" class="w-full h-full text-[#0b2046] fill-current">
-            <path d="M12 12 h20 v76 h-20 z" opacity="0.95"/>
-            <path d="M38 12 c0 40 18 65 50 76 h-18 c-30 -12 -44 -38 -44 -76 z"/>
-            <path d="M52 24 c0 32 15 52 42 64 h-16 c-24 -11 -36 -32 -36 -64 z"/>
-            <path d="M66 38 c0 24 12 40 32 50 h-14 c-18 -9 -26 -25 -26 -50 z"/>
-          </svg>
+        <!-- BSK 실제 로고 이미지 박스 -->
+        <div class="w-12 h-12 bg-white rounded-xl p-1 flex items-center justify-center shrink-0 shadow-sm overflow-hidden border border-white/20">
+          <img src="/BSK.jpg" alt="BIGSHINE KOREA Logo" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='https://www.bigshine.co.kr/img/common/logo.png';">
         </div>
         <div>
           <div class="flex items-center gap-2">
