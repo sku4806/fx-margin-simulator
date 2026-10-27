@@ -292,6 +292,7 @@
           <p id="authSubtitle" class="text-[11px] text-slate-400 mt-0.5">인증된 사내 영업 계정만 원가 및 재고를 조회할 수 있습니다.</p>
         </div>
 
+        <!-- 우측 액션 버튼 그룹 (로그인 후에만 비밀번호 변경 버튼 노출) -->
         <div class="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-end pt-1 sm:pt-0">
           <input type="file" id="csvFileInput" accept=".csv" class="hidden">
           <button id="importCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg border border-slate-300">
@@ -299,6 +300,10 @@
           </button>
           <button id="exportCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg border border-slate-300">
             📤 CSV 백업
+          </button>
+          <!-- 💡 로그인 완료 시에만 나타나는 개인 비밀번호 변경 버튼 -->
+          <button id="changePwdBtn" onclick="openChangePasswordModal()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg border border-slate-300 transition-colors">
+            🔑 비밀번호 변경
           </button>
           <button id="authActionBtn" class="text-xs bg-slate-800 hover:bg-slate-900 active:scale-95 text-white font-semibold px-3.5 py-1.5 rounded-lg transition-transform flex items-center gap-1.5">
             🔑 사내 계정 로그인
@@ -427,6 +432,34 @@
     </div>
   </div>
 
+  <!-- 5. 💡 개인 비밀번호 변경 모달 (로그인 상태 전용) -->
+  <div id="changePasswordModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex justify-between items-start">
+        <div>
+          <h3 class="text-base font-bold text-slate-900">비밀번호 변경</h3>
+          <p id="changePwdUserEmail" class="text-xs text-slate-500 mt-0.5 font-medium"></p>
+        </div>
+        <button onclick="closeChangePasswordModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+      </div>
+
+      <form id="changePasswordForm" class="space-y-3 text-xs" onsubmit="handleChangePasswordSubmit(event)">
+        <div>
+          <label class="text-slate-600 block mb-1 font-semibold">새로운 비밀번호 (6자리 이상)</label>
+          <input type="password" id="newPasswordInput" required minlength="6" placeholder="새 비밀번호 입력" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+        <div>
+          <label class="text-slate-600 block mb-1 font-semibold">새 비밀번호 확인</label>
+          <input type="password" id="confirmPasswordInput" required minlength="6" placeholder="새 비밀번호 재입력" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+        <div id="changePwdErrorMsg" class="hidden text-[11px] font-semibold text-red-600 bg-red-50 p-2 rounded-lg"></div>
+        <button type="submit" id="changePwdSubmitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold py-2.5 rounded-lg transition-transform">
+          비밀번호 변경 완료
+        </button>
+      </form>
+    </div>
+  </div>
+
   <script>
     const SUPABASE_PROJECT_URL = 'https://qheijtepveajdrqerxef.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_0TB2JQq4BVfvihySxCbbkw_v4ZRAF80';
@@ -503,7 +536,6 @@
       document.getElementById('importCsvBtn').addEventListener('click', () => document.getElementById('csvFileInput').click());
       document.getElementById('csvFileInput').addEventListener('change', importFromCsv);
 
-      // 세션 확인 (기존 로그인 유지 여부)
       await checkCurrentAuth();
       runCalculation();
     }
@@ -521,7 +553,6 @@
         await loadItemsFromCloud();
       }
 
-      // 세션 상태 변경 실시간 감지
       sbClient.auth.onAuthStateChange(async (_event, session) => {
         currentUserSession = session;
         updateAuthUI();
@@ -581,6 +612,63 @@
       }
     }
 
+    // 💡 개인 비밀번호 변경 함수 (로그인된 세션의 사용자 비밀번호 즉시 수정)
+    function openChangePasswordModal() {
+      if (!currentUserSession || !currentUserSession.user) {
+        alert("로그인 후에 비밀번호를 변경할 수 있습니다.");
+        return;
+      }
+      document.getElementById('changePwdUserEmail').innerText = `계정: ${currentUserSession.user.email}`;
+      document.getElementById('newPasswordInput').value = "";
+      document.getElementById('confirmPasswordInput').value = "";
+      document.getElementById('changePwdErrorMsg').classList.add('hidden');
+      document.getElementById('changePasswordModal').classList.remove('hidden');
+      document.getElementById('newPasswordInput').focus();
+    }
+
+    function closeChangePasswordModal() {
+      document.getElementById('changePasswordModal').classList.add('hidden');
+    }
+
+    async function handleChangePasswordSubmit(e) {
+      e.preventDefault();
+      const newPwd = document.getElementById('newPasswordInput').value.trim();
+      const confirmPwd = document.getElementById('confirmPasswordInput').value.trim();
+      const btn = document.getElementById('changePwdSubmitBtn');
+      const errBox = document.getElementById('changePwdErrorMsg');
+
+      if (newPwd !== confirmPwd) {
+        errBox.innerText = "새 비밀번호와 확인 비밀번호가 서로 일치하지 않습니다.";
+        errBox.classList.remove('hidden');
+        return;
+      }
+
+      if (newPwd.length < 6) {
+        errBox.innerText = "비밀번호는 최소 6자리 이상이어야 합니다.";
+        errBox.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "변경 처리 중...";
+      errBox.classList.add('hidden');
+
+      const { data, error } = await sbClient.auth.updateUser({
+        password: newPwd
+      });
+
+      btn.disabled = false;
+      btn.innerText = "비밀번호 변경 완료";
+
+      if (error) {
+        errBox.innerText = "비밀번호 변경 실패: " + error.message;
+        errBox.classList.remove('hidden');
+      } else {
+        alert("비밀번호가 성공적으로 변경되었습니다!\n다음 로그인부터 새 비밀번호가 적용됩니다.");
+        closeChangePasswordModal();
+      }
+    }
+
     function updateAuthUI() {
       const overlay = document.getElementById('lockedOverlay');
       const content = document.getElementById('unlockedContent');
@@ -589,12 +677,16 @@
       const authSubtitle = document.getElementById('authSubtitle');
       const exportBtn = document.getElementById('exportCsvBtn');
       const importBtn = document.getElementById('importCsvBtn');
+      const changePwdBtn = document.getElementById('changePwdBtn');
 
       if (currentUserSession && currentUserSession.user) {
         overlay.classList.add('hidden');
         content.classList.remove('hidden');
         exportBtn.classList.remove('hidden');
         importBtn.classList.remove('hidden');
+
+        // 💡 로그인 완료 시에만 비밀번호 변경 버튼 노출
+        changePwdBtn.classList.remove('hidden');
 
         badge.className = "text-[10px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full";
         badge.innerHTML = "🔓 보안 인증됨";
@@ -608,6 +700,9 @@
         content.classList.add('hidden');
         exportBtn.classList.add('hidden');
         importBtn.classList.add('hidden');
+
+        // 💡 비로그인 시 비밀번호 변경 버튼 숨김
+        changePwdBtn.classList.add('hidden');
 
         badge.className = "text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full";
         badge.innerHTML = "🔒 로그인 필요";
