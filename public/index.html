@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>반도체 영업 마진 방어 견적 시스템 (Cloud Edition)</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS Client SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 p-4 md:p-8 min-h-screen">
   <div class="max-w-6xl mx-auto space-y-6">
     
-    <!-- 1. 상단 헤더 -->
+    <!-- 1. 상단 글로벌 헤더 -->
     <header class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
         <div class="flex items-center gap-2">
@@ -24,7 +25,7 @@
         <!-- 환변동 버퍼 -->
         <div class="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-right">
           <span class="text-[10px] font-semibold text-slate-500 block">안전 환율 버퍼 (FX Buffer)</span>
-          <select id="fxBufferSelect" onchange="updateAppliedFxRate()" class="bg-transparent text-xs font-bold text-indigo-600 outline-none cursor-pointer">
+          <select id="fxBufferSelect" class="bg-transparent text-xs font-bold text-indigo-600 outline-none cursor-pointer">
             <option value="0">버퍼 없음 (+0원)</option>
             <option value="10">보수적 (+10원)</option>
             <option value="20">안전 (+20원)</option>
@@ -35,7 +36,7 @@
         <!-- 실시간 환율 -->
         <div class="text-right">
           <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">실시간 FX Rate</span>
-          <div id="liveFx" class="text-2xl font-black text-slate-900 mt-1">$1.00 = ₩1,380</div>
+          <div id="liveFx" class="text-2xl font-black text-slate-900 mt-1">$1.00 = -</div>
         </div>
       </div>
     </header>
@@ -43,14 +44,14 @@
     <!-- 2. 메인 그리드 -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      <!-- 좌측: 견적 입력 폼 -->
+      <!-- 좌측: 견적 파라미터 및 원가 입력 -->
       <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-1 space-y-4">
         <div class="border-b pb-2 flex justify-between items-center">
           <div>
             <h2 class="font-bold text-base text-slate-900">견적 파라미터</h2>
             <p class="text-xs text-slate-400">직접 입력하거나 하단 목록에서 선택</p>
           </div>
-          <button type="button" onclick="saveCurrentItem()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer">
+          <button type="button" id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer">
             클라우드 저장
           </button>
         </div>
@@ -63,34 +64,34 @@
 
           <div>
             <label class="text-slate-600 block mb-1">개당 선적 매입가 (USD, $/EA)</label>
-            <input type="number" id="inputUsd" value="2.50" step="0.001" oninput="runCalculation()" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+            <input type="number" id="inputUsd" value="2.50" step="0.001" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
 
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="text-slate-600 block mb-1">고객사 견적 수량 (EA)</label>
-              <input type="number" id="inputQty" value="1000" step="100" oninput="runCalculation()" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+              <input type="number" id="inputQty" value="1000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
             <div>
               <label class="text-slate-600 block mb-1">현재 창고 재고 (EA)</label>
-              <input type="number" id="inputStock" value="5000" step="100" oninput="runCalculation()" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+              <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="text-slate-600 block mb-1">선적 환율 ($1 기준 KRW)</label>
-              <input type="number" id="inputShipFx" value="1350" step="1" oninput="runCalculation()" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+              <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
             <div>
               <label class="text-slate-600 block mb-1">부대비용/관세 가산 (%)</label>
-              <input type="number" id="inputOverhead" value="3.0" step="0.5" oninput="runCalculation()" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+              <input type="number" id="inputOverhead" value="3.0" step="0.5" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
           </div>
 
           <div>
             <label class="text-slate-600 block mb-1">사내 필수 최소 마진율 (%)</label>
-            <input type="number" id="inputTargetMargin" value="20" min="1" max="90" step="1" oninput="runCalculation()" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+            <input type="number" id="inputTargetMargin" value="20" min="1" max="90" step="1" class="w-full p-2.5 border rounded-lg bg-slate-50 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
         </div>
 
@@ -129,7 +130,7 @@
             <h2 class="font-bold text-base text-slate-900">고객사 제시 권고 견적가 (USD)</h2>
             <span class="text-xs text-slate-400">마진 방어 및 유효 견적 산출</span>
           </div>
-          <button type="button" onclick="copyQuotation()" class="text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer">
+          <button type="button" id="copyQuoteBtn" class="text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer">
             <span>📋</span> 견적서 양식 복사
           </button>
         </div>
@@ -188,7 +189,7 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
             <div>
               <label class="text-[11px] text-slate-500 block mb-1">고객사 희망 단가 ($/EA)</label>
-              <input type="number" id="inputTargetOffer" placeholder="예: 3.10" step="0.001" oninput="runCalculation()" class="w-full p-2 border rounded-lg bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
+              <input type="number" id="inputTargetOffer" placeholder="예: 3.10" step="0.001" class="w-full p-2 border rounded-lg bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
             <div>
               <span class="text-[11px] text-slate-500 block mb-1">재발주 기준 예상 마진율</span>
@@ -230,7 +231,7 @@
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-3">
         <div>
           <div class="flex items-center gap-2">
-            <h2 class="font-bold text-base text-slate-900">클라우드 반도체 재고 리스트</h2>
+            <h2 class="font-bold text-base text-slate-900">반도체 재고 품목 리스트</h2>
             <span id="cloudStatusBadge" class="text-[11px] font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full flex items-center gap-1">☁️ Supabase 연동됨</span>
             <span id="lockStatusBadge" class="text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">🔒 잠김</span>
           </div>
@@ -239,17 +240,17 @@
 
         <!-- 액션 버튼 그룹 -->
         <div class="flex items-center gap-2">
-          <input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="importFromCsv(event)">
-          <button type="button" id="importCsvBtn" onclick="document.getElementById('csvFileInput').click()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
+          <input type="file" id="csvFileInput" accept=".csv" class="hidden">
+          <button type="button" id="importCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
             📥 CSV 가져오기
           </button>
-          <button type="button" id="exportCsvBtn" onclick="exportToCsv()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
+          <button type="button" id="exportCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
             📤 CSV 백업
           </button>
-          <button type="button" id="changePinBtn" onclick="changeAdminPin()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
+          <button type="button" id="changePinBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
             ⚙️ PIN 변경
           </button>
-          <button type="button" id="adminAuthBtn" onclick="toggleAdminAuth()" class="text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer">
+          <button type="button" id="adminAuthBtn" class="text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer">
             🔑 관리자 인증
           </button>
         </div>
@@ -260,7 +261,7 @@
         <div class="text-3xl">🔒</div>
         <div class="font-bold text-slate-700 text-sm">보안을 위해 재고 품목 리스트가 잠겨 있습니다.</div>
         <p class="text-xs text-slate-500 max-w-sm mx-auto">사내 관리자 PIN 번호(기본: 1234)를 입력하시면 등록된 반도체 품목의 원가와 재고 현황을 확인하실 수 있습니다.</p>
-        <button type="button" onclick="promptAdminLogin()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer">
+        <button type="button" id="overlayPinBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer">
           관리자 번호 입력
         </button>
       </div>
@@ -269,7 +270,7 @@
       <div id="unlockedContent" class="hidden space-y-3">
         <div class="flex justify-between items-center gap-3">
           <div class="relative w-full max-w-xs">
-            <input type="text" id="searchInput" oninput="filterAndRenderTable()" placeholder="Part Number 검색..." class="w-full pl-8 pr-3 py-1.5 border rounded-lg bg-slate-50 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
+            <input type="text" id="searchInput" placeholder="Part Number 검색..." class="w-full pl-8 pr-3 py-1.5 border rounded-lg bg-slate-50 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
             <span class="absolute left-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
           </div>
           <span id="itemCount" class="text-xs font-semibold text-slate-500">총 0개 동기화됨</span>
@@ -299,17 +300,19 @@
   </div>
 
   <script>
-    // 1. Supabase 안전 클라이언트 초기화
+    // ==========================================
+    // ⚙️ Supabase 발급 정보 바인딩
+    // ==========================================
     const SUPABASE_URL = 'https://qheijtepveajdrqerxef.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_0TB2JQq4BVfvihySxCbbkw_v4ZRAF80';
     
     let supabase = null;
-    if (window.supabase && typeof window.supabase.createClient === 'function') {
-      try {
+    try {
+      if (window.supabase && SUPABASE_URL.startsWith('http')) {
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      } catch (err) {
-        console.warn("Supabase 연결 실패:", err);
       }
+    } catch (e) {
+      console.warn("Supabase 초기화 경고:", e);
     }
 
     let rawFxRate = 1380.0;
@@ -328,6 +331,41 @@
 
     function getAdminPin() {
       return localStorage.getItem(PIN_STORAGE_KEY) || "1234";
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      init();
+    });
+
+    async function init() {
+      try {
+        const fxRes = await fetch('/api/fx-rate');
+        const fxData = await fxRes.json();
+        rawFxRate = fxData.current_rate;
+      } catch (err) {
+        console.warn("환율 API 조회 실패, 기본값(1380) 사용");
+      }
+      updateAppliedFxRate();
+
+      ['inputUsd', 'inputQty', 'inputShipFx', 'inputTargetMargin', 'inputStock', 'inputOverhead', 'inputTargetOffer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', runCalculation);
+      });
+
+      document.getElementById('fxBufferSelect')?.addEventListener('change', updateAppliedFxRate);
+      document.getElementById('saveItemBtn')?.addEventListener('click', saveCurrentItem);
+      document.getElementById('adminAuthBtn')?.addEventListener('click', toggleAdminAuth);
+      document.getElementById('overlayPinBtn')?.addEventListener('click', promptAdminLogin);
+      document.getElementById('copyQuoteBtn')?.addEventListener('click', copyQuotation);
+      document.getElementById('searchInput')?.addEventListener('input', filterAndRenderTable);
+      document.getElementById('changePinBtn')?.addEventListener('click', changeAdminPin);
+
+      document.getElementById('exportCsvBtn')?.addEventListener('click', exportToCsv);
+      document.getElementById('importCsvBtn')?.addEventListener('click', () => document.getElementById('csvFileInput')?.click());
+      document.getElementById('csvFileInput')?.addEventListener('change', importFromCsv);
+
+      updateSecurityUI();
+      runCalculation();
     }
 
     function updateAppliedFxRate() {
@@ -421,7 +459,7 @@
       if (supabase) {
         try {
           const { data, error } = await supabase.from('inventory_items').select('*').order('created_at', { ascending: false });
-          if (!error && data && data.length > 0) {
+          if (!error && data) {
             cachedItems = data.map(item => ({
               id: item.id,
               partName: item.part_name,
@@ -434,7 +472,7 @@
             return;
           }
         } catch (e) {
-          console.warn("Supabase 데이터 로드 실패, 로컬 데이터 사용:", e);
+          console.warn("Supabase 조회 오류, 로컬 캐시 사용:", e);
         }
       }
 
@@ -474,26 +512,29 @@
         try {
           const existing = cachedItems.find(i => i.partName.toUpperCase() === partName.toUpperCase());
           if (existing) {
-            await supabase.from('inventory_items').update({
+            const { error } = await supabase.from('inventory_items').update({
               unit_usd: unitUsd,
               ship_fx: shipFx,
               stock: stock,
               margin: margin
             }).eq('id', existing.id);
+            if (error) throw error;
           } else {
-            await supabase.from('inventory_items').insert([{
+            const { error } = await supabase.from('inventory_items').insert([{
               part_name: partName,
               unit_usd: unitUsd,
               ship_fx: shipFx,
               stock: stock,
               margin: margin
             }]);
+            if (error) throw error;
           }
-          alert(`[${partName}] 품목이 클라우드에 저장되었습니다.`);
+          alert(`[${partName}] 품목이 Supabase 클라우드에 안전하게 저장되었습니다.`);
           await loadItems();
           return;
         } catch (err) {
-          console.warn("Supabase 저장 실패, 로컬로 저장합니다:", err);
+          console.error("클라우드 저장 실패:", err);
+          alert("클라우드 저장 중 에러가 발생하여 로컬에 백업 저장합니다.");
         }
       }
 
@@ -515,19 +556,19 @@
       localStorage.setItem(LOCAL_ITEMS_KEY, JSON.stringify(items));
       cachedItems = items;
       filterAndRenderTable();
-      alert(`[${partName}] 품목이 안전하게 저장되었습니다.`);
+      alert(`[${partName}] 품목이 저장되었습니다.`);
     }
 
     async function deleteItem(id, event) {
-      if (event) event.stopPropagation();
+      event.stopPropagation();
       if (!isAdminAuthenticated) return;
-      if (!confirm("해당 품목을 삭제하시겠습니까?")) return;
+      if (!confirm("해당 품목을 클라우드에서 영구 삭제하시겠습니까?")) return;
 
       if (supabase) {
         try {
           await supabase.from('inventory_items').delete().eq('id', id);
         } catch (e) {
-          console.warn("클라우드 삭제 실패:", e);
+          console.error("클라우드 삭제 실패:", e);
         }
       }
 
@@ -601,7 +642,7 @@
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `inventory_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("download", `cloud_inventory_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -615,29 +656,33 @@
       reader.onload = async function(evt) {
         const text = evt.target.result;
         const lines = text.split(/\r\n|\n/);
-        const imported = [];
+        const rowsToInsert = [];
 
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
           const parts = line.split(',');
           if (parts.length >= 5) {
-            imported.push({
-              id: Date.now() + Math.random().toString(),
-              partName: parts[0].replace(/\"/g, '').trim(),
-              unitUsd: parseFloat(parts[1]) || 0,
-              shipFx: parseFloat(parts[2]) || 1350,
+            rowsToInsert.push({
+              part_name: parts[0].replace(/\"/g, '').trim(),
+              unit_usd: parseFloat(parts[1]) || 0,
+              ship_fx: parseFloat(parts[2]) || 1350,
               stock: parseInt(parts[3]) || 0,
               margin: parseFloat(parts[4]) || 20
             });
           }
         }
 
-        if (imported.length > 0) {
-          cachedItems = [...imported, ...cachedItems];
-          localStorage.setItem(LOCAL_ITEMS_KEY, JSON.stringify(cachedItems));
-          filterAndRenderTable();
-          alert(`${imported.length}건의 품목 데이터를 가져왔습니다.`);
+        if (rowsToInsert.length > 0) {
+          if (supabase) {
+            const { error } = await supabase.from('inventory_items').insert(rowsToInsert);
+            if (error) {
+              alert("CSV 일괄 저장 오류: " + error.message);
+            } else {
+              alert(`${rowsToInsert.length}건의 품목이 클라우드에 등록되었습니다.`);
+              await loadItems();
+            }
+          }
         }
         e.target.value = "";
       };
@@ -794,23 +839,6 @@
         console.error("복사 실패", err);
       });
     }
-
-    // 초기 실행
-    updateAppliedFxRate();
-    updateSecurityUI();
-
-    // 백그라운드 환율 조회
-    fetch('/api/fx-rate')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.current_rate) {
-          rawFxRate = data.current_rate;
-          updateAppliedFxRate();
-        }
-      })
-      .catch(err => {
-        console.log("환율 API 응답 지연: 기본값 유지");
-      });
   </script>
 </body>
 </html>
