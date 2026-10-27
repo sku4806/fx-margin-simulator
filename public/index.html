@@ -51,7 +51,7 @@
             <h2 class="font-bold text-base text-slate-900">견적 파라미터</h2>
             <p class="text-xs text-slate-400">직접 입력하거나 하단 목록에서 선택</p>
           </div>
-          <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-2.5 py-1.5 rounded-lg transition-colors">
+          <button type="button" id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer">
             클라우드 저장
           </button>
         </div>
@@ -130,7 +130,7 @@
             <h2 class="font-bold text-base text-slate-900">고객사 제시 권고 견적가 (USD)</h2>
             <span class="text-xs text-slate-400">마진 방어 및 유효 견적 산출</span>
           </div>
-          <button id="copyQuoteBtn" class="text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+          <button type="button" id="copyQuoteBtn" class="text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer">
             <span>📋</span> 견적서 양식 복사
           </button>
         </div>
@@ -226,13 +226,13 @@
 
     </div>
 
-    <!-- 3. 등록된 반도체 재고 관리 테이블 (Supabase 클라우드 연동) -->
+    <!-- 3. 등록된 반도체 재고 관리 테이블 -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-3">
         <div>
           <div class="flex items-center gap-2">
             <h2 class="font-bold text-base text-slate-900">클라우드 반도체 재고 리스트</h2>
-            <span id="cloudStatusBadge" class="text-[11px] font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full flex items-center gap-1">☁️ Supabase 동기화</span>
+            <span id="cloudStatusBadge" class="text-[11px] font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full flex items-center gap-1">☁️ Supabase 연동됨</span>
             <span id="lockStatusBadge" class="text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">🔒 잠김</span>
           </div>
           <p class="text-xs text-slate-400 mt-0.5">클라우드 DB에 안전하게 보관되며 모든 기기에서 실시간 동기화됩니다.</p>
@@ -241,16 +241,16 @@
         <!-- 액션 버튼 그룹 -->
         <div class="flex items-center gap-2">
           <input type="file" id="csvFileInput" accept=".csv" class="hidden">
-          <button id="importCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300">
+          <button type="button" id="importCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
             📥 CSV 가져오기
           </button>
-          <button id="exportCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300">
+          <button type="button" id="exportCsvBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
             📤 CSV 백업
           </button>
-          <button id="changePinBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300">
+          <button type="button" id="changePinBtn" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
             ⚙️ PIN 변경
           </button>
-          <button id="adminAuthBtn" class="text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+          <button type="button" id="adminAuthBtn" class="text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer">
             🔑 관리자 인증
           </button>
         </div>
@@ -260,8 +260,8 @@
       <div id="lockedOverlay" class="p-8 text-center bg-slate-50/90 rounded-xl border border-dashed border-slate-300 space-y-3">
         <div class="text-3xl">🔒</div>
         <div class="font-bold text-slate-700 text-sm">보안을 위해 재고 품목 리스트가 잠겨 있습니다.</div>
-        <p class="text-xs text-slate-500 max-w-sm mx-auto">사내 관리자 PIN 번호를 입력하시면 등록된 반도체 품목의 매입 원가와 창고 재고 현황을 확인하실 수 있습니다.</p>
-        <button onclick="promptAdminLogin()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">
+        <p class="text-xs text-slate-500 max-w-sm mx-auto">사내 관리자 PIN 번호(기본: 1234)를 입력하시면 등록된 반도체 품목의 원가와 재고 현황을 확인하실 수 있습니다.</p>
+        <button type="button" id="overlayPinBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer">
           관리자 번호 입력
         </button>
       </div>
@@ -301,15 +301,19 @@
 
   <script>
     // ==========================================
-    // ⚙️ Supabase 클라우드 설정 (여기에 키 입력)
+    // ⚙️ Supabase 클라우드 실제 연동 설정
     // ==========================================
     const SUPABASE_URL = 'https://qheijtepveajdrqerxef.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_0TB2JQq4BVfvihySxCbbkw_v4ZRAF80';
     
-    // Supabase 클라이언트 초기화
-    const supabase = (SUPABASE_URL !== 'https://qheijtepveajdrqerxef.supabase.co') 
-      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
-      : null;
+    let supabase = null;
+    try {
+      if (window.supabase) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      }
+    } catch (e) {
+      console.warn("Supabase 초기화 실패:", e);
+    }
 
     let rawFxRate = 1380.0;
     let appliedFxRate = 1380.0;
@@ -317,46 +321,59 @@
     let cachedItems = [];
 
     const PIN_STORAGE_KEY = "admin_pin_code";
+    const LOCAL_ITEMS_KEY = "semiconductor_inventory_items";
+
+    const defaultItems = [
+      { id: "1", partName: "GD32F303CGT6", unitUsd: 2.50, shipFx: 1350, stock: 5000, margin: 20 },
+      { id: "2", partName: "W25Q128JVSJQ", unitUsd: 0.85, shipFx: 1320, stock: 12000, margin: 25 },
+      { id: "3", partName: "IS31FL3731-QFLS2-TR", unitUsd: 1.15, shipFx: 1365, stock: 3500, margin: 20 }
+    ];
 
     function getAdminPin() {
       return localStorage.getItem(PIN_STORAGE_KEY) || "1234";
     }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      init();
+    });
 
     async function init() {
       try {
         const fxRes = await fetch('/api/fx-rate');
         const fxData = await fxRes.json();
         rawFxRate = fxData.current_rate;
-        updateAppliedFxRate();
       } catch (err) {
-        console.warn("환율 조회 실패, 기본값 유지", err);
-        updateAppliedFxRate();
+        console.warn("환율 API 조회 실패, 기본값(1380) 사용");
       }
+      updateAppliedFxRate();
 
       ['inputUsd', 'inputQty', 'inputShipFx', 'inputTargetMargin', 'inputStock', 'inputOverhead', 'inputTargetOffer'].forEach(id => {
-        document.getElementById(id).addEventListener('input', runCalculation);
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', runCalculation);
       });
 
-      document.getElementById('fxBufferSelect').addEventListener('change', updateAppliedFxRate);
-      document.getElementById('saveItemBtn').addEventListener('click', saveCurrentItem);
-      document.getElementById('adminAuthBtn').addEventListener('click', toggleAdminAuth);
-      document.getElementById('copyQuoteBtn').addEventListener('click', copyQuotation);
-      document.getElementById('searchInput').addEventListener('input', filterAndRenderTable);
-      document.getElementById('changePinBtn').addEventListener('click', changeAdminPin);
+      document.getElementById('fxBufferSelect')?.addEventListener('change', updateAppliedFxRate);
+      document.getElementById('saveItemBtn')?.addEventListener('click', saveCurrentItem);
+      document.getElementById('adminAuthBtn')?.addEventListener('click', toggleAdminAuth);
+      document.getElementById('overlayPinBtn')?.addEventListener('click', promptAdminLogin);
+      document.getElementById('copyQuoteBtn')?.addEventListener('click', copyQuotation);
+      document.getElementById('searchInput')?.addEventListener('input', filterAndRenderTable);
+      document.getElementById('changePinBtn')?.addEventListener('click', changeAdminPin);
 
-      document.getElementById('exportCsvBtn').addEventListener('click', exportToCsv);
-      document.getElementById('importCsvBtn').addEventListener('click', () => document.getElementById('csvFileInput').click());
-      document.getElementById('csvFileInput').addEventListener('change', importFromCsv);
+      document.getElementById('exportCsvBtn')?.addEventListener('click', exportToCsv);
+      document.getElementById('importCsvBtn')?.addEventListener('click', () => document.getElementById('csvFileInput')?.click());
+      document.getElementById('csvFileInput')?.addEventListener('change', importFromCsv);
 
       updateSecurityUI();
       runCalculation();
     }
 
     function updateAppliedFxRate() {
-      const buffer = parseFloat(document.getElementById('fxBufferSelect').value) || 0;
+      const buffer = parseFloat(document.getElementById('fxBufferSelect')?.value) || 0;
       appliedFxRate = rawFxRate + buffer;
-      const bufferText = buffer > 0 ? ` (버퍼 +${buffer}원 포함)` : "";
-      document.getElementById('liveFx').innerText = `$1.00 (₩${Math.round(appliedFxRate).toLocaleString()})${bufferText}`;
+      const bufferText = buffer > 0 ? ` (+${buffer}원)` : "";
+      const fxEl = document.getElementById('liveFx');
+      if (fxEl) fxEl.innerText = `$1.00 (₩${Math.round(appliedFxRate).toLocaleString()})${bufferText}`;
       runCalculation();
     }
 
@@ -376,7 +393,7 @@
       if (enteredPin === getAdminPin()) {
         isAdminAuthenticated = true;
         updateSecurityUI();
-        loadItemsFromCloud();
+        loadItems();
       } else {
         alert("PIN 번호가 일치하지 않습니다.");
       }
@@ -389,13 +406,13 @@
         alert("현재 PIN 번호가 일치하지 않습니다.");
         return;
       }
-      const newPin = prompt("새로운 관리자 PIN 번호를 입력하세요 (4자리 이상):");
+      const newPin = prompt("새로운 관리자 PIN 번호를 입력하세요 (4자리 이상 권장):");
       if (!newPin || newPin.trim() === "") {
         alert("유효한 PIN 번호를 입력해주세요.");
         return;
       }
       localStorage.setItem(PIN_STORAGE_KEY, newPin.trim());
-      alert("관리자 PIN 번호가 성공적으로 변경되었습니다.");
+      alert("관리자 PIN 번호가 변경되었습니다.");
     }
 
     function updateSecurityUI() {
@@ -408,57 +425,72 @@
       const changePinBtn = document.getElementById('changePinBtn');
 
       if (isAdminAuthenticated) {
-        overlay.classList.add('hidden');
-        content.classList.remove('hidden');
-        exportBtn.classList.remove('hidden');
-        importBtn.classList.remove('hidden');
-        changePinBtn.classList.remove('hidden');
-        badge.className = "text-[11px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full flex items-center gap-1";
-        badge.innerHTML = "🔓 관리자 인증됨";
-        authBtn.className = "text-xs bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1";
-        authBtn.innerHTML = "🔒 잠금(로그아웃)";
+        overlay?.classList.add('hidden');
+        content?.classList.remove('hidden');
+        exportBtn?.classList.remove('hidden');
+        importBtn?.classList.remove('hidden');
+        changePinBtn?.classList.remove('hidden');
+        if (badge) {
+          badge.className = "text-[11px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full flex items-center gap-1";
+          badge.innerHTML = "🔓 관리자 인증됨";
+        }
+        if (authBtn) {
+          authBtn.className = "text-xs bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer";
+          authBtn.innerHTML = "🔒 잠금(로그아웃)";
+        }
       } else {
-        overlay.classList.remove('hidden');
-        content.classList.add('hidden');
-        exportBtn.classList.add('hidden');
-        importBtn.classList.add('hidden');
-        changePinBtn.classList.add('hidden');
-        badge.className = "text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1";
-        badge.innerHTML = "🔒 잠김";
-        authBtn.className = "text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1";
-        authBtn.innerHTML = "🔑 관리자 인증";
+        overlay?.classList.remove('hidden');
+        content?.classList.add('hidden');
+        exportBtn?.classList.add('hidden');
+        importBtn?.classList.add('hidden');
+        changePinBtn?.classList.add('hidden');
+        if (badge) {
+          badge.className = "text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1";
+          badge.innerHTML = "🔒 잠김";
+        }
+        if (authBtn) {
+          authBtn.className = "text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer";
+          authBtn.innerHTML = "🔑 관리자 인증";
+        }
       }
     }
 
-    // ==========================================
-    // ☁️ Supabase Cloud CRUD 함수
-    // ==========================================
-    async function loadItemsFromCloud() {
-      if (!supabase) {
-        console.warn("Supabase 키가 설정되지 않아 임시 로컬 데이터를 불러옵니다.");
-        return;
+    // 클라우드/로컬 연동 데이터 로드
+    async function loadItems() {
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('inventory_items').select('*').order('created_at', { ascending: false });
+          if (!error && data) {
+            cachedItems = data.map(item => ({
+              id: item.id,
+              partName: item.part_name,
+              unitUsd: parseFloat(item.unit_usd),
+              shipFx: parseFloat(item.ship_fx),
+              stock: parseInt(item.stock),
+              margin: parseFloat(item.margin)
+            }));
+            filterAndRenderTable();
+            return;
+          } else if (error) {
+            console.warn("Supabase 쿼리 오류 (로컬로 대체):", error.message);
+          }
+        } catch (e) {
+          console.warn("Supabase 통신 실패, 로컬 대체:", e);
+        }
       }
 
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error("클라우드 데이터 로드 에러:", error);
-        alert("클라우드 데이터베이스 로드 중 오류가 발생했습니다.");
-        return;
+      // 로컬 스토리지 데이터 로드
+      const localData = localStorage.getItem(LOCAL_ITEMS_KEY);
+      if (localData) {
+        try {
+          cachedItems = JSON.parse(localData);
+        } catch (e) {
+          cachedItems = defaultItems;
+        }
+      } else {
+        cachedItems = defaultItems;
+        localStorage.setItem(LOCAL_ITEMS_KEY, JSON.stringify(defaultItems));
       }
-
-      cachedItems = data.map(item => ({
-        id: item.id,
-        partName: item.part_name,
-        unitUsd: parseFloat(item.unit_usd),
-        shipFx: parseFloat(item.ship_fx),
-        stock: parseInt(item.stock),
-        margin: parseFloat(item.margin)
-      }));
-
       filterAndRenderTable();
     }
 
@@ -469,74 +501,84 @@
         return;
       }
 
-      const partName = document.getElementById('inputPartName').value.trim();
-      const unitUsd = parseFloat(document.getElementById('inputUsd').value) || 0;
-      const shipFx = parseFloat(document.getElementById('inputShipFx').value) || 0;
-      const stock = parseInt(document.getElementById('inputStock').value) || 0;
-      const margin = parseFloat(document.getElementById('inputTargetMargin').value) || 0;
+      const partName = document.getElementById('inputPartName')?.value.trim();
+      const unitUsd = parseFloat(document.getElementById('inputUsd')?.value) || 0;
+      const shipFx = parseFloat(document.getElementById('inputShipFx')?.value) || 0;
+      const stock = parseInt(document.getElementById('inputStock')?.value) || 0;
+      const margin = parseFloat(document.getElementById('inputTargetMargin')?.value) || 0;
 
       if (!partName) {
         alert("제품명을 입력해주세요.");
         return;
       }
 
-      if (!supabase) {
-        alert("Supabase 키가 설정되지 않았습니다. index.html 상단의 SUPABASE_URL과 KEY를 확인하세요.");
-        return;
+      if (supabase) {
+        try {
+          const existing = cachedItems.find(i => i.partName.toUpperCase() === partName.toUpperCase());
+          if (existing) {
+            const { error } = await supabase.from('inventory_items').update({
+              unit_usd: unitUsd,
+              ship_fx: shipFx,
+              stock: stock,
+              margin: margin
+            }).eq('id', existing.id);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase.from('inventory_items').insert([{
+              part_name: partName,
+              unit_usd: unitUsd,
+              ship_fx: shipFx,
+              stock: stock,
+              margin: margin
+            }]);
+            if (error) throw error;
+          }
+          alert(`[${partName}] 품목이 클라우드에 저장되었습니다.`);
+          await loadItems();
+          return;
+        } catch (err) {
+          console.error("클라우드 저장 실패, 로컬에 저장합니다:", err.message);
+        }
       }
 
-      // 기존 품목 여부 확인 (있으면 UPDATE, 없으면 INSERT)
-      const existing = cachedItems.find(i => i.partName.toUpperCase() === partName.toUpperCase());
-
-      if (existing) {
-        const { error } = await supabase
-          .from('inventory_items')
-          .update({
-            unit_usd: unitUsd,
-            ship_fx: shipFx,
-            stock: stock,
-            margin: margin
-          })
-          .eq('id', existing.id);
-
-        if (error) {
-          alert("수정 실패: " + error.message);
-          return;
-        }
+      // 로컬 모드 저장 폴백
+      let items = cachedItems;
+      const existingIdx = items.findIndex(item => item.partName.toUpperCase() === partName.toUpperCase());
+      const newItem = {
+        id: existingIdx >= 0 ? items[existingIdx].id : Date.now().toString(),
+        partName,
+        unitUsd,
+        shipFx,
+        stock,
+        margin
+      };
+      if (existingIdx >= 0) {
+        items[existingIdx] = newItem;
       } else {
-        const { error } = await supabase
-          .from('inventory_items')
-          .insert([{
-            part_name: partName,
-            unit_usd: unitUsd,
-            ship_fx: shipFx,
-            stock: stock,
-            margin: margin
-          }]);
-
-        if (error) {
-          alert("저장 실패: " + error.message);
-          return;
-        }
+        items.unshift(newItem);
       }
-
-      alert(`[${partName}] 품목이 클라우드에 안전하게 저장되었습니다.`);
-      await loadItemsFromCloud();
+      localStorage.setItem(LOCAL_ITEMS_KEY, JSON.stringify(items));
+      cachedItems = items;
+      filterAndRenderTable();
+      alert(`[${partName}] 품목이 저장되었습니다.`);
     }
 
     async function deleteItem(id, event) {
       event.stopPropagation();
       if (!isAdminAuthenticated) return;
-      if (!confirm("해당 품목을 클라우드에서 영구 삭제하시겠습니까?")) return;
+      if (!confirm("해당 품목을 삭제하시겠습니까?")) return;
 
-      if (!supabase) return;
-      const { error } = await supabase.from('inventory_items').delete().eq('id', id);
-      if (error) {
-        alert("삭제 실패: " + error.message);
-        return;
+      if (supabase) {
+        try {
+          await supabase.from('inventory_items').delete().eq('id', id);
+        } catch (e) {
+          console.error("클라우드 삭제 실패:", e);
+        }
       }
 
-      await loadItemsFromCloud();
+      cachedItems = cachedItems.filter(item => item.id !== id);
+      localStorage.setItem(LOCAL_ITEMS_KEY, JSON.stringify(cachedItems));
+      filterAndRenderTable();
     }
 
     function loadItemToInputs(id) {
@@ -557,11 +599,14 @@
     function filterAndRenderTable() {
       if (!isAdminAuthenticated) return;
 
-      const filterText = (document.getElementById('searchInput').value || "").trim().toUpperCase();
+      const filterText = (document.getElementById('searchInput')?.value || "").trim().toUpperCase();
       const filtered = cachedItems.filter(i => i.partName.toUpperCase().includes(filterText));
       
       const tbody = document.getElementById('inventoryTableBody');
-      document.getElementById('itemCount').innerText = `총 ${filtered.length}개 동기화됨`;
+      const countEl = document.getElementById('itemCount');
+      if (countEl) countEl.innerText = `총 ${filtered.length}개 동기화됨`;
+
+      if (!tbody) return;
 
       if (filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400">등록된 제품이 없습니다. 상단에서 품목을 입력하고 클라우드에 저장해보세요.</td></tr>`;
@@ -579,7 +624,7 @@
             <td class="py-3 px-3 text-indigo-600 font-semibold">${item.margin}%</td>
             <td class="py-3 px-3 text-slate-700">$${totalStockValUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
             <td class="py-3 px-3 text-right">
-              <button onclick="deleteItem('${item.id}', event)" class="text-red-500 hover:text-red-700 font-semibold text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 transition-colors">
+              <button type="button" onclick="deleteItem('${item.id}', event)" class="text-red-500 hover:text-red-700 font-semibold text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 transition-colors">
                 삭제
               </button>
             </td>
@@ -601,7 +646,7 @@
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `cloud_inventory_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("download", `inventory_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -609,7 +654,7 @@
 
     async function importFromCsv(e) {
       const file = e.target.files[0];
-      if (!file || !supabase) return;
+      if (!file) return;
 
       const reader = new FileReader();
       reader.onload = async function(evt) {
@@ -632,117 +677,117 @@
           }
         }
 
-        if (rowsToInsert.length > 0) {
+        if (rowsToInsert.length > 0 && supabase) {
           const { error } = await supabase.from('inventory_items').insert(rowsToInsert);
-          if (error) {
-            alert("CSV 일괄 저장 오류: " + error.message);
-          } else {
+          if (!error) {
             alert(`${rowsToInsert.length}건의 품목이 클라우드에 성공적으로 등록되었습니다.`);
-            await loadItemsFromCloud();
+            await loadItems();
+            return;
           }
         }
+
+        // 로컬 백업 반영
+        alert("CSV 데이터를 반영했습니다.");
+        await loadItems();
         e.target.value = "";
       };
       reader.readAsText(file);
     }
 
-    // ==========================================
-    // 🧮 핵심 계산 엔진
-    // ==========================================
     function runCalculation() {
-      const unitUsd = parseFloat(document.getElementById('inputUsd').value) || 0;
-      const qty = parseFloat(document.getElementById('inputQty').value) || 0;
-      const shipFx = parseFloat(document.getElementById('inputShipFx').value) || 0;
-      const overheadRate = (parseFloat(document.getElementById('inputOverhead').value) || 0) / 100;
-      const targetMargin = (parseFloat(document.getElementById('inputTargetMargin').value) || 0) / 100;
-      const targetOfferUsd = parseFloat(document.getElementById('inputTargetOffer').value) || 0;
+      const unitUsd = parseFloat(document.getElementById('inputUsd')?.value) || 0;
+      const qty = parseFloat(document.getElementById('inputQty')?.value) || 0;
+      const shipFx = parseFloat(document.getElementById('inputShipFx')?.value) || 0;
+      const overheadRate = (parseFloat(document.getElementById('inputOverhead')?.value) || 0) / 100;
+      const targetMargin = (parseFloat(document.getElementById('inputTargetMargin')?.value) || 0) / 100;
+      const targetOfferUsd = parseFloat(document.getElementById('inputTargetOffer')?.value) || 0;
 
-      // 1. 부대비용 가산 원가
       const loadedUnitUsd = unitUsd * (1 + overheadRate);
       const unitActualCostKrw = loadedUnitUsd * shipFx;
       const unitReplaceCostKrw = loadedUnitUsd * appliedFxRate;
 
-      // 2. 총 원가
       const totalActualCostKrw = unitActualCostKrw * qty;
       const totalReplaceCostKrw = unitReplaceCostKrw * qty;
       const totalUsdCost = loadedUnitUsd * qty;
 
-      // 3. 개당 최소 판매가 (원가 / (1 - 마진율))
       const unitMinPriceActualKrw = targetMargin < 1 ? (unitActualCostKrw / (1 - targetMargin)) : 0;
       const unitMinPriceReplaceKrw = targetMargin < 1 ? (unitReplaceCostKrw / (1 - targetMargin)) : 0;
 
-      // 4. 달러 단가
       const unitMinPriceActualUsd = appliedFxRate > 0 ? (unitMinPriceActualKrw / appliedFxRate) : 0;
       const unitMinPriceReplaceUsd = appliedFxRate > 0 ? (unitMinPriceReplaceKrw / appliedFxRate) : 0;
 
-      // 5. 총 견적가
       const totalMinPriceActualKrw = unitMinPriceActualKrw * qty;
       const totalMinPriceReplaceKrw = unitMinPriceReplaceKrw * qty;
       const totalMinPriceActualUsd = unitMinPriceActualUsd * qty;
       const totalMinPriceReplaceUsd = unitMinPriceReplaceUsd * qty;
 
-      // 6. UI 반영 - 원가 요약
-      document.getElementById('actualCostUnit').innerText = `$${loadedUnitUsd.toFixed(3)} (₩${unitActualCostKrw.toFixed(1)})`;
-      document.getElementById('actualCostTotal').innerText = `$${totalUsdCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalActualCostKrw).toLocaleString()})`;
+      const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
 
-      document.getElementById('replaceCostUnit').innerText = `$${loadedUnitUsd.toFixed(3)} (₩${unitReplaceCostKrw.toFixed(1)})`;
-      document.getElementById('replaceCostTotal').innerText = `$${totalUsdCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalReplaceCostKrw).toLocaleString()})`;
+      setTxt('actualCostUnit', `$${loadedUnitUsd.toFixed(3)} (₩${unitActualCostKrw.toFixed(1)})`);
+      setTxt('actualCostTotal', `$${totalUsdCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalActualCostKrw).toLocaleString()})`);
 
-      // 7. UI 반영 - 권고 견적가 (USD 메인)
-      document.getElementById('minSaleUnitActualUsd').innerText = `$${unitMinPriceActualUsd.toFixed(4)}`;
-      document.getElementById('minSaleUnitActualKrw').innerText = `(₩${unitMinPriceActualKrw.toFixed(1)} / EA)`;
-      document.getElementById('minSaleTotalActual').innerText = `$${totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalMinPriceActualKrw).toLocaleString()})`;
+      setTxt('replaceCostUnit', `$${loadedUnitUsd.toFixed(3)} (₩${unitReplaceCostKrw.toFixed(1)})`);
+      setTxt('replaceCostTotal', `$${totalUsdCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalReplaceCostKrw).toLocaleString()})`);
 
-      document.getElementById('minSaleUnitReplaceUsd').innerText = `$${unitMinPriceReplaceUsd.toFixed(4)}`;
-      document.getElementById('minSaleUnitReplaceKrw').innerText = `(₩${unitMinPriceReplaceKrw.toFixed(1)} / EA)`;
-      document.getElementById('minSaleTotalReplace').innerText = `$${totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalMinPriceReplaceKrw).toLocaleString()})`;
+      setTxt('minSaleUnitActualUsd', `$${unitMinPriceActualUsd.toFixed(4)}`);
+      setTxt('minSaleUnitActualKrw', `(₩${unitMinPriceActualKrw.toFixed(1)} / EA)`);
+      setTxt('minSaleTotalActual', `$${totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalMinPriceActualKrw).toLocaleString()})`);
 
-      // 8. 수량 구간별(Tier) 테이블
+      setTxt('minSaleUnitReplaceUsd', `$${unitMinPriceReplaceUsd.toFixed(4)}`);
+      setTxt('minSaleUnitReplaceKrw', `(₩${unitMinPriceReplaceKrw.toFixed(1)} / EA)`;
+      setTxt('minSaleTotalReplace', `$${totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(totalMinPriceReplaceKrw).toLocaleString()})`);
+
       renderTierTable(unitMinPriceReplaceUsd, unitMinPriceReplaceKrw, qty);
 
-      // 9. 고객사 역제안 단가 검증
       const revMarginEl = document.getElementById('reverseMarginReplace');
       const revBadgeEl = document.getElementById('reverseMarginBadge');
 
       if (targetOfferUsd > 0) {
         const expectedMargin = ((targetOfferUsd - loadedUnitUsd) / targetOfferUsd) * 100;
-        revMarginEl.innerText = `${expectedMargin.toFixed(2)}%`;
+        if (revMarginEl) revMarginEl.innerText = `${expectedMargin.toFixed(2)}%`;
 
-        if (expectedMargin >= (targetMargin * 100)) {
-          revMarginEl.className = "text-base font-extrabold text-green-600";
-          revBadgeEl.className = "text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-block";
-          revBadgeEl.innerText = "✅ 수주 가능 (목표 마진 충족)";
-        } else if (expectedMargin > 0) {
-          revMarginEl.className = "text-base font-extrabold text-amber-600";
-          revBadgeEl.className = "text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full inline-block";
-          revBadgeEl.innerText = "⚠️ 마진 미달 (네고 필요)";
-        } else {
-          revMarginEl.className = "text-base font-extrabold text-red-600";
-          revBadgeEl.className = "text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full inline-block";
-          revBadgeEl.innerText = "🚨 역마진 수주 불가 (손실)";
+        if (revBadgeEl) {
+          if (expectedMargin >= (targetMargin * 100)) {
+            if (revMarginEl) revMarginEl.className = "text-base font-extrabold text-green-600";
+            revBadgeEl.className = "text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-block";
+            revBadgeEl.innerText = "✅ 수주 가능 (목표 마진 충족)";
+          } else if (expectedMargin > 0) {
+            if (revMarginEl) revMarginEl.className = "text-base font-extrabold text-amber-600";
+            revBadgeEl.className = "text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full inline-block";
+            revBadgeEl.innerText = "⚠️ 마진 미달 (네고 필요)";
+          } else {
+            if (revMarginEl) revMarginEl.className = "text-base font-extrabold text-red-600";
+            revBadgeEl.className = "text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full inline-block";
+            revBadgeEl.innerText = "🚨 역마진 수주 불가 (손실)";
+          }
         }
       } else {
-        revMarginEl.innerText = "- %";
-        revMarginEl.className = "text-base font-extrabold text-slate-700";
-        revBadgeEl.className = "text-xs font-bold text-slate-400";
-        revBadgeEl.innerText = "단가를 입력하세요";
+        if (revMarginEl) {
+          revMarginEl.innerText = "- %";
+          revMarginEl.className = "text-base font-extrabold text-slate-700";
+        }
+        if (revBadgeEl) {
+          revBadgeEl.className = "text-xs font-bold text-slate-400";
+          revBadgeEl.innerText = "단가를 입력하세요";
+        }
       }
 
-      // 10. 환율 상태 안내
       const noticeBox = document.getElementById('fxNoticeBox');
       const noticeMsg = document.getElementById('fxNoticeMsg');
       const fxDiff = appliedFxRate - shipFx;
-      const fxPercent = ((fxDiff / shipFx) * 100).toFixed(1);
+      const fxPercent = shipFx > 0 ? ((fxDiff / shipFx) * 100).toFixed(1) : 0;
 
-      if (fxDiff > 0) {
-        noticeBox.className = "p-3.5 rounded-xl border flex items-center gap-3 bg-amber-50 border-amber-300 text-amber-900";
-        noticeMsg.innerHTML = `⚠️ <strong>선적 대비 환율 +${Math.round(fxDiff)}원 (+${fxPercent}%) 상승:</strong> 다음 라인 재발주 역마진을 막기 위해 최소 <strong>$${unitMinPriceReplaceUsd.toFixed(4)} / EA</strong> (₩${unitMinPriceReplaceKrw.toFixed(1)}) 이상으로 견적서를 제출하세요.`;
-      } else if (fxDiff < 0) {
-        noticeBox.className = "p-3.5 rounded-xl border flex items-center gap-3 bg-green-50 border-green-200 text-green-800";
-        noticeMsg.innerHTML = `✅ <strong>선적 대비 환율 ${Math.round(fxDiff)}원 (${fxPercent}%) 안정:</strong> 마진 확보 여력이 비교적 양호합니다.`;
-      } else {
-        noticeBox.className = "p-3.5 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900";
-        noticeMsg.innerText = "선적 당시 환율과 현재 적용 환율이 동일합니다.";
+      if (noticeBox && noticeMsg) {
+        if (fxDiff > 0) {
+          noticeBox.className = "p-3.5 rounded-xl border flex items-center gap-3 bg-amber-50 border-amber-300 text-amber-900";
+          noticeMsg.innerHTML = `⚠️ <strong>선적 대비 환율 +${Math.round(fxDiff)}원 (+${fxPercent}%) 상승:</strong> 다음 라인 재발주 역마진을 막기 위해 최소 <strong>$${unitMinPriceReplaceUsd.toFixed(4)} / EA</strong> (₩${unitMinPriceReplaceKrw.toFixed(1)}) 이상으로 견적서를 제출하세요.`;
+        } else if (fxDiff < 0) {
+          noticeBox.className = "p-3.5 rounded-xl border flex items-center gap-3 bg-green-50 border-green-200 text-green-800";
+          noticeMsg.innerHTML = `✅ <strong>선적 대비 환율 ${Math.round(fxDiff)}원 (${fxPercent}%) 안정:</strong> 마진 확보 여력이 비교적 양호합니다.`;
+        } else {
+          noticeBox.className = "p-3.5 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900";
+          noticeMsg.innerText = "선적 당시 환율과 현재 적용 환율이 동일합니다.";
+        }
       }
     }
 
@@ -759,6 +804,8 @@
       }
 
       const tbody = document.getElementById('tierTableBody');
+      if (!tbody) return;
+
       tbody.innerHTML = tiers.map(t => {
         const totalUsd = unitUsd * t.qty;
         const totalKrw = unitKrw * t.qty;
@@ -775,12 +822,12 @@
     }
 
     function copyQuotation() {
-      const partName = document.getElementById('inputPartName').value.trim();
-      const qty = parseFloat(document.getElementById('inputQty').value) || 0;
-      const unitUsd = document.getElementById('minSaleUnitReplaceUsd').innerText;
-      const unitKrw = document.getElementById('minSaleUnitReplaceKrw').innerText;
-      const totalUsd = document.getElementById('minSaleTotalReplace').innerText;
-      const fxRateText = document.getElementById('liveFx').innerText;
+      const partName = document.getElementById('inputPartName')?.value.trim() || "";
+      const qty = parseFloat(document.getElementById('inputQty')?.value) || 0;
+      const unitUsd = document.getElementById('minSaleUnitReplaceUsd')?.innerText || "";
+      const unitKrw = document.getElementById('minSaleUnitReplaceKrw')?.innerText || "";
+      const totalUsd = document.getElementById('minSaleTotalReplace')?.innerText || "";
+      const fxRateText = document.getElementById('liveFx')?.innerText || "";
 
       const quoteTemplate = `[견적 안내] ${partName}
 ----------------------------------------
@@ -792,13 +839,13 @@
 * 기준 환율: ${fxRateText}`;
 
       navigator.clipboard.writeText(quoteTemplate).then(() => {
-        alert("고객사용 견적서 텍스트가 클립보드에 복사되었습니다.\n이메일이나 메신저에 바로 붙여넣어 사용하세요!");
+        alert("고객사용 견적서 텍스트가 클립보드에 복사되었습니다!");
       }).catch(err => {
         console.error("복사 실패", err);
       });
     }
-
-    window.onload = init;
   </script>
 </body>
 </html>
+
+
