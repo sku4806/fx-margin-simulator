@@ -10,7 +10,7 @@
 <body class="bg-slate-100 text-slate-800 p-4 md:p-8 min-h-screen">
   <div class="max-w-6xl mx-auto space-y-6">
     
-    <!-- 1. 헤더: 실시간 환율 -->
+    <!-- 1. 상단 헤더 -->
     <header class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
         <div class="flex items-center gap-2">
@@ -21,6 +21,7 @@
       </div>
 
       <div class="flex items-center gap-4">
+        <!-- 환변동 버퍼 -->
         <div class="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-right">
           <span class="text-[10px] font-semibold text-slate-500 block">안전 환율 버퍼 (FX Buffer)</span>
           <select id="fxBufferSelect" onchange="updateAppliedFxRate()" class="bg-transparent text-xs font-bold text-indigo-600 outline-none cursor-pointer">
@@ -31,17 +32,18 @@
           </select>
         </div>
 
+        <!-- 실시간 환율 -->
         <div class="text-right">
           <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">실시간 FX Rate</span>
-          <div id="liveFx" class="text-2xl font-black text-slate-900 mt-1">$1.00 = -</div>
+          <div id="liveFx" class="text-2xl font-black text-slate-900 mt-1">$1.00 = ₩1,380</div>
         </div>
       </div>
     </header>
 
-    <!-- 2. 메인 견적 엔진 -->
+    <!-- 2. 메인 그리드 -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      <!-- 파라미터 입력 -->
+      <!-- 좌측: 견적 입력 폼 -->
       <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-1 space-y-4">
         <div class="border-b pb-2 flex justify-between items-center">
           <div>
@@ -92,6 +94,7 @@
           </div>
         </div>
 
+        <!-- 원가 요약 -->
         <div class="pt-3 border-t space-y-2.5 text-xs text-slate-500">
           <div>
             <div class="text-[11px] font-semibold text-slate-400 mb-0.5">창고 재고 원가 (선적일 + 부대비용)</div>
@@ -119,7 +122,7 @@
         </div>
       </div>
 
-      <!-- 견적 대시보드 -->
+      <!-- 우측: 권고 견적가 & 역산 시뮬레이터 -->
       <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2 space-y-5">
         <div class="border-b pb-2 flex justify-between items-center">
           <div>
@@ -131,12 +134,15 @@
           </button>
         </div>
 
+        <!-- 환율 변동 상태 배너 -->
         <div id="fxNoticeBox" class="p-3.5 rounded-xl border flex items-center gap-3 bg-blue-50 border-blue-200 text-blue-900">
           <div class="text-xl">ℹ️</div>
           <div class="text-xs font-semibold leading-relaxed" id="fxNoticeMsg">환율 분석 중...</div>
         </div>
 
+        <!-- 2가지 기준 카드 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
           <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
             <div class="flex justify-between items-center">
               <span class="text-xs font-bold text-slate-500">① 재고 소진용 최저 납품선</span>
@@ -168,9 +174,10 @@
               <span id="minSaleTotalReplace" class="font-bold text-indigo-900">$0.00</span>
             </div>
           </div>
+
         </div>
 
-        <!-- 고객사 역제안 단가 검증기 -->
+        <!-- 고객사 타겟단가 검증기 -->
         <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
           <div class="flex justify-between items-center">
             <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -194,7 +201,7 @@
           </div>
         </div>
 
-        <!-- 수량 구간별(Tier) 테이블 -->
+        <!-- 수량 구간별(Tier) 견적 비교 테이블 -->
         <div class="border border-slate-200 rounded-xl overflow-hidden text-xs">
           <div class="bg-slate-50 px-3.5 py-2 font-bold text-slate-700 border-b flex justify-between items-center">
             <span>수량별(Volume Tier Break) 권고 납품선 비교</span>
@@ -213,10 +220,12 @@
             </tbody>
           </table>
         </div>
+
       </div>
+
     </div>
 
-    <!-- 3. 재고 관리 테이블 -->
+    <!-- 3. 등록된 반도체 재고 관리 테이블 -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-3">
         <div>
@@ -228,6 +237,7 @@
           <p class="text-xs text-slate-400 mt-0.5">클라우드 DB에 안전하게 보관되며 모든 기기에서 실시간 동기화됩니다.</p>
         </div>
 
+        <!-- 액션 버튼 그룹 -->
         <div class="flex items-center gap-2">
           <input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="importFromCsv(event)">
           <button type="button" id="importCsvBtn" onclick="document.getElementById('csvFileInput').click()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg transition-colors border border-slate-300 cursor-pointer">
@@ -245,7 +255,7 @@
         </div>
       </div>
 
-      <!-- 잠금 오버레이 -->
+      <!-- 잠금 상태 오버레이 -->
       <div id="lockedOverlay" class="p-8 text-center bg-slate-50/90 rounded-xl border border-dashed border-slate-300 space-y-3">
         <div class="text-3xl">🔒</div>
         <div class="font-bold text-slate-700 text-sm">보안을 위해 재고 품목 리스트가 잠겨 있습니다.</div>
@@ -255,7 +265,7 @@
         </button>
       </div>
 
-      <!-- 해제 콘텐츠 -->
+      <!-- 언락 테이블 영역 -->
       <div id="unlockedContent" class="hidden space-y-3">
         <div class="flex justify-between items-center gap-3">
           <div class="relative w-full max-w-xs">
@@ -283,11 +293,13 @@
           </table>
         </div>
       </div>
+
     </div>
 
   </div>
 
   <script>
+    // 1. Supabase 안전 클라이언트 초기화
     const SUPABASE_URL = 'https://qheijtepveajdrqerxef.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_0TB2JQq4BVfvihySxCbbkw_v4ZRAF80';
     
@@ -422,7 +434,7 @@
             return;
           }
         } catch (e) {
-          console.warn("Supabase 데이터 로드 실패, 로컬 사용:", e);
+          console.warn("Supabase 데이터 로드 실패, 로컬 데이터 사용:", e);
         }
       }
 
@@ -481,7 +493,7 @@
           await loadItems();
           return;
         } catch (err) {
-          console.warn("Supabase 저장 실패, 로컬로 폴백:", err);
+          console.warn("Supabase 저장 실패, 로컬로 저장합니다:", err);
         }
       }
 
@@ -783,11 +795,11 @@
       });
     }
 
-    // 초기 즉시 렌더링
+    // 초기 실행
     updateAppliedFxRate();
     updateSecurityUI();
 
-    // 백엔드 환율 비동기 갱신
+    // 백그라운드 환율 조회
     fetch('/api/fx-rate')
       .then(res => res.json())
       .then(data => {
@@ -797,7 +809,7 @@
         }
       })
       .catch(err => {
-        console.log("환율 API 응답 지연: 기본 환율(1,380원) 유지");
+        console.log("환율 API 응답 지연: 기본값 유지");
       });
   </script>
 </body>
