@@ -37,3 +37,9 @@ export function computeQuotation({ unitUsd, qty, shipFx, overheadRate, targetMar
     expectedMargin
   };
 }
+
+// 통합 선적 부대비용 배부율 계산 (Value-based Allocation)
+export function computeAllocatedOverheadRate(totalShipmentValueUsd, totalOverheadExpenseUsd) {
+  if (!totalShipmentValueUsd || totalShipmentValueUsd <= 0) return 0;
+  return (totalOverheadExpenseUsd / totalShipmentValueUsd) * 100;
+}

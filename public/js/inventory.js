@@ -37,27 +37,64 @@ export async function fetchInventoryItems() {
   return cachedItems;
 }
 
-export async function upsertInventoryItem(payload) {
+export async function upsertInventoryItem(payload, targetId = null) {
   if (!sbClient) throw new Error("클라이언트 미연결");
 
-  const existing = cachedItems.find(i => 
-    i.partName.toUpperCase() === payload.part_name.toUpperCase() && 
-    i.owner.toUpperCase() === payload.owner.toUpperCase() &&
-    i.customer.toUpperCase() === payload.customer.toUpperCase()
-  );
-
-  if (existing) {
+  if (targetId) {
     const { error } = await sbClient
       .from('inventory_items')
       .update(payload)
-      .eq('id', existing.id);
+      .eq('id', targetId);
     if (error) throw error;
-  } else {
-    const { error } = await sbClient
-      .from('inventory_items')
-      .insert([payload]);
-    if (error) throw error;
+    return;
   }
+
+  const { error } = await sbClient
+    .from('inventory_items')
+    .insert([payload]);
+  if (error) throw error;
+}
+
+// 분할 출고 로직: 기존 재고 차감 + 신규 출하 행 생성
+export async function splitInventoryShipment(originalItemId, splitQty, salesPriceUsd, customerName, salesRep) {
+  if (!sbClient) throw new Error("클라이언트 미연결");
+  const orig = cachedItems.find(i => i.id === originalItemId);
+  if (!orig) throw new Error("원본 재고를 찾을 수 없습니다.");
+  if (splitQty <= 0 || splitQty >= orig.stock) {
+    throw new Error(`분할 수량은 1개 이상 ${orig.stock - 1}개 이하이어야 합니다.`);
+  }
+
+  const remainingQty = orig.stock - splitQty;
+
+  // 1. 기존 재고 수량 차감
+  const { error: updateErr } = await sbClient
+    .from('inventory_items')
+    .update({ stock: remainingQty })
+    .eq('id', orig.id);
+  if (updateErr) throw updateErr;
+
+  // 2. 분할 출하 건 신규 생성
+  const newRow = {
+    maker: orig.maker,
+    part_name: orig.partName,
+    owner: salesRep || orig.owner,
+    customer: customerName || orig.customer,
+    sold_price_usd: salesPriceUsd || orig.soldPriceUsd,
+    order_status: "출하준비",
+    payment_terms: orig.paymentTerms,
+    payment_status: "미수",
+    unit_usd: orig.unitUsd,
+    ship_fx: orig.shipFx,
+    stock: splitQty,
+    margin: orig.margin,
+    entry_date: orig.entryDate,
+    memo: `[분할 출하] 원본 Lot 잔여: ${remainingQty} EA`
+  };
+
+  const { error: insertErr } = await sbClient
+    .from('inventory_items')
+    .insert([newRow]);
+  if (insertErr) throw insertErr;
 }
 
 export async function deleteInventoryItem(id) {
@@ -96,7 +133,6 @@ export function getCachedItem(id) {
   return cachedItems.find(i => i.id === id);
 }
 
-// 만기 D-Day 계산 함수
 function computeDueBadge(dueDateStr, isPaid) {
   if (isPaid) return '<span class="text-[10px] font-bold text-slate-400">정산완료</span>';
   if (!dueDateStr) return '<span class="text-[10px] text-slate-300">-</span>';
@@ -119,8 +155,7 @@ function computeDueBadge(dueDateStr, isPaid) {
   }
 }
 
-// 탭 모드별(Sales vs Fulfillment) 전문 렌더링
-export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
+export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSplit) {
   const cardContainer = document.getElementById('inventoryCardContainer');
   const tableHeader = document.getElementById('inventoryTableHeader');
   const tbody = document.getElementById('inventoryTableBody');
@@ -132,7 +167,6 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
     return;
   }
 
-  // 1. 데스크톱 헤더 구성 (영업 수주 뷰 vs 출하 채권 뷰)
   if (activeTab === 'sales') {
     tableHeader.innerHTML = `
       <tr>
@@ -142,20 +176,19 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
         <th class="py-3 px-2">수주 고객사</th>
         <th class="py-3 px-2">매입단가($)</th>
         <th class="py-3 px-2">실판매단가($)</th>
-        <th class="py-3 px-2">배정 수량</th>
+        <th class="py-3 px-2">보유/배정수량</th>
         <th class="py-3 px-2">마진율</th>
         <th class="py-3 px-2">진행 상태</th>
         <th class="py-3 px-2 text-right">관리</th>
       </tr>
     `;
   } else {
-    // Fulfillment & Billing 뷰
     tableHeader.innerHTML = `
       <tr>
         <th class="py-3 px-2">상태</th>
         <th class="py-3 px-2">고객사 (Account)</th>
         <th class="py-3 px-2">Part Number</th>
-        <th class="py-3 px-2">출하수량</th>
+        <th class="py-3 px-2">수량</th>
         <th class="py-3 px-2">인보이스 No</th>
         <th class="py-3 px-2">송장 / B/L No</th>
         <th class="py-3 px-2">결제조건</th>
@@ -166,7 +199,6 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
     `;
   }
 
-  // 2. 데스크톱 본문 구성
   tbody.innerHTML = filtered.map(item => {
     const isPaid = item.paymentStatus === '완료';
     const dueBadge = computeDueBadge(item.dueDate, isPaid);
@@ -175,6 +207,10 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
     if (item.orderStatus === '출하준비') statusBadge = '<span class="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">출하준비</span>';
     if (item.orderStatus === '출하완료') statusBadge = '<span class="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">출하완료</span>';
     if (item.orderStatus === '정산마감') statusBadge = '<span class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded">정산마감</span>';
+
+    const splitBtn = item.stock > 1 
+      ? `<button class="split-btn text-indigo-600 hover:text-indigo-800 font-semibold text-xs px-2 py-1 rounded bg-indigo-50 mr-1" data-id="${item.id}">출하분할</button>`
+      : '';
 
     if (activeTab === 'sales') {
       return `
@@ -188,7 +224,8 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
           <td class="py-3 px-2 font-semibold text-slate-800">${item.stock.toLocaleString()} EA</td>
           <td class="py-3 px-2 text-slate-700 font-semibold">${item.margin}%</td>
           <td class="py-3 px-2">${statusBadge}</td>
-          <td class="py-3 px-2 text-right">
+          <td class="py-3 px-2 text-right whitespace-nowrap">
+            ${splitBtn}
             <button class="delete-btn text-red-500 hover:text-red-700 font-semibold text-xs px-2 py-1 rounded bg-red-50" data-id="${item.id}">삭제</button>
           </td>
         </tr>
@@ -209,7 +246,8 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
           <td class="py-3 px-2 text-slate-600 text-[11px]">${item.paymentTerms}</td>
           <td class="py-3 px-2">${payBadge}</td>
           <td class="py-3 px-2">${dueBadge}</td>
-          <td class="py-3 px-2 text-right">
+          <td class="py-3 px-2 text-right whitespace-nowrap">
+            ${splitBtn}
             <button class="delete-btn text-red-500 hover:text-red-700 font-semibold text-xs px-2 py-1 rounded bg-red-50" data-id="${item.id}">삭제</button>
           </td>
         </tr>
@@ -217,10 +255,12 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
     }
   }).join('');
 
-  // 3. 모바일 카드 뷰 구성
   cardContainer.innerHTML = filtered.map(item => {
     const isPaid = item.paymentStatus === '완료';
     const dueBadge = computeDueBadge(item.dueDate, isPaid);
+    const splitBtn = item.stock > 1 
+      ? `<button class="split-btn text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-0.5 rounded bg-indigo-50 mr-1" data-id="${item.id}">출하분할</button>`
+      : '';
 
     return `
       <div class="p-3 bg-slate-50 hover:bg-indigo-50/50 rounded-xl border border-slate-200 cursor-pointer space-y-2" data-item-id="${item.id}">
@@ -249,8 +289,11 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
         </div>
 
         <div class="flex justify-between items-center pt-0.5 text-[11px]">
-          <span class="text-slate-500">결제: <strong>${item.paymentTerms}</strong> (${item.paymentStatus})</span>
-          <button class="delete-btn text-red-500 hover:text-red-700 px-2 py-0.5 rounded bg-red-50" data-id="${item.id}">삭제</button>
+          <span class="text-slate-500">결제: <strong>${item.paymentTerms}</strong></span>
+          <div>
+            ${splitBtn}
+            <button class="delete-btn text-red-500 hover:text-red-700 px-2 py-0.5 rounded bg-red-50" data-id="${item.id}">삭제</button>
+          </div>
         </div>
       </div>
     `;
@@ -258,6 +301,12 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete) {
 
   [cardContainer, tbody].forEach(container => {
     container.onclick = (e) => {
+      const splitBtn = e.target.closest('.split-btn');
+      if (splitBtn) {
+        e.stopPropagation();
+        onSplit(splitBtn.dataset.id);
+        return;
+      }
       const deleteBtn = e.target.closest('.delete-btn');
       if (deleteBtn) {
         e.stopPropagation();
