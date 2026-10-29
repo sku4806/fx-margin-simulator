@@ -1,5 +1,5 @@
 import { getCurrentSession, loginWithEmail, logout, updatePassword, subscribeAuthChange } from './supabase.js';
-import { computeQuotation, computeAllocatedOverheadRate } from './calculator.js';
+import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { fetchInventoryItems, upsertInventoryItem, splitInventoryShipment, deleteInventoryItem, filterItems, getCachedItem, renderInventoryUI } from './inventory.js';
 
 let currentSession = null;
@@ -117,12 +117,27 @@ function updateFxDisplay() {
 }
 
 function bindInputs() {
-  ['inputUsd', 'inputStock', 'inputShipFx', 'inputOverhead', 'inputTargetOffer'].forEach(id => {
+  ['inputUsd', 'inputStock', 'inputShipFx', 'inputOverhead', 'inputTargetOffer', 'inputApprovedDebit'].forEach(id => {
     safeAddListener(id, 'input', runEngine);
   });
 
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
+
+  // SPA 체크박스 토글
+  const spaCheck = document.getElementById('checkIsSpa');
+  const spaDebitWrapper = document.getElementById('spaDebitWrapper');
+  spaCheck?.addEventListener('change', () => {
+    if (spaCheck.checked) {
+      spaDebitWrapper?.classList.remove('hidden');
+    } else {
+      spaDebitWrapper?.classList.add('hidden');
+    }
+    runEngine();
+  });
+
+  // 환차손익 실시간 피드백
+  safeAddListener('inputSettledFx', 'input', updateFxVarianceFeedback);
 
   bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
   bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
@@ -138,6 +153,32 @@ function bindInputs() {
   safeAddListener('openLandedCostBtn', 'click', () => {
     document.getElementById('landedCostModal')?.classList.remove('hidden');
   });
+}
+
+function updateFxVarianceFeedback() {
+  const orderFx = parseFloat(document.getElementById('inputShipFx')?.value) || 1350;
+  const settledFx = parseFloat(document.getElementById('inputSettledFx')?.value) || 0;
+  const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value) || 0;
+  const stock = parseInt(document.getElementById('inputStock')?.value) || 0;
+  const display = document.getElementById('fxVarianceDisplay');
+
+  if (!display) return;
+
+  if (settledFx > 0 && soldPrice > 0 && stock > 0) {
+    const diffKrw = computeFxVariance(soldPrice, stock, orderFx, settledFx);
+    if (diffKrw > 0) {
+      display.className = "text-[11px] font-bold text-green-600 block mt-1";
+      display.innerText = `📈 환차익: +₩${Math.round(diffKrw).toLocaleString()} 발생 (수금 환율 +${(settledFx - orderFx).toFixed(1)}원)`;
+    } else if (diffKrw < 0) {
+      display.className = "text-[11px] font-bold text-red-600 block mt-1";
+      display.innerText = `📉 환차손: -₩${Math.round(Math.abs(diffKrw)).toLocaleString()} 발생 (수금 환율 ${(settledFx - orderFx).toFixed(1)}원)`;
+    } else {
+      display.className = "text-[11px] font-semibold text-slate-500 block mt-1";
+      display.innerText = `환율 변동 없음 (₩0)`;
+    }
+  } else {
+    display.innerText = "";
+  }
 }
 
 function bindCustomSelect(selectId, inputId, customVal) {
@@ -237,6 +278,7 @@ function bindModals() {
     };
   }
 
+  // 출하 분할 실행 및 잔여 Dead Stock 소유권 처리
   const splitShipmentForm = document.getElementById('splitShipmentForm');
   if (splitShipmentForm) {
     splitShipmentForm.onsubmit = async (e) => {
@@ -245,9 +287,10 @@ function bindModals() {
       const price = parseFloat(document.getElementById('splitPriceInput')?.value) || 0;
       const cust = document.getElementById('splitCustomerInput')?.value.trim();
       const rep = document.getElementById('splitRepInput')?.value;
+      const deadStockAction = document.getElementById('splitDeadStockSelect')?.value || 'maintain';
 
       try {
-        await splitInventoryShipment(targetSplitId, qty, price, cust, rep);
+        await splitInventoryShipment(targetSplitId, qty, price, cust, rep, deadStockAction);
         alert(`${qty.toLocaleString()}개가 [${cust}] 건으로 분할 출하 등록되었습니다.`);
         document.getElementById('splitShipmentModal')?.classList.add('hidden');
         await refreshInventory();
@@ -265,6 +308,9 @@ function runEngine() {
   const overhead = (parseFloat(document.getElementById('inputOverhead')?.value) || 0) / 100;
   const targetOffer = parseFloat(document.getElementById('inputTargetOffer')?.value) || 0;
 
+  const isSpa = document.getElementById('checkIsSpa')?.checked || false;
+  const approvedDebit = parseFloat(document.getElementById('inputApprovedDebit')?.value) || 0;
+
   const result = computeQuotation({
     unitUsd,
     qty: stock,
@@ -272,7 +318,9 @@ function runEngine() {
     overheadRate: overhead,
     targetMarginRate: 0.20,
     appliedFxRate,
-    targetOfferUsd: targetOffer
+    targetOfferUsd: targetOffer,
+    isSpa,
+    approvedDebitUsd: approvedDebit
   });
 
   const setText = (id, val) => {
@@ -293,7 +341,10 @@ function runEngine() {
   if (result.expectedMargin !== null) {
     if (revMarginEl) revMarginEl.innerText = `${result.expectedMargin.toFixed(2)}%`;
     if (revBadgeEl) {
-      if (result.expectedMargin >= 20) {
+      if (isSpa && approvedDebit > 0) {
+        revBadgeEl.className = "text-[11px] font-bold text-cyan-800 bg-cyan-100 border border-cyan-300 px-2 py-0.5 rounded-full inline-block mt-0.5";
+        revBadgeEl.innerText = `🔵 SPA 승인가 적용 (마진: ${result.expectedMargin.toFixed(1)}%)`;
+      } else if (result.expectedMargin >= 20) {
         revBadgeEl.className = "text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-block mt-0.5";
         revBadgeEl.innerText = "✅ 수주 가능";
       } else if (result.expectedMargin > 0) {
@@ -379,16 +430,31 @@ function loadFormFromItem(id) {
   setVal('selectOrderStatus', item.orderStatus);
   setVal('selectPaymentTerms', item.paymentTerms);
   setVal('selectPaymentStatus', item.paymentStatus);
+  setVal('selectCurrency', item.currency);
   setVal('inputInvoiceNo', item.invoiceNo || '');
   setVal('inputTrackingNo', item.trackingNo || '');
   setVal('inputDueDate', item.dueDate || '');
   setVal('inputShippedDate', item.shippedDate || '');
   setVal('inputSettledDate', item.settledDate || '');
+  setVal('inputSettledFx', item.settledFx || '');
   setVal('inputEntryDate', item.entryDate);
   setVal('inputMemo', item.memo);
   setVal('inputUsd', item.unitUsd);
   setVal('inputShipFx', item.shipFx);
   setVal('inputStock', item.stock);
+
+  // SPA 값 세팅
+  const spaCheck = document.getElementById('checkIsSpa');
+  const spaDebitWrapper = document.getElementById('spaDebitWrapper');
+  if (spaCheck) {
+    spaCheck.checked = item.isSpa;
+    if (item.isSpa) {
+      spaDebitWrapper?.classList.remove('hidden');
+      setVal('inputApprovedDebit', item.approvedDebitUsd || '');
+    } else {
+      spaDebitWrapper?.classList.add('hidden');
+    }
+  }
 
   const editingBanner = document.getElementById('editingBanner');
   editingBanner?.classList.remove('hidden');
@@ -397,6 +463,7 @@ function loadFormFromItem(id) {
     bannerText.innerText = `선택된 항목: [${item.maker}] ${item.partName} (${item.customer})`;
   }
 
+  updateFxVarianceFeedback();
   runEngine();
   document.getElementById('formSection')?.scrollIntoView({ behavior: 'smooth' });
 }
@@ -409,7 +476,7 @@ function handleOpenSplitModal(id) {
   const titleEl = document.getElementById('splitModalTitle');
   if (titleEl) titleEl.innerText = `[${item.partName}] 출하 분할`;
   const maxStockEl = document.getElementById('splitMaxStockText');
-  if (maxStockEl) maxStockEl.innerText = `현재 보유 재고: ${item.stock.toLocaleString()} EA`;
+  if (maxStockEl) maxStockEl.innerText = `현재 보유 재고: ${item.stock.toLocaleString()} EA (소유: ${item.owner})`;
   
   const qtyInput = document.getElementById('splitQtyInput');
   if (qtyInput) {
@@ -460,6 +527,9 @@ async function saveCurrentForm() {
   const ownerSel = document.getElementById('selectOwner');
   const owner = (ownerSel && ownerSel.value === '__CUSTOM_OWNER__') ? document.getElementById('inputCustomOwner')?.value.trim() : ownerSel?.value;
 
+  const isSpa = document.getElementById('checkIsSpa')?.checked || false;
+  const approvedDebit = parseFloat(document.getElementById('inputApprovedDebit')?.value) || 0;
+
   const payload = {
     maker: maker || "기타",
     part_name: partName,
@@ -469,17 +539,21 @@ async function saveCurrentForm() {
     order_status: document.getElementById('selectOrderStatus')?.value || "배정요청",
     payment_terms: document.getElementById('selectPaymentTerms')?.value || "Net 30",
     payment_status: document.getElementById('selectPaymentStatus')?.value || "미수",
+    currency: document.getElementById('selectCurrency')?.value || "USD",
     invoice_no: document.getElementById('inputInvoiceNo')?.value.trim() || "",
     tracking_no: document.getElementById('inputTrackingNo')?.value.trim() || "",
     due_date: document.getElementById('inputDueDate')?.value || null,
     shipped_date: document.getElementById('inputShippedDate')?.value || null,
     settled_date: document.getElementById('inputSettledDate')?.value || null,
+    settled_fx: parseFloat(document.getElementById('inputSettledFx')?.value) || 0,
     entry_date: document.getElementById('inputEntryDate')?.value || new Date().toISOString().slice(0, 10),
     memo: document.getElementById('inputMemo')?.value.trim() || "",
     unit_usd: parseFloat(document.getElementById('inputUsd')?.value) || 0,
     ship_fx: parseFloat(document.getElementById('inputShipFx')?.value) || 1350,
     stock: parseInt(document.getElementById('inputStock')?.value) || 0,
-    margin: 20
+    margin: 20,
+    is_spa: isSpa,
+    approved_debit_usd: isSpa ? approvedDebit : 0
   };
 
   try {

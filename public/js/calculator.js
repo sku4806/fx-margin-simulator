@@ -1,20 +1,30 @@
 /**
  * 반도체 견적 및 마진 방어 계산 엔진
  */
-export function computeQuotation({ unitUsd, qty, shipFx, overheadRate, targetMarginRate, appliedFxRate, targetOfferUsd }) {
-  // 개당 부대비용(관세/운임) 포함 매입원가
-  const loadedUnitUsd = unitUsd * (1 + overheadRate);
+export function computeQuotation({ 
+  unitUsd, 
+  qty, 
+  shipFx, 
+  overheadRate, 
+  targetMarginRate, 
+  appliedFxRate, 
+  targetOfferUsd,
+  isSpa = false,
+  approvedDebitUsd = 0
+}) {
+  // SPA 승인 건인 경우, 본사 승인 매입가(Approved Debit)를 실제 원가 기준으로 계산
+  const effectiveBaseUsd = (isSpa && approvedDebitUsd > 0) ? approvedDebitUsd : unitUsd;
+  const loadedUnitUsd = effectiveBaseUsd * (1 + overheadRate);
   
-  // 1) 창고 재고 기준 원가 (선적 당시 환율 적용)
+  // 1) 창고 재고 기준 원가 (선적 환율)
   const unitActualCostKrw = loadedUnitUsd * shipFx;
-  // 2) 라인 재발주 기준 원가 (현재 변동 환율 적용)
+  // 2) 라인 재발주 기준 원가 (현재 환율)
   const unitReplaceCostKrw = loadedUnitUsd * appliedFxRate;
 
   const totalActualCostKrw = unitActualCostKrw * qty;
   const totalReplaceCostKrw = unitReplaceCostKrw * qty;
   const totalUsdCost = loadedUnitUsd * qty;
 
-  // 마진 방어 최저 견적가 산출 공식: 원가 / (1 - 목표마진율)
   const unitMinPriceActualKrw = targetMarginRate < 1 ? (unitActualCostKrw / (1 - targetMarginRate)) : 0;
   const unitMinPriceReplaceKrw = targetMarginRate < 1 ? (unitReplaceCostKrw / (1 - targetMarginRate)) : 0;
 
@@ -26,7 +36,6 @@ export function computeQuotation({ unitUsd, qty, shipFx, overheadRate, targetMar
 
   let expectedMargin = null;
   if (targetOfferUsd > 0) {
-    // 고객 희망 단가 제시 시 실현 마진율 역산: (제시가 - 원가) / 제시가 * 100
     expectedMargin = ((targetOfferUsd - loadedUnitUsd) / targetOfferUsd) * 100;
   }
 
@@ -49,19 +58,22 @@ export function computeQuotation({ unitUsd, qty, shipFx, overheadRate, targetMar
 
 /**
  * [무역 실무] 선적 부대비용 자동 배부 계산 함수 (Value-based Landed Cost Allocation)
- * --------------------------------------------------------------------------------
- * @param {number} totalShipmentValueUsd  - 해당 선적에 포함된 전체 품목 물품대금 총액 ($)
- * @param {number} totalOverheadExpenseUsd - 포워더 운임($) + 관세청 수입세금($ 환산)의 총합
- * 
- * [원리 및 공식]
- * 여러 파트(A, B, C...)가 한 컨테이너/항공편으로 함께 선적되어 운임 및 세금이 묶음 청구되었을 때,
- * 부피 대비 단가가 높은 반도체 IC 특성에 맞춰 "물품 가액 비율(Value-based)"로 배부합니다.
- * 
- * 공식: 가산율(%) = (총 부대비용 $ / 전체 물품가액 $) * 100
- * 
- * 산출된 가산율(%)은 각 파트의 매입단가에 공통 적용되어, 각 파트별 개당 랜디드 코스트(도착원가)를 정확히 확정합니다.
  */
 export function computeAllocatedOverheadRate(totalShipmentValueUsd, totalOverheadExpenseUsd) {
   if (!totalShipmentValueUsd || totalShipmentValueUsd <= 0) return 0;
   return (totalOverheadExpenseUsd / totalShipmentValueUsd) * 100;
+}
+
+/**
+ * [무역 실무] 결제 시점 외환 차손익(FX Variance) 계산
+ * @param {number} soldPriceUsd - 판매단가 ($)
+ * @param {number} qty          - 출하 수량 (EA)
+ * @param {number} orderFx      - 수주/선적 당시 환율
+ * @param {number} settledFx    - 실제 입금/수금 환율
+ */
+export function computeFxVariance(soldPriceUsd, qty, orderFx, settledFx) {
+  if (!soldPriceUsd || !qty || !orderFx || !settledFx) return 0;
+  const expectedKrw = soldPriceUsd * qty * orderFx;
+  const actualKrw = soldPriceUsd * qty * settledFx;
+  return actualKrw - expectedKrw; // (+) 환차익, (-) 환차손
 }

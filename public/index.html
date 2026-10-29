@@ -67,7 +67,6 @@
           <span class="text-[11px] text-slate-400">실시간 환율 변동 연동 원가 역산 시뮬레이션</span>
         </div>
         <div class="flex items-center gap-2">
-          <!-- 선적 부대비용 배부기 열기 버튼 -->
           <button id="openLandedCostBtn" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1">
             <span>🚢</span> 선적 부대비용 자동 배부
           </button>
@@ -141,7 +140,7 @@
       </div>
     </div>
 
-    <!-- 4. 전문화 분리형 입력 폼팩터 -->
+    <!-- 4. 전문화 분리형 입력 폼팩터 (SPA, FX손익, 출하보류 등 반영) -->
     <div id="formSection" class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
       <div class="border-b pb-2 flex justify-between items-center">
         <div>
@@ -211,15 +210,33 @@
           <input type="text" id="inputCustomer" placeholder="예: LG전자, 도원텍" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
         </div>
 
-        <!-- 💼 [영업 모드 전용 필드들] -->
+        <!-- 💼 [영업 모드 전용 필드들 + SPA 특가 필드] -->
         <div class="sales-only-field">
-          <label class="text-slate-600 block mb-1">개당 선적 매입가 ($/EA)</label>
+          <label class="text-slate-600 block mb-1">개당 표준 매입가 ($/EA)</label>
           <input type="number" id="inputUsd" value="2.50" step="0.001" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        </div>
+
+        <div class="sales-only-field">
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-slate-600 font-semibold">본사 특가 승인 (SPA)</label>
+            <label class="inline-flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" id="checkIsSpa" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+              <span class="text-[11px] text-cyan-700 font-bold">SPA 적용</span>
+            </label>
+          </div>
+          <div id="spaDebitWrapper" class="hidden">
+            <input type="number" id="inputApprovedDebit" placeholder="승인 실매입가 ($)" step="0.001" class="w-full p-2.5 border rounded-lg bg-cyan-50/50 text-xs font-bold text-cyan-900 border-cyan-300 outline-none">
+          </div>
         </div>
 
         <div class="sales-only-field">
           <label class="text-slate-600 block mb-1">협의 실판매단가 ($/EA)</label>
           <input type="number" id="inputSoldPrice" placeholder="실제 납품 합의단가" step="0.001" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-bold text-indigo-700 outline-none">
+        </div>
+
+        <div class="sales-only-field">
+          <label class="text-slate-600 block mb-1">수주/보유 수량 (EA)</label>
+          <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
         <div class="sales-only-field">
@@ -235,12 +252,7 @@
           <input type="number" id="inputOverhead" value="3.0" step="0.1" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <div class="sales-only-field">
-          <label class="text-slate-600 block mb-1">수주/보유 수량 (EA)</label>
-          <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
-        </div>
-
-        <!-- 📋 [출하 및 채권 모드 전용 필드들] -->
+        <!-- 📋 [출하 및 채권 모드 전용 필드들 + 예외 상태 세분화 + FX 차손익] -->
         <div class="fulfillment-only-field hidden">
           <label class="text-slate-600 block mb-1 font-bold text-indigo-900">진행 상태 (Order Status)</label>
           <select id="selectOrderStatus" class="w-full p-2.5 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
@@ -248,17 +260,26 @@
             <option value="출하준비">출하준비 (Preparing)</option>
             <option value="출하완료">출하완료 (Shipped)</option>
             <option value="정산마감">정산마감 (Closed)</option>
+            <option value="출하보류">⚠️ 출하보류 (Credit/Push-out Hold)</option>
+            <option value="무상지원">🎁 샘플지원 (Sample/EVB)</option>
+            <option value="반품검토">🔄 반품검토 (RMA Pending)</option>
           </select>
         </div>
 
         <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-1">결제 조건 (Payment Terms)</label>
-          <select id="selectPaymentTerms" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-            <option value="Net 30">Net 30 (납품 후 30일)</option>
-            <option value="Net 60">Net 60 (납품 후 60일)</option>
-            <option value="익월말현금">익월 말 현금 결제</option>
-            <option value="선입금/현금">선입금 / 출하 전 현금</option>
-          </select>
+          <label class="text-slate-600 block mb-1">결제 통화 및 조건</label>
+          <div class="grid grid-cols-2 gap-1">
+            <select id="selectCurrency" class="p-2.5 border rounded-lg bg-slate-50 text-xs font-bold text-slate-800 outline-none">
+              <option value="USD">USD ($)</option>
+              <option value="KRW">KRW (₩)</option>
+            </select>
+            <select id="selectPaymentTerms" class="p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+              <option value="Net 30">Net 30</option>
+              <option value="Net 60">Net 60</option>
+              <option value="익월말현금">익월말현금</option>
+              <option value="선입금/현금">선입금</option>
+            </select>
+          </div>
         </div>
 
         <div class="fulfillment-only-field hidden">
@@ -290,17 +311,22 @@
         </div>
 
         <div class="fulfillment-only-field hidden">
+          <label class="text-slate-600 block mb-1">수금 완료 환율 (Settled FX Rate)</label>
+          <input type="number" id="inputSettledFx" placeholder="실제 입금 환율 입력" step="1" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-bold text-slate-900 outline-none">
+          <div id="fxVarianceDisplay"></div>
+        </div>
+
+        <div class="fulfillment-only-field hidden">
           <label class="text-slate-600 block mb-1">실입금 완료일 (Settled Date)</label>
           <input type="date" id="inputSettledDate" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
         <div class="sm:col-span-2 lg:col-span-4">
           <label class="text-slate-600 block mb-1">업무 비고 (창고 위치, 포장 단위, 결제 특이사항)</label>
-          <input type="text" id="inputMemo" placeholder="예: 본사 A랙 3열 보관 / Reel 2500EA 단위 포장 / 담당자 구두 협의 완료" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-medium outline-none">
+          <input type="text" id="inputMemo" placeholder="예: 본사 A랙 3열 보관 / Reel 2500EA 포장 / 여신 초과로 출하 일시 보류" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-medium outline-none">
         </div>
       </div>
 
-      <input type="hidden" id="inputTargetMargin" value="20">
       <input type="hidden" id="inputEntryDate">
     </div>
 
@@ -377,6 +403,9 @@
               <option value="출하준비">출하준비</option>
               <option value="출하완료">출하완료</option>
               <option value="정산마감">정산마감</option>
+              <option value="출하보류">출하보류</option>
+              <option value="무상지원">무상지원</option>
+              <option value="반품검토">반품검토</option>
             </select>
 
             <select id="filterPayment" class="w-full p-1.5 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
@@ -388,7 +417,7 @@
         </div>
 
         <div class="flex justify-between items-center text-[11px] text-slate-500 px-1">
-          <span>※ [출하분할] 버튼으로 입고된 물량 중 일부만 특정 고객사 출하 건으로 즉시 쪼갤 수 있습니다.</span>
+          <span>※ 상태별(출하보류/RMA 등) 및 특가(SPA) 배지가 리스트에 자동 표시됩니다.</span>
           <span id="itemCount" class="font-bold text-indigo-700">총 0건</span>
         </div>
 
@@ -406,7 +435,7 @@
 
   </div>
 
-  <!-- 모달 1: 선적 부대비용 자동 배부 계산기 (Landed Cost Allocation) -->
+  <!-- 모달 1: 선적 부대비용 자동 배부 계산기 -->
   <div id="landedCostModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4">
       <div class="flex justify-between items-start">
@@ -438,7 +467,7 @@
     </div>
   </div>
 
-  <!-- 모달 2: 부분 출하 분할 (Split Partial Shipment) -->
+  <!-- 모달 2: 부분 출하 분할 (Dead Stock 귀속 선택 지원) -->
   <div id="splitShipmentModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4">
       <div class="flex justify-between items-start">
@@ -475,7 +504,14 @@
             <option value="Paul">Paul</option>
           </select>
         </div>
-        <p class="text-[11px] text-slate-400">※ 분할 실행 시 기존 Lot의 수량은 자동 감액되며, 출하 건이 별도 생성되어 채권(미수금)이 분리 추적됩니다.</p>
+        <div>
+          <label class="text-slate-600 block mb-1 font-semibold">남은 잔여 수량 소유권 (Dead Stock 처리)</label>
+          <select id="splitDeadStockSelect" class="w-full p-2.5 border rounded-lg bg-slate-50 font-semibold outline-none">
+            <option value="maintain">현재 담당 Sales 재고로 유지</option>
+            <option value="hq">본사 일반재고로 이관 (공용 소진용 Dead Stock)</option>
+          </select>
+        </div>
+        <p class="text-[11px] text-slate-400">※ 분할 실행 시 기존 원장의 수량은 자동 차감되며, 독립된 출하 건이 생성됩니다.</p>
         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold py-2.5 rounded-lg transition-transform">
           출하 분할 실행
         </button>
