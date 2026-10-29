@@ -10,7 +10,6 @@ let editingItemId = null;
 let targetSplitId = null;
 let manualRawText = "";
 
-// 💡 지정된 CS 및 최종 관리자 계정 화이트리스트 (9인)
 const ADMIN_EMAILS = [
   'timothy@bigshine.co.kr',
   'tony@bigshine.co.kr',
@@ -68,7 +67,7 @@ export async function bootstrap() {
     if (currentSession) {
       await refreshInventory();
     } else {
-      renderInventoryUI([], activeTab, () => {}, () => {}, () => {});
+      renderInventoryUI([], activeTab, () => {}, () => {}, () => {}, false);
     }
   });
 
@@ -109,6 +108,7 @@ function updateFormVisibility() {
   const salesFields = document.querySelectorAll('.sales-only-field');
   const fulfillmentFields = document.querySelectorAll('.fulfillment-only-field');
   const saveBtn = document.getElementById('saveItemBtn');
+  const formSection = document.getElementById('formSection');
 
   const canEdit = isCsOrAdminUser();
 
@@ -126,27 +126,22 @@ function updateFormVisibility() {
     fulfillmentFields.forEach(el => el.classList.remove('hidden'));
   }
 
-  // 💡 지정된 9인 이외 계정일 경우 조용히 비활성화 (별도 텍스트 배너 없음)
-  const formInputs = document.querySelectorAll('#formSection input, #formSection select');
+  // 💡 관리자가 아니면 '수주/배정 저장' 버튼을 아예 숨김 (티 안 나게 처리)
   if (!canEdit) {
+    if (saveBtn) saveBtn.classList.add('hidden');
+    // 입력 필드들도 자연스럽게 읽기 전용으로 잠금
+    const formInputs = document.querySelectorAll('#formSection input, #formSection select');
     formInputs.forEach(inp => {
       inp.disabled = true;
-      inp.classList.add('bg-slate-100', 'cursor-not-allowed', 'opacity-70');
+      inp.classList.add('bg-slate-50', 'cursor-default');
     });
-    if (saveBtn) {
-      saveBtn.disabled = true;
-      saveBtn.classList.add('opacity-40', 'cursor-not-allowed');
-      saveBtn.innerText = "조회 전용 (CS/관리자 전용)";
-    }
   } else {
+    if (saveBtn) saveBtn.classList.remove('hidden');
+    const formInputs = document.querySelectorAll('#formSection input, #formSection select');
     formInputs.forEach(inp => {
       inp.disabled = false;
-      inp.classList.remove('bg-slate-100', 'cursor-not-allowed', 'opacity-70');
+      inp.classList.remove('bg-slate-50', 'cursor-default');
     });
-    if (saveBtn) {
-      saveBtn.disabled = false;
-      saveBtn.classList.remove('opacity-40', 'cursor-not-allowed');
-    }
   }
 }
 
@@ -375,7 +370,6 @@ function runEngine() {
     if (el) el.innerText = val;
   };
 
-  // 💡 달러($) 우선 표기 (뒤에 원화 및 기준환율 명시)
   setText('minSaleUnitActualUsd', `$${result.unitMinPriceActualUsd.toFixed(4)}`);
   setText('minSaleUnitActualKrw', `(₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()} / @${Math.round(shipFx).toLocaleString()})`);
   setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(result.totalActualCostKrw / (1 - 0.2)).toLocaleString()})`);
@@ -448,6 +442,7 @@ async function refreshInventory() {
 }
 
 function applyFilters() {
+  const canEdit = isCsOrAdminUser();
   const filtered = filterItems({
     query: document.getElementById('searchInput')?.value || "",
     filterMaker: document.getElementById('filterMaker')?.value || "",
@@ -455,10 +450,11 @@ function applyFilters() {
     filterStatus: document.getElementById('filterStatus')?.value || "",
     filterPayment: document.getElementById('filterPayment')?.value || ""
   });
-  renderInventoryUI(filtered, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal);
+  renderInventoryUI(filtered, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, canEdit);
 }
 
 function loadFormFromItem(id) {
+  if (!isCsOrAdminUser()) return; // 관리자가 아니면 수정 모드 진입 안 함
   const item = getCachedItem(id);
   if (!item) return;
 
@@ -517,10 +513,7 @@ function loadFormFromItem(id) {
 }
 
 function handleOpenSplitModal(id) {
-  if (!isCsOrAdminUser()) {
-    alert("출하 분할은 CS 및 관리자 권한만 실행할 수 있습니다.");
-    return;
-  }
+  if (!isCsOrAdminUser()) return;
   const item = getCachedItem(id);
   if (!item) return;
   targetSplitId = item.id;
@@ -568,9 +561,7 @@ async function saveCurrentForm() {
     return;
   }
 
-  // 💡 지정된 9인 이외 계정 저장 차단
   if (!isCsOrAdminUser()) {
-    alert("수주 및 재고 배정은 CS 및 관리자 권한 계정만 등록·수정할 수 있습니다.");
     return;
   }
 
@@ -627,10 +618,7 @@ async function saveCurrentForm() {
 }
 
 async function handleDeleteItem(id) {
-  if (!isCsOrAdminUser()) {
-    alert("데이터 삭제는 CS 및 관리자 권한만 가능합니다.");
-    return;
-  }
+  if (!isCsOrAdminUser()) return;
   if (!confirm("해당 건을 영구 삭제하시겠습니까?")) return;
   try {
     await deleteInventoryItem(id);
@@ -653,15 +641,12 @@ function updateAuthUI() {
   const sub = document.getElementById('authSubtitle');
 
   if (isAuth) {
-    const isCs = isCsOrAdminUser();
-    const roleText = isCs ? 'CS/관리자' : 'Sales(조회전용)';
-    const roleBadgeClass = isCs ? 'bg-indigo-100 text-indigo-900 border border-indigo-200' : 'bg-slate-200 text-slate-800 border border-slate-300';
-
+    // 💡 'Sales(조회전용)' 같은 구분 없이 자연스럽게 '사내 인증됨'으로만 표시
     if (badge) {
-      badge.className = `text-[10px] font-bold px-2.5 py-0.5 rounded-full ${roleBadgeClass}`;
-      badge.innerHTML = `🔓 ${roleText}`;
+      badge.className = "text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-900 border border-indigo-200";
+      badge.innerHTML = "🔓 사내 인증됨";
     }
-    if (sub) sub.innerHTML = `접속 계정: <strong class="text-indigo-700">${currentSession.user.email}</strong> (${roleText})`;
+    if (sub) sub.innerHTML = `접속 계정: <strong class="text-indigo-700">${currentSession.user.email}</strong>`;
     if (btn) {
       btn.className = "text-xs bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-3 py-1.5 rounded-lg transition-colors";
       btn.innerHTML = "🚪 로그아웃";

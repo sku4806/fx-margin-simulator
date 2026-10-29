@@ -27,7 +27,7 @@ export async function fetchInventoryItems() {
     settledDate: item.settled_date ? item.settled_date.slice(0, 10) : "",
     invoiceNo: item.invoice_no || "",
     trackingNo: item.tracking_no || "",
-    entryDate: item.entry_date ? item.entry_date.slice(0, 10) : "", // 선적/입고일
+    entryDate: item.entry_date ? item.entry_date.slice(0, 10) : "",
     memo: item.memo || "",
     unitUsd: parseFloat(item.unit_usd) || 0,
     shipFx: parseFloat(item.ship_fx) || 1350,
@@ -187,7 +187,6 @@ function getStatusBadge(status) {
   }
 }
 
-// 💡 원화 우선 포맷터: ₩원화 ($달러 / @적용환율)
 function formatPriceKrwUsd(priceUsd, fxRate) {
   if (!priceUsd || priceUsd <= 0) return '-';
   const krw = Math.round(priceUsd * fxRate);
@@ -197,7 +196,8 @@ function formatPriceKrwUsd(priceUsd, fxRate) {
   `;
 }
 
-export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSplit) {
+// 💡 canEdit(관리자 여부)을 전달받아 관리자가 아니면 관리 열/버튼 자체를 렌더링하지 않음
+export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSplit, canEdit = false) {
   const cardContainer = document.getElementById('inventoryCardContainer');
   const tableHeader = document.getElementById('inventoryTableHeader');
   const tbody = document.getElementById('inventoryTableBody');
@@ -209,7 +209,8 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
     return;
   }
 
-  // 1. 데스크톱 헤더 구성 (마진율 제거, D/C 및 선적/출하일 배치)
+  const adminTh = canEdit ? '<th class="py-3 px-2 text-right">관리</th>' : '';
+
   if (activeTab === 'sales') {
     tableHeader.innerHTML = `
       <tr>
@@ -223,7 +224,7 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
         <th class="py-3 px-2">선적일 / 출하일</th>
         <th class="py-3 px-2">보유수량</th>
         <th class="py-3 px-2">진행 상태</th>
-        <th class="py-3 px-2 text-right">관리</th>
+        ${adminTh}
       </tr>
     `;
   } else {
@@ -239,12 +240,11 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
         <th class="py-3 px-2">인보이스 / B/L</th>
         <th class="py-3 px-2">수금/환차손익</th>
         <th class="py-3 px-2">만기일정</th>
-        <th class="py-3 px-2 text-right">관리</th>
+        ${adminTh}
       </tr>
     `;
   }
 
-  // 2. 데스크톱 본문 구성
   tbody.innerHTML = filtered.map(item => {
     const isPaid = item.paymentStatus === '완료';
     const dueBadge = computeDueBadge(item.dueDate, isPaid);
@@ -258,13 +258,23 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
       <div class="text-[10px] text-indigo-700">출하: <strong>${item.shippedDate || '미출하'}</strong></div>
     `;
 
-    const splitBtn = item.stock > 1 
-      ? `<button class="split-btn text-indigo-600 hover:text-indigo-800 font-semibold text-xs px-2 py-1 rounded bg-indigo-50 mr-1" data-id="${item.id}">출하분할</button>`
-      : '';
+    // 💡 관리자에게만 분할/삭제 버튼 표시
+    let adminTd = '';
+    if (canEdit) {
+      const splitBtn = item.stock > 1 
+        ? `<button class="split-btn text-indigo-600 hover:text-indigo-800 font-semibold text-xs px-2 py-1 rounded bg-indigo-50 mr-1" data-id="${item.id}">출하분할</button>`
+        : '';
+      adminTd = `
+        <td class="py-3 px-2 text-right whitespace-nowrap">
+          ${splitBtn}
+          <button class="delete-btn text-red-500 hover:text-red-700 font-semibold text-xs px-2 py-1 rounded bg-red-50" data-id="${item.id}">삭제</button>
+        </td>
+      `;
+    }
 
     if (activeTab === 'sales') {
       return `
-        <tr class="hover:bg-indigo-50/50 cursor-pointer transition-colors" data-item-id="${item.id}">
+        <tr class="hover:bg-indigo-50/50 ${canEdit ? 'cursor-pointer' : ''} transition-colors" data-item-id="${item.id}">
           <td class="py-3 px-2"><span class="font-semibold text-indigo-800 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded text-[11px]">${item.maker}</span></td>
           <td class="py-3 px-2 font-bold text-slate-800">${item.partName}</td>
           <td class="py-3 px-2 font-mono text-[11px] text-slate-600 font-bold">${item.dateCode}</td>
@@ -275,10 +285,7 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
           <td class="py-3 px-2">${dateDisplayHtml}</td>
           <td class="py-3 px-2 font-semibold text-slate-800">${item.stock.toLocaleString()} EA</td>
           <td class="py-3 px-2">${statusBadge}</td>
-          <td class="py-3 px-2 text-right whitespace-nowrap">
-            ${splitBtn}
-            <button class="delete-btn text-red-500 hover:text-red-700 font-semibold text-xs px-2 py-1 rounded bg-red-50" data-id="${item.id}">삭제</button>
-          </td>
+          ${adminTd}
         </tr>
       `;
     } else {
@@ -297,7 +304,7 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
       }
 
       return `
-        <tr class="hover:bg-indigo-50/50 cursor-pointer transition-colors" data-item-id="${item.id}">
+        <tr class="hover:bg-indigo-50/50 ${canEdit ? 'cursor-pointer' : ''} transition-colors" data-item-id="${item.id}">
           <td class="py-3 px-2">${statusBadge}</td>
           <td class="py-3 px-2 font-bold text-slate-900">${item.customer}</td>
           <td class="py-3 px-2 font-bold text-slate-700">${item.partName}</td>
@@ -311,28 +318,28 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
           </td>
           <td class="py-3 px-2">${payBadge}${fxDiffBadge}</td>
           <td class="py-3 px-2">${dueBadge}</td>
-          <td class="py-3 px-2 text-right whitespace-nowrap">
-            ${splitBtn}
-            <button class="delete-btn text-red-500 hover:text-red-700 font-semibold text-xs px-2 py-1 rounded bg-red-50" data-id="${item.id}">삭제</button>
-          </td>
+          ${adminTd}
         </tr>
       `;
     }
   }).join('');
 
-  // 3. 모바일 카드 뷰
+  // 모바일 카드 뷰
   cardContainer.innerHTML = filtered.map(item => {
     const isPaid = item.paymentStatus === '완료';
     const dueBadge = computeDueBadge(item.dueDate, isPaid);
     const statusBadge = getStatusBadge(item.orderStatus);
     const soldPriceHtml = formatPriceKrwUsd(item.soldPriceUsd, item.shipFx);
 
-    const splitBtn = item.stock > 1 
-      ? `<button class="split-btn text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-0.5 rounded bg-indigo-50 mr-1" data-id="${item.id}">출하분할</button>`
-      : '';
+    const adminActions = canEdit ? `
+      <div>
+        ${item.stock > 1 ? `<button class="split-btn text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-0.5 rounded bg-indigo-50 mr-1" data-id="${item.id}">출하분할</button>` : ''}
+        <button class="delete-btn text-red-500 hover:text-red-700 px-2 py-0.5 rounded bg-red-50 text-[11px]" data-id="${item.id}">삭제</button>
+      </div>
+    ` : '';
 
     return `
-      <div class="p-3 bg-slate-50 hover:bg-indigo-50/50 rounded-xl border border-slate-200 cursor-pointer space-y-2" data-item-id="${item.id}">
+      <div class="p-3 bg-slate-50 hover:bg-indigo-50/50 rounded-xl border border-slate-200 ${canEdit ? 'cursor-pointer' : ''} space-y-2" data-item-id="${item.id}">
         <div class="flex justify-between items-start">
           <div>
             <span class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">${item.maker}</span>
@@ -370,10 +377,7 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
 
         <div class="flex justify-between items-center pt-0.5 text-[11px]">
           <span class="text-slate-500">결제: <strong>${item.paymentTerms}</strong></span>
-          <div>
-            ${splitBtn}
-            <button class="delete-btn text-red-500 hover:text-red-700 px-2 py-0.5 rounded bg-red-50" data-id="${item.id}">삭제</button>
-          </div>
+          ${adminActions}
         </div>
       </div>
     `;
@@ -382,19 +386,20 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
   [cardContainer, tbody].forEach(container => {
     container.onclick = (e) => {
       const splitBtn = e.target.closest('.split-btn');
-      if (splitBtn) {
+      if (splitBtn && canEdit) {
         e.stopPropagation();
         onSplit(splitBtn.dataset.id);
         return;
       }
       const deleteBtn = e.target.closest('.delete-btn');
-      if (deleteBtn) {
+      if (deleteBtn && canEdit) {
         e.stopPropagation();
         onDelete(deleteBtn.dataset.id);
         return;
       }
       const row = e.target.closest('[data-item-id]');
-      if (row) {
+      // 💡 관리자만 클릭 시 입력/수정 폼으로 로드됨
+      if (row && canEdit) {
         onSelect(row.dataset.itemId);
       }
     };
