@@ -9,7 +9,6 @@ let activeTab = 'sales';
 let editingItemId = null;
 let targetSplitId = null;
 
-// 안전한 이벤트 리스너 헬퍼 (null 요소 참조 에러 원천 차단)
 function safeAddListener(id, event, handler) {
   const el = document.getElementById(id);
   if (el) {
@@ -118,7 +117,6 @@ function updateFxDisplay() {
 }
 
 function bindInputs() {
-  // 존재하는 요소만 안전하게 이벤트 등록 (Uncaught TypeError 원천 방어)
   ['inputUsd', 'inputStock', 'inputShipFx', 'inputOverhead', 'inputTargetOffer'].forEach(id => {
     safeAddListener(id, 'input', runEngine);
   });
@@ -213,7 +211,6 @@ function bindModals() {
     };
   }
 
-  // 선적 부대비용 자동 배부 계산 처리
   const landedCostForm = document.getElementById('landedCostForm');
   if (landedCostForm) {
     landedCostForm.onsubmit = (e) => {
@@ -240,7 +237,6 @@ function bindModals() {
     };
   }
 
-  // 부분 출하 분할 실행 처리
   const splitShipmentForm = document.getElementById('splitShipmentForm');
   if (splitShipmentForm) {
     splitShipmentForm.onsubmit = async (e) => {
@@ -289,7 +285,7 @@ function runEngine() {
   setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
   setText('minSaleUnitReplaceUsd', `$${result.unitMinPriceReplaceUsd.toFixed(4)}`);
-  setText('minSaleUnitReplaceKrw', `(₩${result.unitMinPriceReplaceKrw.toFixed(1)} / EA)`;
+  setText('minSaleUnitReplaceKrw', `(₩${result.unitMinPriceReplaceKrw.toFixed(1)} / EA)`);
   setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
   const revMarginEl = document.getElementById('reverseMarginReplace');
