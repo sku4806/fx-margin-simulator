@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>BIGSHINE KOREA - 반도체 영업 마진 방어 & 재고 관리 시스템</title>
+  <title>BIGSHINE KOREA - 영업 견적 & 출하 채권 관리 시스템</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
@@ -14,7 +14,7 @@
 <body class="bg-slate-100 text-slate-800 p-3 sm:p-6 md:p-8 min-h-screen font-sans">
   <div class="max-w-6xl mx-auto space-y-4 sm:space-y-6">
     
-    <!-- 헤더 -->
+    <!-- 1. 헤더 -->
     <header class="bg-[#0b2046] text-white p-4 sm:p-6 rounded-2xl shadow-md border border-slate-700/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div class="flex items-center gap-3.5">
         <div class="w-12 h-12 bg-white rounded-xl p-1 flex items-center justify-center shrink-0 shadow-sm overflow-hidden border border-white/20">
@@ -23,7 +23,7 @@
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-xl sm:text-2xl font-black tracking-wider text-white">BIGSHINE KOREA</h1>
-            <span class="text-[10px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded">FX Cloud Secure</span>
+            <span class="text-[10px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded">ERP Enterprise</span>
           </div>
           <p class="text-xs text-slate-300 font-medium tracking-tight mt-0.5">Better Future Starts here &gt;&gt;</p>
         </div>
@@ -46,259 +46,256 @@
       </div>
     </header>
 
-    <!-- 메인 그리드 -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-      
-      <!-- 파라미터 입력 -->
-      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-1 space-y-3 sm:space-y-4">
-        <div class="border-b pb-2 flex justify-between items-center">
-          <div>
-            <h2 class="font-bold text-sm sm:text-base text-slate-900">견적 & 실판매 파라미터</h2>
-            <p class="text-[11px] text-slate-400">직접 입력 또는 하단 목록 선택</p>
-          </div>
-          <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold px-3 py-1.5 rounded-lg transition-transform shadow-sm">
-            클라우드 저장
-          </button>
+    <!-- 2. 비즈니스 탭 스위처 바 -->
+    <div class="bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-2">
+      <div class="flex items-center gap-1.5">
+        <button id="tabSales" class="px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm transition-colors">
+          💼 영업 견적 및 수주 (Sales & Quotation)
+        </button>
+        <button id="tabFulfillment" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+          📋 출하 및 채권 관리 (Fulfillment & Billing)
+        </button>
+      </div>
+      <span id="csHeaderDesc" class="text-xs text-slate-400 font-medium hidden md:block px-2">영업 협의 수주 현황 및 실판매 마진율을 관리합니다.</span>
+    </div>
+
+    <!-- 3. 견적 시뮬레이터 (영업 견적 모드에서만 활성화) -->
+    <div id="salesQuotationPanel" class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+      <div class="border-b pb-2 flex justify-between items-center">
+        <div>
+          <h2 class="font-bold text-sm sm:text-base text-slate-900">고객사 제시 권고 견적가 (FX Protection)</h2>
+          <span class="text-[11px] text-slate-400">실시간 환율 변동 연동 원가 역산 시뮬레이션</span>
         </div>
+        <button id="copyQuoteBtn" class="shrink-0 text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-3 py-1.5 rounded-lg transition-transform flex items-center gap-1.5 shadow-sm">
+          <span>📋</span> 견적서 복사
+        </button>
+      </div>
 
-        <div class="space-y-2.5 sm:space-y-3 text-xs font-medium">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-slate-500">① 재고 소진용 최저 납품선</span>
+            <span class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold">선적원가 기준</span>
+          </div>
           <div>
-            <label class="text-slate-600 block mb-1">제조사 라인 (BSK Line)</label>
-            <div class="grid grid-cols-1 gap-1.5">
-              <select id="selectMaker" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-                <option value="GigaDevice">GigaDevice</option>
-                <option value="ISSI">ISSI</option>
-                <option value="Lumissil">Lumissil</option>
-                <option value="XMOS">XMOS</option>
-                <option value="Silicon Motion">Silicon Motion</option>
-                <option value="ESMT">ESMT</option>
-                <option value="Innodisk">Innodisk</option>
-                <option value="SSSTC">SSSTC (Kioxia Group)</option>
-                <option value="Giantec">Giantec</option>
-                <option value="WIZnet">WIZnet</option>
-                <option value="Intelligent Memory">Intelligent Memory (I'M)</option>
-                <option value="Chiplus">Chiplus</option>
-                <option value="Bel Fuse">Bel Fuse</option>
-                <option value="Link-PP">Link-PP</option>
-                <option value="Eta-Semi">Eta-Semi (Nanowatt)</option>
-                <option value="AMS">AMS</option>
-                <option value="Belling">Belling</option>
-                <option value="__CUSTOM_MAKER__">기타 (직접 입력)</option>
-              </select>
-              <input type="text" id="inputCustomMaker" placeholder="제조사명 직접 입력..." class="hidden w-full p-2 border rounded-lg bg-amber-50/50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
+            <div id="minSaleUnitActualUsd" class="text-2xl font-black text-slate-900">$0.0000</div>
+            <div id="minSaleUnitActualKrw" class="text-xs font-bold text-indigo-600">(₩0 / EA)</div>
           </div>
-
-          <div>
-            <label class="text-slate-600 block mb-1">제품명 / Part Number</label>
-            <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-          </div>
-
-          <!-- 영업 및 고객사 정보 (실무 확장) -->
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-slate-600 block mb-1">담당 Sales</label>
-              <select id="selectOwner" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-                <option value="본사 일반재고">본사 일반재고</option>
-                <option value="Dustin">Dustin</option>
-                <option value="Steve">Steve</option>
-                <option value="Eric">Eric</option>
-                <option value="William">William</option>
-                <option value="Allen">Allen</option>
-                <option value="Kelly">Kelly</option>
-                <option value="Joye">Joye</option>
-                <option value="Paul">Paul</option>
-                <option value="__CUSTOM_OWNER__">기타 (직접 입력)</option>
-              </select>
-              <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1.5 p-2 border rounded-lg bg-amber-50/50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div>
-              <label class="text-slate-600 block mb-1">납품 고객사 (Account)</label>
-              <input type="text" id="inputCustomer" placeholder="예: LG전자, 도원텍" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-slate-600 block mb-1">실제 판매단가 ($/EA)</label>
-              <input type="number" id="inputSoldPrice" placeholder="실납품가 입력" step="0.001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div>
-              <label class="text-slate-600 block mb-1">수금 상태</label>
-              <select id="selectPaymentStatus" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-                <option value="미수">미수 (Unpaid)</option>
-                <option value="완료">수금완료 (Paid)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-slate-600 block mb-1">수금 만기일 (Due Date)</label>
-              <input type="date" id="inputDueDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div>
-              <label class="text-slate-600 block mb-1">등록 / 선적 일자</label>
-              <input type="date" id="inputEntryDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-          </div>
-
-          <div>
-            <label class="text-slate-600 block mb-1">개당 선적 매입가 (USD, $/EA)</label>
-            <input type="number" id="inputUsd" value="2.50" step="0.001" class="w-full p-2 sm:p-2.5 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-slate-600 block mb-1">견적/납품 수량</label>
-              <input type="number" id="inputQty" value="1000" step="100" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div>
-              <label class="text-slate-600 block mb-1">현재 창고 재고</label>
-              <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-slate-600 block mb-1">선적 환율 ($1 기준)</label>
-              <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div>
-              <label class="text-slate-600 block mb-1">부대비용/관세 (%)</label>
-              <input type="number" id="inputOverhead" value="3.0" step="0.5" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-slate-600 block mb-1">목표 마진율 (%)</label>
-              <input type="number" id="inputTargetMargin" value="20" min="1" max="90" step="1" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div>
-              <label class="text-slate-600 block mb-1">비고 / 보관위치</label>
-              <input type="text" id="inputMemo" placeholder="예: A랙 / Net 30" class="w-full p-2 border rounded-lg bg-slate-50 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
+          <div class="pt-1 border-t text-[11px] flex justify-between text-slate-500">
+            <span>총 납품 견적:</span>
+            <span id="minSaleTotalActual" class="font-bold text-slate-800">$0.00</span>
           </div>
         </div>
 
-        <div class="pt-2 border-t space-y-2 text-xs text-slate-500">
-          <div>
-            <div class="text-[10px] font-semibold text-slate-400">창고 재고 원가 (선적일+부대비용)</div>
-            <div class="flex justify-between items-center text-slate-700 font-bold mt-0.5">
-              <span>개당: <span id="actualCostUnit">-</span></span>
-              <span class="text-[11px] font-normal text-slate-400" id="actualCostTotal">-</span>
-            </div>
+        <div class="p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-1">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-indigo-800">② 라인 재발주 방어 권장선</span>
+            <span class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">현재환율 안전선</span>
           </div>
-          <div class="pt-1.5 border-t border-dashed">
-            <div class="text-[10px] font-semibold text-slate-400">라인 재발주 원가 (현재환율+부대비용)</div>
-            <div class="flex justify-between items-center text-slate-700 font-bold mt-0.5">
-              <span>개당: <span id="replaceCostUnit">-</span></span>
-              <span class="text-[11px] font-normal text-slate-400" id="replaceCostTotal">-</span>
-            </div>
+          <div>
+            <div id="minSaleUnitReplaceUsd" class="text-2xl font-black text-indigo-950">$0.0000</div>
+            <div id="minSaleUnitReplaceKrw" class="text-xs font-bold text-indigo-600">(₩0 / EA)</div>
+          </div>
+          <div class="pt-1 border-t border-indigo-100 text-[11px] flex justify-between text-indigo-950">
+            <span>총 권장 견적:</span>
+            <span id="minSaleTotalReplace" class="font-bold text-indigo-900">$0.00</span>
           </div>
         </div>
       </div>
 
-      <!-- 견적 시뮬레이터 -->
-      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2 space-y-4 sm:space-y-5">
-        <div class="border-b pb-2 flex justify-between items-center gap-2">
+      <!-- 타겟단가 검증 & Tier 테이블 -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 items-center">
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-2 items-center">
           <div>
-            <h2 class="font-bold text-sm sm:text-base text-slate-900">고객사 제시 권고 견적가</h2>
-            <span class="text-[11px] text-slate-400">마진 방어 및 유효 견적</span>
+            <label class="text-[10px] text-slate-500 block mb-0.5">고객 희망단가($)</label>
+            <input type="number" id="inputTargetOffer" placeholder="예: 3.10" step="0.001" class="w-full p-1.5 border rounded-lg bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
-          <button id="copyQuoteBtn" class="shrink-0 text-xs bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-semibold px-3 py-1.5 rounded-lg transition-transform flex items-center gap-1.5 shadow-sm">
-            <span>📋</span> 견적서 복사
-          </button>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
-            <div class="flex justify-between items-center">
-              <span class="text-xs font-bold text-slate-500">① 재고 소진용 최저선</span>
-              <span class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold">선적원가 기준</span>
-            </div>
-            <div>
-              <div class="text-[11px] text-slate-400">개당 최소 견적 (EA)</div>
-              <div id="minSaleUnitActualUsd" class="text-2xl font-black text-slate-900 mt-0.5">$0.0000</div>
-              <div id="minSaleUnitActualKrw" class="text-xs font-bold text-indigo-600">(₩0 / EA)</div>
-            </div>
-            <div class="pt-1.5 border-t text-[11px] flex justify-between text-slate-500">
-              <span>총 납품 견적:</span>
-              <span id="minSaleTotalActual" class="font-bold text-slate-800">$0.00</span>
-            </div>
+          <div>
+            <span class="text-[10px] text-slate-500 block">예상 마진율</span>
+            <div id="reverseMarginReplace" class="text-sm font-black text-slate-700 mt-0.5">- %</div>
           </div>
-
-          <div class="p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-1.5">
-            <div class="flex justify-between items-center">
-              <span class="text-xs font-bold text-indigo-800">② 라인 재발주 방어선</span>
-              <span class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">현재환율 안전</span>
-            </div>
-            <div>
-              <div class="text-[11px] text-indigo-600/80">개당 권장 견적 (EA)</div>
-              <div id="minSaleUnitReplaceUsd" class="text-2xl font-black text-indigo-950 mt-0.5">$0.0000</div>
-              <div id="minSaleUnitReplaceKrw" class="text-xs font-bold text-indigo-600">(₩0 / EA)</div>
-            </div>
-            <div class="pt-1.5 border-t border-indigo-100 text-[11px] flex justify-between text-indigo-950">
-              <span>총 권장 견적:</span>
-              <span id="minSaleTotalReplace" class="font-bold text-indigo-900">$0.00</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
-          <div class="flex justify-between items-center">
-            <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-              <span>🎯</span> 타겟단가 역산 검증기
-            </span>
-            <span class="text-[10px] text-slate-400">네고 단가 입력 즉시 판정</span>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center">
-            <div>
-              <label class="text-[10px] text-slate-500 block mb-0.5">고객 희망 단가 ($/EA)</label>
-              <input type="number" id="inputTargetOffer" placeholder="예: 3.10" step="0.001" class="w-full p-2 border rounded-lg bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div class="flex sm:flex-col justify-between sm:justify-start items-center sm:items-start">
-              <span class="text-[10px] text-slate-500">예상 마진율</span>
-              <div id="reverseMarginReplace" class="text-sm sm:text-base font-black text-slate-700 mt-0.5">- %</div>
-            </div>
-            <div class="flex sm:flex-col justify-between sm:justify-start items-center sm:items-start">
-              <span class="text-[10px] text-slate-500">기준 충족 여부</span>
-              <div id="reverseMarginBadge" class="text-xs font-bold text-slate-400 mt-0.5">단가를 입력하세요</div>
-            </div>
+          <div>
+            <span class="text-[10px] text-slate-500 block">판정 결과</span>
+            <div id="reverseMarginBadge" class="text-xs font-bold text-slate-400 mt-0.5">단가 입력</div>
           </div>
         </div>
 
         <div class="border border-slate-200 rounded-xl overflow-hidden text-xs">
-          <div class="bg-slate-50 px-3 py-2 font-bold text-slate-700 border-b flex justify-between items-center text-[11px]">
-            <span>수량별(Volume Tier Break) 권고선</span>
-            <span class="text-[10px] text-slate-400 font-normal">재발주 안전선 기준</span>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-center">
-              <thead class="bg-slate-50/50 text-slate-500 border-b text-[11px]">
-                <tr>
-                  <th class="py-2 px-1">수량</th>
-                  <th class="py-2 px-1">단가(USD)</th>
-                  <th class="py-2 px-1">원화(KRW)</th>
-                  <th class="py-2 px-1">총액(USD)</th>
-                </tr>
-              </thead>
-              <tbody id="tierTableBody" class="divide-y divide-slate-100 font-medium text-[11px]">
-              </tbody>
-            </table>
-          </div>
+          <table class="w-full text-center">
+            <thead class="bg-slate-50 text-slate-500 border-b text-[11px]">
+              <tr>
+                <th class="py-1.5 px-1">수량</th>
+                <th class="py-1.5 px-1">권장단가(USD)</th>
+                <th class="py-1.5 px-1">원화(KRW)</th>
+                <th class="py-1.5 px-1">합계(USD)</th>
+              </tr>
+            </thead>
+            <tbody id="tierTableBody" class="divide-y divide-slate-100 font-medium text-[11px]"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. 통합 등록 및 수정 폼 (공통 아코디언/폼) -->
+    <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+      <div class="border-b pb-2 flex justify-between items-center">
+        <div>
+          <h2 class="font-bold text-sm sm:text-base text-slate-900">데이터 입력 및 트랜잭션 관리</h2>
+          <p class="text-[11px] text-slate-400">영업 수주 정보와 출하/채권 데이터를 일원화하여 관리합니다.</p>
+        </div>
+        <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg transition-transform shadow-sm">
+          클라우드 영구 저장
+        </button>
+      </div>
+
+      <!-- 폼 그리드 (영업 + 출하/채권 영역 정돈) -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 text-xs font-medium">
+        <!-- 1) 기본 정보 -->
+        <div>
+          <label class="text-slate-600 block mb-1">제조사 라인 (Maker)</label>
+          <select id="selectMaker" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+            <option value="GigaDevice">GigaDevice</option>
+            <option value="ISSI">ISSI</option>
+            <option value="Lumissil">Lumissil</option>
+            <option value="XMOS">XMOS</option>
+            <option value="Silicon Motion">Silicon Motion</option>
+            <option value="ESMT">ESMT</option>
+            <option value="Innodisk">Innodisk</option>
+            <option value="SSSTC">SSSTC (Kioxia Group)</option>
+            <option value="Giantec">Giantec</option>
+            <option value="WIZnet">WIZnet</option>
+            <option value="Intelligent Memory">Intelligent Memory (I'M)</option>
+            <option value="Chiplus">Chiplus</option>
+            <option value="Bel Fuse">Bel Fuse</option>
+            <option value="Link-PP">Link-PP</option>
+            <option value="Eta-Semi">Eta-Semi</option>
+            <option value="AMS">AMS</option>
+            <option value="Belling">Belling</option>
+            <option value="__CUSTOM_MAKER__">기타 (직접 입력)</option>
+          </select>
+          <input type="text" id="inputCustomMaker" placeholder="제조사 직접 입력..." class="hidden w-full mt-1.5 p-2 border rounded-lg bg-amber-50/50 text-xs font-semibold outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">제품명 (Part Number)</label>
+          <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">담당 Sales</label>
+          <select id="selectOwner" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+            <option value="본사 일반재고">본사 일반재고</option>
+            <option value="Dustin">Dustin</option>
+            <option value="Steve">Steve</option>
+            <option value="Eric">Eric</option>
+            <option value="William">William</option>
+            <option value="Allen">Allen</option>
+            <option value="Kelly">Kelly</option>
+            <option value="Joye">Joye</option>
+            <option value="Paul">Paul</option>
+            <option value="__CUSTOM_OWNER__">기타 (직접 입력)</option>
+          </select>
+          <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1.5 p-2 border rounded-lg bg-amber-50/50 text-xs font-semibold outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">수주 고객사 (Account)</label>
+          <input type="text" id="inputCustomer" placeholder="예: LG전자, 도원텍" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+
+        <!-- 2) 가격 및 원가 정보 -->
+        <div>
+          <label class="text-slate-600 block mb-1">개당 선적 매입가 ($/EA)</label>
+          <input type="number" id="inputUsd" value="2.50" step="0.001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">협의 실판매단가 ($/EA)</label>
+          <input type="number" id="inputSoldPrice" placeholder="실납품 계약단가" step="0.001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">선적 환율 (기준 KRW)</label>
+          <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">수량 (견적/배정 수량)</label>
+          <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        </div>
+
+        <!-- 3) 출하 및 채권 관리 항목 (Fulfillment Fields) -->
+        <div>
+          <label class="text-slate-600 block mb-1">진행 상태 (Status)</label>
+          <select id="selectOrderStatus" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+            <option value="배정요청">배정요청 (Order Placed)</option>
+            <option value="출하준비">출하준비 (Preparing)</option>
+            <option value="출하완료">출하완료 (Shipped)</option>
+            <option value="정산마감">정산마감 (Closed)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">결제 조건 (Terms)</label>
+          <select id="selectPaymentTerms" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+            <option value="Net 30">Net 30 (납품 후 30일)</option>
+            <option value="Net 60">Net 60 (납품 후 60일)</option>
+            <option value="익월말현금">익월 말 현금 결제</option>
+            <option value="선입금/현금">선입금 / 출하 전 현금</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">인보이스 / 계산서 번호</label>
+          <input type="text" id="inputInvoiceNo" placeholder="예: INV-2026-001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">운송장 / B/L 번호</label>
+          <input type="text" id="inputTrackingNo" placeholder="예: CJ 6548-XXXX" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">수금 상태</label>
+          <select id="selectPaymentStatus" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+            <option value="미수">미수 (Unpaid)</option>
+            <option value="완료">수금완료 (Paid)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">수금 만기일 (Due Date)</label>
+          <input type="date" id="inputDueDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">실물 출고일 (Shipped Date)</label>
+          <input type="date" id="inputShippedDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-1">비고 및 창고 랙 번호</label>
+          <input type="text" id="inputMemo" placeholder="예: A랙 2열 / Reel 포장" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
       </div>
 
+      <!-- 숨겨진 계산기 파라미터 보존 -->
+      <input type="hidden" id="inputQty" value="1000">
+      <input type="hidden" id="inputOverhead" value="3.0">
+      <input type="hidden" id="inputTargetMargin" value="20">
+      <input type="hidden" id="inputEntryDate">
+      <div id="actualCostUnit" class="hidden"></div>
+      <div id="actualCostTotal" class="hidden"></div>
+      <div id="replaceCostUnit" class="hidden"></div>
+      <div id="replaceCostTotal" class="hidden"></div>
     </div>
 
-    <!-- 재고 & 매출 관리 테이블 -->
+    <!-- 5. 엔터프라이즈 데이터 그리드 (Sales vs CS 듀얼 렌더링) -->
     <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
         <div>
           <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <h2 class="font-bold text-sm sm:text-base text-slate-900">클라우드 재고 & 매출 관리</h2>
+            <h2 class="font-bold text-sm sm:text-base text-slate-900">클라우드 트랜잭션 마스터</h2>
             <span id="cloudStatusBadge" class="text-[10px] font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">☁️ RLS 암호화</span>
             <span id="lockStatusBadge" class="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">🔒 로그인 필요</span>
           </div>
@@ -315,9 +312,10 @@
         </div>
       </div>
 
+      <!-- 미로그인 오버레이 -->
       <div id="lockedOverlay" class="p-6 sm:p-8 text-center bg-slate-50/90 rounded-xl border border-dashed border-slate-300 space-y-2.5">
         <div class="text-2xl sm:text-3xl">🔐</div>
-        <div class="font-bold text-slate-800 text-xs sm:text-sm">보안을 위해 재고 및 판매 데이터가 잠겨 있습니다.</div>
+        <div class="font-bold text-slate-800 text-xs sm:text-sm">보안을 위해 데이터가 보호되어 있습니다.</div>
         <button onclick="document.getElementById('loginModal').classList.remove('hidden')" class="text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg transition-transform shadow-sm">
           로그인하고 데이터 불러오기
         </button>
@@ -327,7 +325,7 @@
       <div id="unlockedContent" class="hidden space-y-3">
         <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 grid grid-cols-1 sm:grid-cols-5 gap-2 items-center">
           <div class="sm:col-span-2 relative">
-            <input type="text" id="searchInput" placeholder="Part, 고객사, 라인, 비고 검색..." class="w-full pl-7 pr-3 py-1.5 border rounded-lg bg-white text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
+            <input type="text" id="searchInput" placeholder="Part, 고객사, 인보이스, 송장번호 검색..." class="w-full pl-7 pr-3 py-1.5 border rounded-lg bg-white text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
             <span class="absolute left-2 top-1.5 text-slate-400 text-xs">🔍</span>
           </div>
 
@@ -360,41 +358,35 @@
             </select>
           </div>
 
-          <div>
-            <select id="filterPayment" class="w-full p-1.5 border rounded-lg bg-white text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+          <div class="grid grid-cols-2 gap-1.5">
+            <select id="filterStatus" class="w-full p-1.5 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <option value="">진행상태 전체</option>
+              <option value="배정요청">배정요청</option>
+              <option value="출하준비">출하준비</option>
+              <option value="출하완료">출하완료</option>
+              <option value="정산마감">정산마감</option>
+            </select>
+
+            <select id="filterPayment" class="w-full p-1.5 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
               <option value="">수금상태 전체</option>
-              <option value="미수">미수 (Unpaid)</option>
-              <option value="완료">수금완료 (Paid)</option>
+              <option value="미수">미수</option>
+              <option value="완료">수금완료</option>
             </select>
           </div>
         </div>
 
         <div class="flex justify-between items-center text-[11px] text-slate-500 px-1">
-          <span>※ 파트별 고객사 납품 이력 및 미수금을 함께 추적합니다.</span>
+          <span>※ 파트별 고객사 납품 이력 및 출하/수금 현황을 통합 트래킹합니다.</span>
           <span id="itemCount" class="font-bold text-indigo-700">총 0건</span>
         </div>
 
-        <!-- 모바일 카드 -->
+        <!-- 모바일 카드 뷰 -->
         <div id="inventoryCardContainer" class="block md:hidden space-y-2.5"></div>
 
-        <!-- 데스크톱 테이블 -->
+        <!-- 데스크톱 테이블 뷰 -->
         <div class="hidden md:block overflow-x-auto">
           <table class="w-full text-left text-xs">
-            <thead class="bg-slate-50 text-slate-500 border-b uppercase font-semibold">
-              <tr>
-                <th class="py-3 px-2">라인</th>
-                <th class="py-3 px-2">제품명</th>
-                <th class="py-3 px-2">Sales</th>
-                <th class="py-3 px-2">납품고객사</th>
-                <th class="py-3 px-2">매입단가</th>
-                <th class="py-3 px-2">실판매단가</th>
-                <th class="py-3 px-2">수금</th>
-                <th class="py-3 px-2">만기일</th>
-                <th class="py-3 px-2">재고</th>
-                <th class="py-3 px-2">마진</th>
-                <th class="py-3 px-2 text-right">관리</th>
-              </tr>
-            </thead>
+            <thead id="inventoryTableHeader" class="bg-slate-50 text-slate-500 border-b uppercase font-semibold"></thead>
             <tbody id="inventoryTableBody" class="divide-y divide-slate-100 font-medium"></tbody>
           </table>
         </div>
@@ -408,7 +400,7 @@
   <div id="loginModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4">
       <div class="flex justify-between items-start">
-        <h3 class="text-base font-bold text-slate-900">사내 영업 인증 (Supabase Auth)</h3>
+        <h3 class="text-base font-bold text-slate-900">사내 계정 인증 (Supabase Auth)</h3>
         <button onclick="document.getElementById('loginModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
       </div>
       <form id="loginForm" class="space-y-3 text-xs">
@@ -455,7 +447,6 @@
     </div>
   </div>
 
-  <!-- 모듈 엔트리포인트 로드 -->
   <script type="module" src="/js/app.js"></script>
 </body>
 </html>

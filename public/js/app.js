@@ -5,11 +5,11 @@ import { fetchInventoryItems, upsertInventoryItem, deleteInventoryItem, filterIt
 let currentSession = null;
 let rawFxRate = 1380.0;
 let appliedFxRate = 1380.0;
+let activeTab = 'sales'; // 'sales' | 'fulfillment'
 
 export async function bootstrap() {
   document.getElementById('inputEntryDate').value = new Date().toISOString().slice(0, 10);
 
-  // FX API 호출
   try {
     const fxRes = await fetch('/api/fx-rate');
     const fxData = await fxRes.json();
@@ -19,10 +19,10 @@ export async function bootstrap() {
   }
   updateFxDisplay();
 
+  bindTabSwitch();
   bindInputs();
   bindModals();
 
-  // 세션 확인
   currentSession = await getCurrentSession();
   updateAuthUI();
   if (currentSession) {
@@ -35,11 +35,36 @@ export async function bootstrap() {
     if (currentSession) {
       await refreshInventory();
     } else {
-      renderInventoryUI([], () => {}, () => {});
+      renderInventoryUI([], activeTab, () => {}, () => {});
     }
   });
 
   runEngine();
+}
+
+function bindTabSwitch() {
+  const tabSales = document.getElementById('tabSales');
+  const tabFulfillment = document.getElementById('tabFulfillment');
+  const salesPanel = document.getElementById('salesQuotationPanel');
+  const csHeaderDesc = document.getElementById('csHeaderDesc');
+
+  tabSales.addEventListener('click', () => {
+    activeTab = 'sales';
+    tabSales.className = "px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm transition-colors";
+    tabFulfillment.className = "px-4 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors";
+    salesPanel.classList.remove('hidden');
+    csHeaderDesc.innerText = "영업 협의 수주 현황 및 실판매 마진율을 관리합니다.";
+    applyFilters();
+  });
+
+  tabFulfillment.addEventListener('click', () => {
+    activeTab = 'fulfillment';
+    tabFulfillment.className = "px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm transition-colors";
+    tabSales.className = "px-4 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors";
+    salesPanel.classList.add('hidden'); // 출하/채권 모드에서는 견적 계산기 접기
+    csHeaderDesc.innerText = "출하 스케줄, 운송장/인보이스 번호 및 미수금 만기 일정을 관리합니다.";
+    applyFilters();
+  });
 }
 
 function updateFxDisplay() {
@@ -58,12 +83,10 @@ function bindInputs() {
   document.getElementById('fxBufferSelect').addEventListener('change', updateFxDisplay);
   document.getElementById('copyQuoteBtn').addEventListener('click', copyQuotation);
 
-  // 드롭다운 기타(직접입력) 토글
   bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
   bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
 
-  // 필터 이벤트
-  ['searchInput', 'filterMaker', 'filterOwner', 'filterPayment'].forEach(id => {
+  ['searchInput', 'filterMaker', 'filterOwner', 'filterStatus', 'filterPayment'].forEach(id => {
     document.getElementById(id).addEventListener('input', applyFilters);
     document.getElementById(id).addEventListener('change', applyFilters);
   });
@@ -216,9 +239,10 @@ function applyFilters() {
     query: document.getElementById('searchInput').value,
     filterMaker: document.getElementById('filterMaker').value,
     filterOwner: document.getElementById('filterOwner').value,
+    filterStatus: document.getElementById('filterStatus').value,
     filterPayment: document.getElementById('filterPayment').value
   });
-  renderInventoryUI(filtered, loadFormFromItem, handleDeleteItem);
+  renderInventoryUI(filtered, activeTab, loadFormFromItem, handleDeleteItem);
 }
 
 function loadFormFromItem(id) {
@@ -230,8 +254,13 @@ function loadFormFromItem(id) {
   document.getElementById('inputPartName').value = item.partName;
   document.getElementById('inputCustomer').value = item.customer !== '-' ? item.customer : '';
   document.getElementById('inputSoldPrice').value = item.soldPriceUsd || '';
+  document.getElementById('selectOrderStatus').value = item.orderStatus;
+  document.getElementById('selectPaymentTerms').value = item.paymentTerms;
   document.getElementById('selectPaymentStatus').value = item.paymentStatus;
+  document.getElementById('inputInvoiceNo').value = item.invoiceNo || '';
+  document.getElementById('inputTrackingNo').value = item.trackingNo || '';
   document.getElementById('inputDueDate').value = item.dueDate || '';
+  document.getElementById('inputShippedDate').value = item.shippedDate || '';
   document.getElementById('inputEntryDate').value = item.entryDate;
   document.getElementById('inputMemo').value = item.memo;
   document.getElementById('inputUsd').value = item.unitUsd;
@@ -282,8 +311,13 @@ async function saveCurrentForm() {
     owner: owner || "본사 일반재고",
     customer: document.getElementById('inputCustomer').value.trim() || "-",
     sold_price_usd: parseFloat(document.getElementById('inputSoldPrice').value) || 0,
+    order_status: document.getElementById('selectOrderStatus').value,
+    payment_terms: document.getElementById('selectPaymentTerms').value,
     payment_status: document.getElementById('selectPaymentStatus').value,
+    invoice_no: document.getElementById('inputInvoiceNo').value.trim(),
+    tracking_no: document.getElementById('inputTrackingNo').value.trim(),
     due_date: document.getElementById('inputDueDate').value || null,
+    shipped_date: document.getElementById('inputShippedDate').value || null,
     entry_date: document.getElementById('inputEntryDate').value || new Date().toISOString().slice(0, 10),
     memo: document.getElementById('inputMemo').value.trim(),
     unit_usd: parseFloat(document.getElementById('inputUsd').value) || 0,
@@ -294,7 +328,7 @@ async function saveCurrentForm() {
 
   try {
     await upsertInventoryItem(payload);
-    alert(`[${payload.part_name}] 데이터가 저장되었습니다.`);
+    alert(`[${payload.part_name}] 데이터가 안전하게 저장되었습니다.`);
     await refreshInventory();
   } catch (err) {
     alert("저장 실패: " + err.message);
@@ -302,7 +336,7 @@ async function saveCurrentForm() {
 }
 
 async function handleDeleteItem(id) {
-  if (!confirm("삭제하시겠습니까?")) return;
+  if (!confirm("해당 건을 삭제하시겠습니까?")) return;
   try {
     await deleteInventoryItem(id);
     await refreshInventory();
