@@ -10,17 +10,23 @@ let editingItemId = null;
 let targetSplitId = null;
 let manualRawText = "";
 
-// 💡 CS 및 관리자 권한 여부 확인 (이메일 기준 검증)
+// 💡 지정된 CS 및 최종 관리자 계정 화이트리스트 (9인)
+const ADMIN_EMAILS = [
+  'timothy@bigshine.co.kr',
+  'tony@bigshine.co.kr',
+  'nathan@bigshine.co.kr',
+  'jamie@bigshine.co.kr',
+  'jane@bigshine.co.kr',
+  'lily@bigshine.co.kr',
+  'raina@bigshine.co.kr',
+  'susan@bigshine.co.kr',
+  'trisha@bigshine.co.kr'
+];
+
 function isCsOrAdminUser() {
   if (!currentSession || !currentSession.user || !currentSession.user.email) return false;
-  const email = currentSession.user.email.toLowerCase();
-  // 관리자, CS, 경영관리 계정 허용 키워드
-  return email.includes('admin') || 
-         email.includes('cs') || 
-         email.includes('oper') || 
-         email.includes('mgmt') || 
-         email.includes('nathan') || 
-         email.includes('manager');
+  const userEmail = currentSession.user.email.toLowerCase().trim();
+  return ADMIN_EMAILS.includes(userEmail);
 }
 
 function safeAddListener(id, event, handler) {
@@ -103,7 +109,6 @@ function updateFormVisibility() {
   const salesFields = document.querySelectorAll('.sales-only-field');
   const fulfillmentFields = document.querySelectorAll('.fulfillment-only-field');
   const saveBtn = document.getElementById('saveItemBtn');
-  const permissionNotice = document.getElementById('salesPermissionNotice');
 
   const canEdit = isCsOrAdminUser();
 
@@ -121,7 +126,7 @@ function updateFormVisibility() {
     fulfillmentFields.forEach(el => el.classList.remove('hidden'));
   }
 
-  // 💡 세일즈 임의 수정 차단 로직
+  // 💡 지정된 9인 이외 계정일 경우 조용히 비활성화 (별도 텍스트 배너 없음)
   const formInputs = document.querySelectorAll('#formSection input, #formSection select');
   if (!canEdit) {
     formInputs.forEach(inp => {
@@ -130,10 +135,9 @@ function updateFormVisibility() {
     });
     if (saveBtn) {
       saveBtn.disabled = true;
-      saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
-      saveBtn.innerText = "수정 권한 없음 (CS/관리자 전용)";
+      saveBtn.classList.add('opacity-40', 'cursor-not-allowed');
+      saveBtn.innerText = "조회 전용 (CS/관리자 전용)";
     }
-    permissionNotice?.classList.remove('hidden');
   } else {
     formInputs.forEach(inp => {
       inp.disabled = false;
@@ -141,9 +145,8 @@ function updateFormVisibility() {
     });
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      saveBtn.classList.remove('opacity-40', 'cursor-not-allowed');
     }
-    permissionNotice?.classList.add('hidden');
   }
 }
 
@@ -372,14 +375,14 @@ function runEngine() {
     if (el) el.innerText = val;
   };
 
-  // 원화 우선 표기: ₩원화 (뒤에 $달러 표기)
-  setText('minSaleUnitActualKrw', `₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()}`);
-  setText('minSaleUnitActualUsd', `($${result.unitMinPriceActualUsd.toFixed(3)} / @${Math.round(shipFx).toLocaleString()})`);
-  setText('minSaleTotalActual', `₩${Math.round(result.totalActualCostKrw / (1 - 0.2)).toLocaleString()} ($${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})})`);
+  // 💡 달러($) 우선 표기 (뒤에 원화 및 기준환율 명시)
+  setText('minSaleUnitActualUsd', `$${result.unitMinPriceActualUsd.toFixed(4)}`);
+  setText('minSaleUnitActualKrw', `(₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()} / @${Math.round(shipFx).toLocaleString()})`);
+  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(result.totalActualCostKrw / (1 - 0.2)).toLocaleString()})`);
 
-  setText('minSaleUnitReplaceKrw', `₩${Math.round(result.unitMinPriceReplaceKrw).toLocaleString()}`);
-  setText('minSaleUnitReplaceUsd', `($${result.unitMinPriceReplaceUsd.toFixed(3)} / @${Math.round(appliedFxRate).toLocaleString()})`);
-  setText('minSaleTotalReplace', `₩${Math.round(result.totalReplaceCostKrw / (1 - 0.2)).toLocaleString()} ($${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}`);
+  setText('minSaleUnitReplaceUsd', `$${result.unitMinPriceReplaceUsd.toFixed(4)}`);
+  setText('minSaleUnitReplaceKrw', `(₩${Math.round(result.unitMinPriceReplaceKrw).toLocaleString()} / @${Math.round(appliedFxRate).toLocaleString()})`);
+  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(result.totalReplaceCostKrw / (1 - 0.2)).toLocaleString()})`);
 
   const revMarginEl = document.getElementById('reverseMarginReplace');
   const revBadgeEl = document.getElementById('reverseMarginBadge');
@@ -428,9 +431,9 @@ function renderTierTable(unitUsd, unitKrw, currentQty) {
   tbody.innerHTML = tiers.map(t => `
     <tr class="${t.isCurrent ? "bg-indigo-50/70 font-bold text-indigo-900" : ""}">
       <td class="py-1.5 px-1">${t.label}</td>
-      <td class="py-1.5 px-1 text-indigo-900 font-bold">₩${Math.round(unitKrw).toLocaleString()}</td>
-      <td class="py-1.5 px-1 text-slate-600 font-mono text-[10px]">$${unitUsd.toFixed(3)}</td>
-      <td class="py-1.5 px-1 text-slate-800 font-semibold">₩${Math.round(unitKrw * t.qty).toLocaleString()}</td>
+      <td class="py-1.5 px-1 text-indigo-950 font-black text-xs">$${unitUsd.toFixed(4)}</td>
+      <td class="py-1.5 px-1 text-slate-600 font-semibold text-[11px]">₩${Math.round(unitKrw).toLocaleString()}</td>
+      <td class="py-1.5 px-1 text-slate-800 font-bold">$${(unitUsd * t.qty).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</td>
     </tr>
   `).join('');
 }
@@ -565,9 +568,9 @@ async function saveCurrentForm() {
     return;
   }
 
-  // 💡 세일즈 임의 수정 방어
+  // 💡 지정된 9인 이외 계정 저장 차단
   if (!isCsOrAdminUser()) {
-    alert("수주 및 재고 배정은 CS 및 관리자만 등록·수정할 수 있습니다.");
+    alert("수주 및 재고 배정은 CS 및 관리자 권한 계정만 등록·수정할 수 있습니다.");
     return;
   }
 
@@ -652,10 +655,10 @@ function updateAuthUI() {
   if (isAuth) {
     const isCs = isCsOrAdminUser();
     const roleText = isCs ? 'CS/관리자' : 'Sales(조회전용)';
-    const roleBadgeClass = isCs ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-200 text-slate-800';
+    const roleBadgeClass = isCs ? 'bg-indigo-100 text-indigo-900 border border-indigo-200' : 'bg-slate-200 text-slate-800 border border-slate-300';
 
     if (badge) {
-      badge.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${roleBadgeClass}`;
+      badge.className = `text-[10px] font-bold px-2.5 py-0.5 rounded-full ${roleBadgeClass}`;
       badge.innerHTML = `🔓 ${roleText}`;
     }
     if (sub) sub.innerHTML = `접속 계정: <strong class="text-indigo-700">${currentSession.user.email}</strong> (${roleText})`;
@@ -690,12 +693,12 @@ function copyQuotation() {
   const partName = document.getElementById('inputPartName')?.value.trim() || "-";
   const dateCode = document.getElementById('inputDateCode')?.value.trim() || "-";
   const qty = parseFloat(document.getElementById('inputStock')?.value) || 0;
-  const unitKrw = document.getElementById('minSaleUnitReplaceKrw')?.innerText || "-";
   const unitUsd = document.getElementById('minSaleUnitReplaceUsd')?.innerText || "-";
+  const unitKrw = document.getElementById('minSaleUnitReplaceKrw')?.innerText || "-";
   const totalReplace = document.getElementById('minSaleTotalReplace')?.innerText || "-";
   const fxRateText = document.getElementById('liveFx')?.innerText || "-";
 
-  const quote = `[견적 안내] ${partName} (D/C: ${dateCode})\n- 수량: ${qty.toLocaleString()} EA\n- 공급단가: ${unitKrw} ${unitUsd}\n- 총견적액: ${totalReplace}\n* 기준환율: ${fxRateText}`;
+  const quote = `[견적 안내] ${partName} (D/C: ${dateCode})\n- 수량: ${qty.toLocaleString()} EA\n- 공급단가: ${unitUsd} ${unitKrw}\n- 총견적액: ${totalReplace}\n* 기준환율: ${fxRateText}`;
   navigator.clipboard.writeText(quote).then(() => alert("견적서 텍스트가 복사되었습니다!"));
 }
 

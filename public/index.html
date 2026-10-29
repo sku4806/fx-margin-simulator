@@ -63,12 +63,12 @@
       <span id="csHeaderDesc" class="text-xs text-slate-400 font-medium hidden md:block px-2">영업 협의 수주 현황 및 실판매가를 확인합니다.</span>
     </div>
 
-    <!-- 3. 환율 마진 시뮬레이터 (원화 우선 표기) -->
+    <!-- 3. 환율 마진 시뮬레이터 (💡 달러 우선 표기) -->
     <div id="salesQuotationPanel" class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
       <div class="border-b pb-2 flex justify-between items-center">
         <div>
           <h2 class="font-bold text-sm sm:text-base text-slate-900">고객사 제시 권고 견적가 (FX Protection)</h2>
-          <span class="text-[11px] text-slate-400">원화(KRW) 기준 우선 표기 및 외화(@환율) 병기</span>
+          <span class="text-[11px] text-slate-400">달러(USD) 기준 우선 표기 및 원화(@환율) 병기</span>
         </div>
         <div class="flex items-center gap-2">
           <button id="openLandedCostBtn" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1">
@@ -81,35 +81,35 @@
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-        <!-- 원화 우선 카드 1 -->
+        <!-- 달러 우선 카드 1 -->
         <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
           <div class="flex justify-between items-center">
             <span class="text-xs font-bold text-slate-500">① 재고 소진용 최저 납품선</span>
             <span class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold">선적원가 기준</span>
           </div>
           <div>
-            <div id="minSaleUnitActualKrw" class="text-2xl font-black text-slate-900">₩0</div>
-            <div id="minSaleUnitActualUsd" class="text-xs font-bold text-slate-500 mt-0.5">($0.000 / @1,350)</div>
+            <div id="minSaleUnitActualUsd" class="text-2xl font-black text-slate-900">$0.0000</div>
+            <div id="minSaleUnitActualKrw" class="text-xs font-bold text-slate-500 mt-0.5">(₩0 / @1,350)</div>
           </div>
           <div class="pt-1.5 border-t text-[11px] flex justify-between text-slate-500">
             <span>총 납품 견적:</span>
-            <span id="minSaleTotalActual" class="font-bold text-slate-800">₩0 ($0.00)</span>
+            <span id="minSaleTotalActual" class="font-bold text-slate-800">$0.00 (₩0)</span>
           </div>
         </div>
 
-        <!-- 원화 우선 카드 2 -->
+        <!-- 달러 우선 카드 2 -->
         <div class="p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-1">
           <div class="flex justify-between items-center">
             <span class="text-xs font-bold text-indigo-800">② 라인 재발주 방어 권장선</span>
             <span class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">현재환율 안전선</span>
           </div>
           <div>
-            <div id="minSaleUnitReplaceKrw" class="text-2xl font-black text-indigo-950">₩0</div>
-            <div id="minSaleUnitReplaceUsd" class="text-xs font-bold text-indigo-700 mt-0.5">($0.000 / @1,380)</div>
+            <div id="minSaleUnitReplaceUsd" class="text-2xl font-black text-indigo-950">$0.0000</div>
+            <div id="minSaleUnitReplaceKrw" class="text-xs font-bold text-indigo-700 mt-0.5">(₩0 / @1,380)</div>
           </div>
           <div class="pt-1.5 border-t border-indigo-100 text-[11px] flex justify-between text-indigo-950">
             <span>총 권장 견적:</span>
-            <span id="minSaleTotalReplace" class="font-bold text-indigo-900">₩0 ($0.00)</span>
+            <span id="minSaleTotalReplace" class="font-bold text-indigo-900">$0.00 (₩0)</span>
           </div>
         </div>
       </div>
@@ -135,9 +135,9 @@
             <thead class="bg-slate-50 text-slate-500 border-b text-[11px]">
               <tr>
                 <th class="py-1.5 px-1">수량</th>
-                <th class="py-1.5 px-1">원화 견적(KRW)</th>
-                <th class="py-1.5 px-1">외화단가(USD)</th>
-                <th class="py-1.5 px-1">총액(KRW)</th>
+                <th class="py-1.5 px-1">단가(USD)</th>
+                <th class="py-1.5 px-1">원화환산(KRW)</th>
+                <th class="py-1.5 px-1">총액(USD)</th>
               </tr>
             </thead>
             <tbody id="tierTableBody" class="divide-y divide-slate-100 font-medium text-[11px]"></tbody>
@@ -146,7 +146,7 @@
       </div>
     </div>
 
-    <!-- 4. 전문화 분리형 입력 폼팩터 (세일즈 임의 수정 방어 알림 탑재) -->
+    <!-- 4. 전문화 분리형 입력 폼팩터 (💡 세일즈 안내 배너 완전 삭제) -->
     <div id="formSection" class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
       <div class="border-b pb-2 flex justify-between items-center">
         <div>
@@ -156,14 +156,6 @@
         <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg transition-transform shadow-sm">
           수주/배정 저장
         </button>
-      </div>
-
-      <!-- 💡 세일즈 권한 제한 경고 배너 -->
-      <div id="salesPermissionNotice" class="hidden p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
-        <span class="text-base">🔒</span>
-        <div>
-          <strong class="font-bold">세일즈 조회 전용 모드:</strong> 수주 배정 및 재고 수정은 데이터 임의 변경 방지를 위해 <strong>CS 및 관리자 계정으로만 등록·수정</strong>할 수 있습니다.
-        </div>
       </div>
 
       <div id="editingBanner" class="hidden p-2.5 bg-indigo-50 border border-indigo-200 rounded-xl flex justify-between items-center text-xs">
@@ -202,7 +194,6 @@
           <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
         </div>
 
-        <!-- 💡 1번 항목: Date Code (D/C) 신설 -->
         <div>
           <label class="text-slate-600 block mb-1 font-bold text-indigo-900">제조주기 (Date Code)</label>
           <input type="text" id="inputDateCode" placeholder="예: 2432+, 2501+" class="w-full p-2.5 border rounded-lg bg-indigo-50/30 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none">
@@ -325,7 +316,6 @@
           <input type="date" id="inputDueDate" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <!-- 💡 1번 항목: 선적일 및 출하일 입력란 -->
         <div>
           <label class="text-slate-600 block mb-1 font-semibold">선적일 (Shipping Date)</label>
           <input type="date" id="inputEntryDate" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
@@ -354,7 +344,7 @@
       </div>
     </div>
 
-    <!-- 5. 💡 5번 항목: 타이틀 명칭 변경 -> Inventory & Fulfillment Master -->
+    <!-- 5. 엔터프라이즈 데이터 그리드 -->
     <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
         <div>
@@ -441,7 +431,7 @@
         </div>
 
         <div class="flex justify-between items-center text-[11px] text-slate-500 px-1">
-          <span>※ 원화 우선 단가와 Date Code, 선적/출하일이 마스터에 통합 표기됩니다.</span>
+          <span>※ 권한이 있는 CS 및 관리자 계정만 수주 배정 및 출하 정보를 등록·수정할 수 있습니다.</span>
           <span id="itemCount" class="font-bold text-indigo-700">총 0건</span>
         </div>
 
