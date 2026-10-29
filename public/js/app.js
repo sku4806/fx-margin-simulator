@@ -8,6 +8,7 @@ let appliedFxRate = 1380.0;
 let activeTab = 'sales';
 let editingItemId = null;
 let targetSplitId = null;
+let manualRawText = "";
 
 function safeAddListener(id, event, handler) {
   const el = document.getElementById(id);
@@ -34,6 +35,7 @@ export async function bootstrap() {
   bindTabSwitch();
   bindInputs();
   bindModals();
+  initManualViewer();
 
   currentSession = await getCurrentSession();
   updateAuthUI();
@@ -124,7 +126,6 @@ function bindInputs() {
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
 
-  // SPA 체크박스 토글
   const spaCheck = document.getElementById('checkIsSpa');
   const spaDebitWrapper = document.getElementById('spaDebitWrapper');
   spaCheck?.addEventListener('change', () => {
@@ -136,7 +137,6 @@ function bindInputs() {
     runEngine();
   });
 
-  // 환차손익 실시간 피드백
   safeAddListener('inputSettledFx', 'input', updateFxVarianceFeedback);
 
   bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
@@ -278,7 +278,6 @@ function bindModals() {
     };
   }
 
-  // 출하 분할 실행 및 잔여 Dead Stock 소유권 처리
   const splitShipmentForm = document.getElementById('splitShipmentForm');
   if (splitShipmentForm) {
     splitShipmentForm.onsubmit = async (e) => {
@@ -443,7 +442,6 @@ function loadFormFromItem(id) {
   setVal('inputShipFx', item.shipFx);
   setVal('inputStock', item.stock);
 
-  // SPA 값 세팅
   const spaCheck = document.getElementById('checkIsSpa');
   const spaDebitWrapper = document.getElementById('spaDebitWrapper');
   if (spaCheck) {
@@ -638,14 +636,10 @@ window.openChangePasswordModal = () => {
   document.getElementById('changePasswordModal')?.classList.remove('hidden');
 };
 
-bootstrap();
-
 // ==========================================
-// 📖 시스템 매뉴얼 팝업 및 검색 핸들러
+// 📖 시스템 매뉴얼 팝업 및 검색 핸들러 (별표 완전 제거 정규식 적용)
 // ==========================================
-let manualRawText = "";
-
-async function initManualViewer() {
+function initManualViewer() {
   const openBtn = document.getElementById('openManualBtn');
   const manualModal = document.getElementById('manualModal');
   const contentEl = document.getElementById('manualContent');
@@ -684,17 +678,42 @@ async function initManualViewer() {
 function renderManualContent(text) {
   const contentEl = document.getElementById('manualContent');
   if (!contentEl) return;
-  // 기본적인 마크다운 줄바꿈 및 헤더 강조 변환
-  const html = text
-    .split('\n')
-    .map(line => {
-      if (line.startsWith('# ')) return `<h1 class="text-base font-black text-indigo-950 mt-4 mb-2 pb-1 border-b">${escapeHtml(line.slice(2))}</h1>`;
-      if (line.startsWith('## ')) return `<h2 class="text-sm font-bold text-indigo-900 mt-4 mb-1">${escapeHtml(line.slice(3))}</h2>`;
-      if (line.startsWith('### ')) return `<h3 class="text-xs font-bold text-slate-800 mt-3 mb-1 text-indigo-700">${escapeHtml(line.slice(4))}</h3>`;
-      if (line.startsWith('- ')) return `<div class="ml-3 my-0.5">• ${escapeHtml(line.slice(2))}</div>`;
-      return line.trim() ? `<div>${escapeHtml(line)}</div>` : `<div class="h-2"></div>`;
-    })
-    .join('');
+
+  const lines = text.split('\n');
+  const html = lines.map(line => {
+    let l = escapeHtml(line);
+
+    // 잔여 별표 기호 완전 제거 및 볼드 변환
+    l = l.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
+    l = l.replace(/\*\*/g, ''); // 짝이 맞지 않는 잔여 별표도 완전 삭제
+    
+    // 백틱 코드 변환
+    l = l.replace(/\`(.*?)\`/g, '<code class="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-[11px] font-mono border border-indigo-100">$1</code>');
+
+    // 마크다운 링크 변환
+    l = l.replace(/\[(.*?)\]\((.*?)\)/g, '<span class="text-indigo-600 font-semibold">$1</span>');
+
+    if (line.startsWith('# ')) {
+      return `<h1 class="text-base font-black text-indigo-950 mt-4 mb-2 pb-1 border-b border-slate-200">${l.replace(/^#\s*/, '')}</h1>`;
+    }
+    if (line.startsWith('## ')) {
+      return `<h2 class="text-sm font-bold text-indigo-900 mt-4 mb-1.5 flex items-center gap-1.5 bg-slate-100/70 p-1.5 rounded-lg">${l.replace(/^##\s*/, '')}</h2>`;
+    }
+    if (line.startsWith('### ')) {
+      return `<h3 class="text-xs font-bold text-indigo-700 mt-3 mb-1 pl-1 border-l-2 border-indigo-500">${l.replace(/^###\s*/, '')}</h3>`;
+    }
+    if (line.trim().startsWith('- ')) {
+      return `<div class="ml-3 my-1 flex items-start gap-1.5"><span class="text-indigo-500 font-bold">•</span><div>${l.replace(/^\s*-\s*/, '')}</div></div>`;
+    }
+    if (line.trim().match(/^\d+\.\s/)) {
+      return `<div class="ml-3 my-1 flex items-start gap-1.5 font-medium"><span class="text-slate-400 font-bold">•</span><div>${l}</div></div>`;
+    }
+    if (line.trim() === '---') {
+      return '<hr class="my-3 border-slate-200">';
+    }
+    return line.trim() ? `<div class="leading-relaxed pl-1">${l}</div>` : '<div class="h-1.5"></div>';
+  }).join('');
+
   contentEl.innerHTML = html;
 }
 
@@ -702,4 +721,4 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-initManualViewer();
+bootstrap();
