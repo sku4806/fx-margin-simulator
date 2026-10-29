@@ -639,3 +639,67 @@ window.openChangePasswordModal = () => {
 };
 
 bootstrap();
+
+// ==========================================
+// 📖 시스템 매뉴얼 팝업 및 검색 핸들러
+// ==========================================
+let manualRawText = "";
+
+async function initManualViewer() {
+  const openBtn = document.getElementById('openManualBtn');
+  const manualModal = document.getElementById('manualModal');
+  const contentEl = document.getElementById('manualContent');
+  const searchInput = document.getElementById('manualSearchInput');
+
+  openBtn?.addEventListener('click', async () => {
+    manualModal?.classList.remove('hidden');
+    if (!manualRawText) {
+      try {
+        const res = await fetch('/BSK_ERP_User_Manual.md');
+        manualRawText = await res.text();
+        renderManualContent(manualRawText);
+      } catch (err) {
+        if (contentEl) contentEl.innerText = "매뉴얼을 불러오는 중 오류가 발생했습니다: " + err.message;
+      }
+    }
+  });
+
+  searchInput?.addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) {
+      renderManualContent(manualRawText);
+      return;
+    }
+    const lines = manualRawText.split('\n');
+    const matched = lines.map(line => {
+      if (line.toLowerCase().includes(q)) {
+        return `<mark class="bg-amber-200 px-1 rounded">${escapeHtml(line)}</mark>`;
+      }
+      return escapeHtml(line);
+    }).join('<br>');
+    if (contentEl) contentEl.innerHTML = `<div class="whitespace-pre-line leading-relaxed font-mono">${matched}</div>`;
+  });
+}
+
+function renderManualContent(text) {
+  const contentEl = document.getElementById('manualContent');
+  if (!contentEl) return;
+  // 기본적인 마크다운 줄바꿈 및 헤더 강조 변환
+  const html = text
+    .split('\n')
+    .map(line => {
+      if (line.startsWith('# ')) return `<h1 class="text-base font-black text-indigo-950 mt-4 mb-2 pb-1 border-b">${escapeHtml(line.slice(2))}</h1>`;
+      if (line.startsWith('## ')) return `<h2 class="text-sm font-bold text-indigo-900 mt-4 mb-1">${escapeHtml(line.slice(3))}</h2>`;
+      if (line.startsWith('### ')) return `<h3 class="text-xs font-bold text-slate-800 mt-3 mb-1 text-indigo-700">${escapeHtml(line.slice(4))}</h3>`;
+      if (line.startsWith('- ')) return `<div class="ml-3 my-0.5">• ${escapeHtml(line.slice(2))}</div>`;
+      return line.trim() ? `<div>${escapeHtml(line)}</div>` : `<div class="h-2"></div>`;
+    })
+    .join('');
+  contentEl.innerHTML = html;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+initManualViewer();
