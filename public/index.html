@@ -59,7 +59,7 @@
       <span id="csHeaderDesc" class="text-xs text-slate-400 font-medium hidden md:block px-2">영업 협의 수주 현황 및 실판매 마진율을 관리합니다.</span>
     </div>
 
-    <!-- 3. 견적 시뮬레이터 (영업 견적 모드에서만 활성화) -->
+    <!-- 3. 환율 마진 시뮬레이터 (영업 견적 모드 전용) -->
     <div id="salesQuotationPanel" class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
       <div class="border-b pb-2 flex justify-between items-center">
         <div>
@@ -136,24 +136,31 @@
       </div>
     </div>
 
-    <!-- 4. 통합 등록 및 수정 폼 (공통 아코디언/폼) -->
-    <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+    <!-- 4. 전문화 분리형 입력 폼팩터 (선택된 탭에 따라 필드가 자동 전환) -->
+    <div id="formSection" class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
       <div class="border-b pb-2 flex justify-between items-center">
         <div>
-          <h2 class="font-bold text-sm sm:text-base text-slate-900">데이터 입력 및 트랜잭션 관리</h2>
-          <p class="text-[11px] text-slate-400">영업 수주 정보와 출하/채권 데이터를 일원화하여 관리합니다.</p>
+          <h2 id="formTitle" class="font-bold text-sm sm:text-base text-slate-900">수주 및 재고 배정 등록 (Sales Order Entry)</h2>
+          <p id="formSubtitle" class="text-[11px] text-slate-400">고객사 수주 물량, 협의 단가 및 마진 방어선을 설정합니다.</p>
         </div>
         <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg transition-transform shadow-sm">
-          클라우드 영구 저장
+          수주/배정 저장
         </button>
       </div>
 
-      <!-- 폼 그리드 (영업 + 출하/채권 영역 정돈) -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 text-xs font-medium">
-        <!-- 1) 기본 정보 -->
+      <!-- 선택된 항목 수정 안내 배너 -->
+      <div id="editingBanner" class="hidden p-2.5 bg-indigo-50 border border-indigo-200 rounded-xl flex justify-between items-center text-xs">
+        <span id="editingBannerText" class="font-bold text-indigo-900"></span>
+        <button onclick="document.getElementById('editingBanner').classList.add('hidden')" class="text-indigo-600 hover:text-indigo-800 font-bold text-[11px]">✕ 신규 등록으로 리셋</button>
+      </div>
+
+      <!-- 폼 그리드 -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-medium">
+        
+        <!-- [공통 필드 1] 제조사 라인 -->
         <div>
           <label class="text-slate-600 block mb-1">제조사 라인 (Maker)</label>
-          <select id="selectMaker" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+          <select id="selectMaker" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
             <option value="GigaDevice">GigaDevice</option>
             <option value="ISSI">ISSI</option>
             <option value="Lumissil">Lumissil</option>
@@ -176,14 +183,16 @@
           <input type="text" id="inputCustomMaker" placeholder="제조사 직접 입력..." class="hidden w-full mt-1.5 p-2 border rounded-lg bg-amber-50/50 text-xs font-semibold outline-none">
         </div>
 
+        <!-- [공통 필드 2] Part Number -->
         <div>
           <label class="text-slate-600 block mb-1">제품명 (Part Number)</label>
-          <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+          <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
         </div>
 
+        <!-- [공통 필드 3] 담당 Sales -->
         <div>
           <label class="text-slate-600 block mb-1">담당 Sales</label>
-          <select id="selectOwner" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+          <select id="selectOwner" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
             <option value="본사 일반재고">본사 일반재고</option>
             <option value="Dustin">Dustin</option>
             <option value="Steve">Steve</option>
@@ -198,36 +207,41 @@
           <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1.5 p-2 border rounded-lg bg-amber-50/50 text-xs font-semibold outline-none">
         </div>
 
+        <!-- [공통 필드 4] 수주 고객사 -->
         <div>
           <label class="text-slate-600 block mb-1">수주 고객사 (Account)</label>
-          <input type="text" id="inputCustomer" placeholder="예: LG전자, 도원텍" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+          <input type="text" id="inputCustomer" placeholder="예: LG전자, 도원텍" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
         </div>
 
-        <!-- 2) 가격 및 원가 정보 -->
-        <div>
+        <!-- ============================================== -->
+        <!-- 💼 [영업 모드 전용 필드들 (Sales-Only)] -->
+        <!-- ============================================== -->
+        <div class="sales-only-field">
           <label class="text-slate-600 block mb-1">개당 선적 매입가 ($/EA)</label>
-          <input type="number" id="inputUsd" value="2.50" step="0.001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+          <input type="number" id="inputUsd" value="2.50" step="0.001" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <div>
+        <div class="sales-only-field">
           <label class="text-slate-600 block mb-1">협의 실판매단가 ($/EA)</label>
-          <input type="number" id="inputSoldPrice" placeholder="실납품 계약단가" step="0.001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+          <input type="number" id="inputSoldPrice" placeholder="실제 납품 합의단가" step="0.001" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-bold text-indigo-700 outline-none">
         </div>
 
-        <div>
+        <div class="sales-only-field">
           <label class="text-slate-600 block mb-1">선적 환율 (기준 KRW)</label>
-          <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+          <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <div>
-          <label class="text-slate-600 block mb-1">수량 (견적/배정 수량)</label>
-          <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        <div class="sales-only-field">
+          <label class="text-slate-600 block mb-1">수주/배정 수량 (EA)</label>
+          <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <!-- 3) 출하 및 채권 관리 항목 (Fulfillment Fields) -->
-        <div>
-          <label class="text-slate-600 block mb-1">진행 상태 (Status)</label>
-          <select id="selectOrderStatus" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+        <!-- ============================================== -->
+        <!-- 📋 [출하 및 채권 모드 전용 필드들 (Fulfillment-Only)] -->
+        <!-- ============================================== -->
+        <div class="fulfillment-only-field hidden">
+          <label class="text-slate-600 block mb-1 font-bold text-indigo-900">진행 상태 (Order Status)</label>
+          <select id="selectOrderStatus" class="w-full p-2.5 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
             <option value="배정요청">배정요청 (Order Placed)</option>
             <option value="출하준비">출하준비 (Preparing)</option>
             <option value="출하완료">출하완료 (Shipped)</option>
@@ -235,9 +249,9 @@
           </select>
         </div>
 
-        <div>
-          <label class="text-slate-600 block mb-1">결제 조건 (Terms)</label>
-          <select id="selectPaymentTerms" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+        <div class="fulfillment-only-field hidden">
+          <label class="text-slate-600 block mb-1">결제 조건 (Payment Terms)</label>
+          <select id="selectPaymentTerms" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
             <option value="Net 30">Net 30 (납품 후 30일)</option>
             <option value="Net 60">Net 60 (납품 후 60일)</option>
             <option value="익월말현금">익월 말 현금 결제</option>
@@ -245,41 +259,48 @@
           </select>
         </div>
 
-        <div>
+        <div class="fulfillment-only-field hidden">
           <label class="text-slate-600 block mb-1">인보이스 / 계산서 번호</label>
-          <input type="text" id="inputInvoiceNo" placeholder="예: INV-2026-001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+          <input type="text" id="inputInvoiceNo" placeholder="예: INV-2026-001" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <div>
+        <div class="fulfillment-only-field hidden">
           <label class="text-slate-600 block mb-1">운송장 / B/L 번호</label>
-          <input type="text" id="inputTrackingNo" placeholder="예: CJ 6548-XXXX" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+          <input type="text" id="inputTrackingNo" placeholder="예: CJ 6548-XXXX" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <div>
+        <div class="fulfillment-only-field hidden">
           <label class="text-slate-600 block mb-1">수금 상태</label>
-          <select id="selectPaymentStatus" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+          <select id="selectPaymentStatus" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
             <option value="미수">미수 (Unpaid)</option>
             <option value="완료">수금완료 (Paid)</option>
           </select>
         </div>
 
-        <div>
-          <label class="text-slate-600 block mb-1">수금 만기일 (Due Date)</label>
-          <input type="date" id="inputDueDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        <div class="fulfillment-only-field hidden">
+          <label class="text-slate-600 block mb-1">결제 만기일 (Due Date)</label>
+          <input type="date" id="inputDueDate" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <div>
+        <div class="fulfillment-only-field hidden">
           <label class="text-slate-600 block mb-1">실물 출고일 (Shipped Date)</label>
-          <input type="date" id="inputShippedDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+          <input type="date" id="inputShippedDate" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <div>
-          <label class="text-slate-600 block mb-1">비고 및 창고 랙 번호</label>
-          <input type="text" id="inputMemo" placeholder="예: A랙 2열 / Reel 포장" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
+        <div class="fulfillment-only-field hidden">
+          <label class="text-slate-600 block mb-1">실입금 완료일 (Settled Date)</label>
+          <input type="date" id="inputSettledDate" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
+
+        <!-- [공통 필드 5] 비고 -->
+        <div class="sm:col-span-2 lg:col-span-4">
+          <label class="text-slate-600 block mb-1">업무 비고 (창고 위치, 포장 단위, 결제 특이사항)</label>
+          <input type="text" id="inputMemo" placeholder="예: 본사 A랙 3열 보관 / Reel 2500EA 단위 포장 / 담당자 구두 협의 완료" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs font-medium outline-none">
+        </div>
+
       </div>
 
-      <!-- 숨겨진 계산기 파라미터 보존 -->
+      <!-- 내부 계산식 연동용 숨김 필드 -->
       <input type="hidden" id="inputQty" value="1000">
       <input type="hidden" id="inputOverhead" value="3.0">
       <input type="hidden" id="inputTargetMargin" value="20">
@@ -290,7 +311,7 @@
       <div id="replaceCostTotal" class="hidden"></div>
     </div>
 
-    <!-- 5. 엔터프라이즈 데이터 그리드 (Sales vs CS 듀얼 렌더링) -->
+    <!-- 5. 엔터프라이즈 데이터 그리드 -->
     <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
         <div>

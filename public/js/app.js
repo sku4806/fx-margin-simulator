@@ -6,6 +6,7 @@ let currentSession = null;
 let rawFxRate = 1380.0;
 let appliedFxRate = 1380.0;
 let activeTab = 'sales'; // 'sales' | 'fulfillment'
+let editingItemId = null;
 
 export async function bootstrap() {
   document.getElementById('inputEntryDate').value = new Date().toISOString().slice(0, 10);
@@ -39,6 +40,7 @@ export async function bootstrap() {
     }
   });
 
+  updateFormVisibility();
   runEngine();
 }
 
@@ -54,6 +56,7 @@ function bindTabSwitch() {
     tabFulfillment.className = "px-4 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors";
     salesPanel.classList.remove('hidden');
     csHeaderDesc.innerText = "영업 협의 수주 현황 및 실판매 마진율을 관리합니다.";
+    updateFormVisibility();
     applyFilters();
   });
 
@@ -61,10 +64,34 @@ function bindTabSwitch() {
     activeTab = 'fulfillment';
     tabFulfillment.className = "px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm transition-colors";
     tabSales.className = "px-4 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors";
-    salesPanel.classList.add('hidden'); // 출하/채권 모드에서는 견적 계산기 접기
+    salesPanel.classList.add('hidden');
     csHeaderDesc.innerText = "출하 스케줄, 운송장/인보이스 번호 및 미수금 만기 일정을 관리합니다.";
+    updateFormVisibility();
     applyFilters();
   });
+}
+
+// 탭 모드에 따른 입력 폼 필드 가시성 및 라벨 최적화
+function updateFormVisibility() {
+  const formTitle = document.getElementById('formTitle');
+  const formSubtitle = document.getElementById('formSubtitle');
+  const salesFields = document.querySelectorAll('.sales-only-field');
+  const fulfillmentFields = document.querySelectorAll('.fulfillment-only-field');
+  const saveBtn = document.getElementById('saveItemBtn');
+
+  if (activeTab === 'sales') {
+    formTitle.innerText = "수주 및 재고 배정 등록 (Sales Order Entry)";
+    formSubtitle.innerText = "고객사 수주 물량, 협의 단가 및 마진 방어선을 설정합니다.";
+    saveBtn.innerText = "수주/배정 저장";
+    salesFields.forEach(el => el.classList.remove('hidden'));
+    fulfillmentFields.forEach(el => el.classList.add('hidden'));
+  } else {
+    formTitle.innerText = "출하 처리 및 세금계산서/정산 등록 (Fulfillment & Billing)";
+    formSubtitle.innerText = "실물 출고(송장), 세금계산서(인보이스) 발행 및 채권 결제 만기를 관리합니다.";
+    saveBtn.innerText = "출하/정산 업데이트";
+    salesFields.forEach(el => el.classList.add('hidden'));
+    fulfillmentFields.forEach(el => el.classList.remove('hidden'));
+  }
 }
 
 function updateFxDisplay() {
@@ -249,6 +276,8 @@ function loadFormFromItem(id) {
   const item = getCachedItem(id);
   if (!item) return;
 
+  editingItemId = item.id;
+
   setSelectValue('selectMaker', 'inputCustomMaker', item.maker, '__CUSTOM_MAKER__');
   setSelectValue('selectOwner', 'inputCustomOwner', item.owner, '__CUSTOM_OWNER__');
   document.getElementById('inputPartName').value = item.partName;
@@ -261,6 +290,7 @@ function loadFormFromItem(id) {
   document.getElementById('inputTrackingNo').value = item.trackingNo || '';
   document.getElementById('inputDueDate').value = item.dueDate || '';
   document.getElementById('inputShippedDate').value = item.shippedDate || '';
+  document.getElementById('inputSettledDate').value = item.settledDate || '';
   document.getElementById('inputEntryDate').value = item.entryDate;
   document.getElementById('inputMemo').value = item.memo;
   document.getElementById('inputUsd').value = item.unitUsd;
@@ -268,8 +298,18 @@ function loadFormFromItem(id) {
   document.getElementById('inputStock').value = item.stock;
   document.getElementById('inputTargetMargin').value = item.margin;
 
+  // 선택된 항목 표시 배너 활성화
+  const editingBanner = document.getElementById('editingBanner');
+  editingBanner.classList.remove('hidden');
+  document.getElementById('editingBannerText').innerText = `선택된 항목: [${item.maker}] ${item.partName} (${item.customer})`;
+
   runEngine();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.getElementById('formSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+function clearFormSelection() {
+  editingItemId = null;
+  document.getElementById('editingBanner').classList.add('hidden');
 }
 
 function setSelectValue(selectId, inputId, val, customKey) {
@@ -318,6 +358,7 @@ async function saveCurrentForm() {
     tracking_no: document.getElementById('inputTrackingNo').value.trim(),
     due_date: document.getElementById('inputDueDate').value || null,
     shipped_date: document.getElementById('inputShippedDate').value || null,
+    settled_date: document.getElementById('inputSettledDate').value || null,
     entry_date: document.getElementById('inputEntryDate').value || new Date().toISOString().slice(0, 10),
     memo: document.getElementById('inputMemo').value.trim(),
     unit_usd: parseFloat(document.getElementById('inputUsd').value) || 0,
@@ -329,6 +370,7 @@ async function saveCurrentForm() {
   try {
     await upsertInventoryItem(payload);
     alert(`[${payload.part_name}] 데이터가 안전하게 저장되었습니다.`);
+    clearFormSelection();
     await refreshInventory();
   } catch (err) {
     alert("저장 실패: " + err.message);
@@ -336,9 +378,10 @@ async function saveCurrentForm() {
 }
 
 async function handleDeleteItem(id) {
-  if (!confirm("해당 건을 삭제하시겠습니까?")) return;
+  if (!confirm("해당 건을 영구 삭제하시겠습니까?")) return;
   try {
     await deleteInventoryItem(id);
+    clearFormSelection();
     await refreshInventory();
   } catch (err) {
     alert("삭제 실패: " + err.message);
