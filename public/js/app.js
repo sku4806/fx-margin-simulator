@@ -10,6 +10,19 @@ let editingItemId = null;
 let targetSplitId = null;
 let manualRawText = "";
 
+// 💡 CS 및 관리자 권한 여부 확인 (이메일 기준 검증)
+function isCsOrAdminUser() {
+  if (!currentSession || !currentSession.user || !currentSession.user.email) return false;
+  const email = currentSession.user.email.toLowerCase();
+  // 관리자, CS, 경영관리 계정 허용 키워드
+  return email.includes('admin') || 
+         email.includes('cs') || 
+         email.includes('oper') || 
+         email.includes('mgmt') || 
+         email.includes('nathan') || 
+         email.includes('manager');
+}
+
 function safeAddListener(id, event, handler) {
   const el = document.getElementById(id);
   if (el) {
@@ -68,7 +81,7 @@ function bindTabSwitch() {
     tabSales.className = "px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm transition-colors";
     if (tabFulfillment) tabFulfillment.className = "px-4 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors";
     salesPanel?.classList.remove('hidden');
-    if (csHeaderDesc) csHeaderDesc.innerText = "영업 협의 수주 현황 및 실판매 마진율을 관리합니다.";
+    if (csHeaderDesc) csHeaderDesc.innerText = "영업 협의 수주 현황 및 실판매가를 확인합니다.";
     updateFormVisibility();
     applyFilters();
   });
@@ -90,10 +103,13 @@ function updateFormVisibility() {
   const salesFields = document.querySelectorAll('.sales-only-field');
   const fulfillmentFields = document.querySelectorAll('.fulfillment-only-field');
   const saveBtn = document.getElementById('saveItemBtn');
+  const permissionNotice = document.getElementById('salesPermissionNotice');
+
+  const canEdit = isCsOrAdminUser();
 
   if (activeTab === 'sales') {
     if (formTitle) formTitle.innerText = "수주 및 재고 배정 등록 (Sales Order Entry)";
-    if (formSubtitle) formSubtitle.innerText = "고객사 수주 물량, 협의 단가 및 마진 방어선을 설정합니다.";
+    if (formSubtitle) formSubtitle.innerText = "공식 배정 물량, 협의 단가 및 Date Code를 설정합니다.";
     if (saveBtn) saveBtn.innerText = "수주/배정 저장";
     salesFields.forEach(el => el.classList.remove('hidden'));
     fulfillmentFields.forEach(el => el.classList.add('hidden'));
@@ -103,6 +119,31 @@ function updateFormVisibility() {
     if (saveBtn) saveBtn.innerText = "출하/정산 업데이트";
     salesFields.forEach(el => el.classList.add('hidden'));
     fulfillmentFields.forEach(el => el.classList.remove('hidden'));
+  }
+
+  // 💡 세일즈 임의 수정 차단 로직
+  const formInputs = document.querySelectorAll('#formSection input, #formSection select');
+  if (!canEdit) {
+    formInputs.forEach(inp => {
+      inp.disabled = true;
+      inp.classList.add('bg-slate-100', 'cursor-not-allowed', 'opacity-70');
+    });
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      saveBtn.innerText = "수정 권한 없음 (CS/관리자 전용)";
+    }
+    permissionNotice?.classList.remove('hidden');
+  } else {
+    formInputs.forEach(inp => {
+      inp.disabled = false;
+      inp.classList.remove('bg-slate-100', 'cursor-not-allowed', 'opacity-70');
+    });
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+    permissionNotice?.classList.add('hidden');
   }
 }
 
@@ -282,6 +323,10 @@ function bindModals() {
   if (splitShipmentForm) {
     splitShipmentForm.onsubmit = async (e) => {
       e.preventDefault();
+      if (!isCsOrAdminUser()) {
+        alert("출하 분할은 CS 및 관리자 권한만 실행할 수 있습니다.");
+        return;
+      }
       const qty = parseInt(document.getElementById('splitQtyInput')?.value) || 0;
       const price = parseFloat(document.getElementById('splitPriceInput')?.value) || 0;
       const cust = document.getElementById('splitCustomerInput')?.value.trim();
@@ -327,13 +372,14 @@ function runEngine() {
     if (el) el.innerText = val;
   };
 
-  setText('minSaleUnitActualUsd', `$${result.unitMinPriceActualUsd.toFixed(4)}`);
-  setText('minSaleUnitActualKrw', `(₩${result.unitMinPriceActualKrw.toFixed(1)} / EA)`);
-  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+  // 원화 우선 표기: ₩원화 (뒤에 $달러 표기)
+  setText('minSaleUnitActualKrw', `₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()}`);
+  setText('minSaleUnitActualUsd', `($${result.unitMinPriceActualUsd.toFixed(3)} / @${Math.round(shipFx).toLocaleString()})`);
+  setText('minSaleTotalActual', `₩${Math.round(result.totalActualCostKrw / (1 - 0.2)).toLocaleString()} ($${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})})`);
 
-  setText('minSaleUnitReplaceUsd', `$${result.unitMinPriceReplaceUsd.toFixed(4)}`);
-  setText('minSaleUnitReplaceKrw', `(₩${result.unitMinPriceReplaceKrw.toFixed(1)} / EA)`);
-  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+  setText('minSaleUnitReplaceKrw', `₩${Math.round(result.unitMinPriceReplaceKrw).toLocaleString()}`);
+  setText('minSaleUnitReplaceUsd', `($${result.unitMinPriceReplaceUsd.toFixed(3)} / @${Math.round(appliedFxRate).toLocaleString()})`);
+  setText('minSaleTotalReplace', `₩${Math.round(result.totalReplaceCostKrw / (1 - 0.2)).toLocaleString()} ($${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}`);
 
   const revMarginEl = document.getElementById('reverseMarginReplace');
   const revBadgeEl = document.getElementById('reverseMarginBadge');
@@ -342,7 +388,7 @@ function runEngine() {
     if (revBadgeEl) {
       if (isSpa && approvedDebit > 0) {
         revBadgeEl.className = "text-[11px] font-bold text-cyan-800 bg-cyan-100 border border-cyan-300 px-2 py-0.5 rounded-full inline-block mt-0.5";
-        revBadgeEl.innerText = `🔵 SPA 승인가 적용 (마진: ${result.expectedMargin.toFixed(1)}%)`;
+        revBadgeEl.innerText = `🔵 SPA 승인가 적용`;
       } else if (result.expectedMargin >= 20) {
         revBadgeEl.className = "text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-block mt-0.5";
         revBadgeEl.innerText = "✅ 수주 가능";
@@ -382,9 +428,9 @@ function renderTierTable(unitUsd, unitKrw, currentQty) {
   tbody.innerHTML = tiers.map(t => `
     <tr class="${t.isCurrent ? "bg-indigo-50/70 font-bold text-indigo-900" : ""}">
       <td class="py-1.5 px-1">${t.label}</td>
-      <td class="py-1.5 px-1 text-indigo-600 font-semibold">$${unitUsd.toFixed(4)}</td>
-      <td class="py-1.5 px-1 text-slate-600">₩${unitKrw.toFixed(1)}</td>
-      <td class="py-1.5 px-1 text-slate-800">$${(unitUsd * t.qty).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</td>
+      <td class="py-1.5 px-1 text-indigo-900 font-bold">₩${Math.round(unitKrw).toLocaleString()}</td>
+      <td class="py-1.5 px-1 text-slate-600 font-mono text-[10px]">$${unitUsd.toFixed(3)}</td>
+      <td class="py-1.5 px-1 text-slate-800 font-semibold">₩${Math.round(unitKrw * t.qty).toLocaleString()}</td>
     </tr>
   `).join('');
 }
@@ -424,6 +470,7 @@ function loadFormFromItem(id) {
   };
 
   setVal('inputPartName', item.partName);
+  setVal('inputDateCode', item.dateCode !== '-' ? item.dateCode : '');
   setVal('inputCustomer', item.customer !== '-' ? item.customer : '');
   setVal('inputSoldPrice', item.soldPriceUsd || '');
   setVal('selectOrderStatus', item.orderStatus);
@@ -458,7 +505,7 @@ function loadFormFromItem(id) {
   editingBanner?.classList.remove('hidden');
   const bannerText = document.getElementById('editingBannerText');
   if (bannerText) {
-    bannerText.innerText = `선택된 항목: [${item.maker}] ${item.partName} (${item.customer})`;
+    bannerText.innerText = `선택된 항목: [${item.maker}] ${item.partName} (D/C: ${item.dateCode} / ${item.customer})`;
   }
 
   updateFxVarianceFeedback();
@@ -467,12 +514,16 @@ function loadFormFromItem(id) {
 }
 
 function handleOpenSplitModal(id) {
+  if (!isCsOrAdminUser()) {
+    alert("출하 분할은 CS 및 관리자 권한만 실행할 수 있습니다.");
+    return;
+  }
   const item = getCachedItem(id);
   if (!item) return;
   targetSplitId = item.id;
 
   const titleEl = document.getElementById('splitModalTitle');
-  if (titleEl) titleEl.innerText = `[${item.partName}] 출하 분할`;
+  if (titleEl) titleEl.innerText = `[${item.partName}] 출하 분할 (D/C: ${item.dateCode})`;
   const maxStockEl = document.getElementById('splitMaxStockText');
   if (maxStockEl) maxStockEl.innerText = `현재 보유 재고: ${item.stock.toLocaleString()} EA (소유: ${item.owner})`;
   
@@ -514,6 +565,12 @@ async function saveCurrentForm() {
     return;
   }
 
+  // 💡 세일즈 임의 수정 방어
+  if (!isCsOrAdminUser()) {
+    alert("수주 및 재고 배정은 CS 및 관리자만 등록·수정할 수 있습니다.");
+    return;
+  }
+
   const partName = document.getElementById('inputPartName')?.value.trim();
   if (!partName) {
     alert("제품명을 입력해주세요.");
@@ -531,6 +588,7 @@ async function saveCurrentForm() {
   const payload = {
     maker: maker || "기타",
     part_name: partName,
+    date_code: document.getElementById('inputDateCode')?.value.trim() || "-",
     owner: owner || "본사 일반재고",
     customer: document.getElementById('inputCustomer')?.value.trim() || "-",
     sold_price_usd: parseFloat(document.getElementById('inputSoldPrice')?.value) || 0,
@@ -566,6 +624,10 @@ async function saveCurrentForm() {
 }
 
 async function handleDeleteItem(id) {
+  if (!isCsOrAdminUser()) {
+    alert("데이터 삭제는 CS 및 관리자 권한만 가능합니다.");
+    return;
+  }
   if (!confirm("해당 건을 영구 삭제하시겠습니까?")) return;
   try {
     await deleteInventoryItem(id);
@@ -588,11 +650,15 @@ function updateAuthUI() {
   const sub = document.getElementById('authSubtitle');
 
   if (isAuth) {
+    const isCs = isCsOrAdminUser();
+    const roleText = isCs ? 'CS/관리자' : 'Sales(조회전용)';
+    const roleBadgeClass = isCs ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-200 text-slate-800';
+
     if (badge) {
-      badge.className = "text-[10px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full";
-      badge.innerHTML = "🔓 보안 인증됨";
+      badge.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${roleBadgeClass}`;
+      badge.innerHTML = `🔓 ${roleText}`;
     }
-    if (sub) sub.innerHTML = `접속 계정: <strong class="text-indigo-700">${currentSession.user.email}</strong>`;
+    if (sub) sub.innerHTML = `접속 계정: <strong class="text-indigo-700">${currentSession.user.email}</strong> (${roleText})`;
     if (btn) {
       btn.className = "text-xs bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-3 py-1.5 rounded-lg transition-colors";
       btn.innerHTML = "🚪 로그아웃";
@@ -608,6 +674,8 @@ function updateAuthUI() {
       btn.innerHTML = "🔑 사내 계정 로그인";
     }
   }
+
+  updateFormVisibility();
 }
 
 function handleAuthButton() {
@@ -620,13 +688,14 @@ function handleAuthButton() {
 
 function copyQuotation() {
   const partName = document.getElementById('inputPartName')?.value.trim() || "-";
+  const dateCode = document.getElementById('inputDateCode')?.value.trim() || "-";
   const qty = parseFloat(document.getElementById('inputStock')?.value) || 0;
-  const unitUsd = document.getElementById('minSaleUnitReplaceUsd')?.innerText || "-";
   const unitKrw = document.getElementById('minSaleUnitReplaceKrw')?.innerText || "-";
-  const totalUsd = document.getElementById('minSaleTotalReplace')?.innerText || "-";
+  const unitUsd = document.getElementById('minSaleUnitReplaceUsd')?.innerText || "-";
+  const totalReplace = document.getElementById('minSaleTotalReplace')?.innerText || "-";
   const fxRateText = document.getElementById('liveFx')?.innerText || "-";
 
-  const quote = `[견적 안내] ${partName}\n- 수량: ${qty.toLocaleString()} EA\n- 공급단가: ${unitUsd} / EA ${unitKrw}\n- 총견적액: ${totalUsd}\n* 기준환율: ${fxRateText}`;
+  const quote = `[견적 안내] ${partName} (D/C: ${dateCode})\n- 수량: ${qty.toLocaleString()} EA\n- 공급단가: ${unitKrw} ${unitUsd}\n- 총견적액: ${totalReplace}\n* 기준환율: ${fxRateText}`;
   navigator.clipboard.writeText(quote).then(() => alert("견적서 텍스트가 복사되었습니다!"));
 }
 
@@ -636,9 +705,6 @@ window.openChangePasswordModal = () => {
   document.getElementById('changePasswordModal')?.classList.remove('hidden');
 };
 
-// ==========================================
-// 📖 시스템 매뉴얼 팝업 및 검색 핸들러 (별표 완전 제거 정규식 적용)
-// ==========================================
 function initManualViewer() {
   const openBtn = document.getElementById('openManualBtn');
   const manualModal = document.getElementById('manualModal');
@@ -682,15 +748,9 @@ function renderManualContent(text) {
   const lines = text.split('\n');
   const html = lines.map(line => {
     let l = escapeHtml(line);
-
-    // 잔여 별표 기호 완전 제거 및 볼드 변환
     l = l.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
-    l = l.replace(/\*\*/g, ''); // 짝이 맞지 않는 잔여 별표도 완전 삭제
-    
-    // 백틱 코드 변환
+    l = l.replace(/\*\*/g, '');
     l = l.replace(/\`(.*?)\`/g, '<code class="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-[11px] font-mono border border-indigo-100">$1</code>');
-
-    // 마크다운 링크 변환
     l = l.replace(/\[(.*?)\]\((.*?)\)/g, '<span class="text-indigo-600 font-semibold">$1</span>');
 
     if (line.startsWith('# ')) {
