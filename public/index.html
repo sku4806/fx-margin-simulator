@@ -88,7 +88,6 @@
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
-        <!-- 달러 우선 카드 1 -->
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
           <div class="flex justify-between items-center">
             <span class="text-[11px] font-bold text-slate-500">① 재고 소진용 최저선</span>
@@ -104,7 +103,6 @@
           </div>
         </div>
 
-        <!-- 달러 우선 카드 2 -->
         <div class="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-1">
           <div class="flex justify-between items-center">
             <span class="text-[11px] font-bold text-indigo-800">② 라인 재발주 권장선</span>
@@ -153,14 +151,14 @@
       </div>
     </div>
 
-    <!-- 4. 전문화 입력 폼 (모바일 2열, PC 4열 정렬) -->
-    <div id="formSection" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
-      <div class="border-b pb-2 flex justify-between items-center">
+    <!-- 4. 💡 [핵심 개선] 관련성 기반 그룹화 입력 폼팩터 -->
+    <div id="formSection" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+      <div class="border-b pb-2.5 flex justify-between items-center">
         <div>
           <h2 id="formTitle" class="font-bold text-xs sm:text-base text-slate-900">수주 및 재고 배정 등록 (Sales Order Entry)</h2>
           <p id="formSubtitle" class="text-[10px] sm:text-[11px] text-slate-400">공식 배정 물량, 협의 단가 및 Date Code를 설정합니다.</p>
         </div>
-        <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg shadow-sm">
+        <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-sm">
           저장
         </button>
       </div>
@@ -170,184 +168,226 @@
         <button onclick="document.getElementById('editingBanner').classList.add('hidden')" class="text-indigo-600 hover:text-indigo-800 font-bold text-[10px]">✕ 리셋</button>
       </div>
 
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
-        <div>
-          <label class="text-slate-600 block mb-0.5 text-[11px]">제조사 (Maker)</label>
-          <select id="selectMaker" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-            <option value="GigaDevice">GigaDevice</option>
-            <option value="ISSI">ISSI</option>
-            <option value="Lumissil">Lumissil</option>
-            <option value="XMOS">XMOS</option>
-            <option value="Silicon Motion">Silicon Motion</option>
-            <option value="ESMT">ESMT</option>
-            <option value="Innodisk">Innodisk</option>
-            <option value="SSSTC">SSSTC (Kioxia Group)</option>
-            <option value="Giantec">Giantec</option>
-            <option value="WIZnet">WIZnet</option>
-            <option value="Intelligent Memory">Intelligent Memory (I'M)</option>
-            <option value="Chiplus">Chiplus</option>
-            <option value="Bel Fuse">Bel Fuse</option>
-            <option value="Link-PP">Link-PP</option>
-            <option value="Eta-Semi">Eta-Semi</option>
-            <option value="AMS">AMS</option>
-            <option value="Belling">Belling</option>
-            <option value="__CUSTOM_MAKER__">기타 (직접 입력)</option>
-          </select>
-          <input type="text" id="inputCustomMaker" placeholder="제조사 직접 입력..." class="hidden w-full mt-1 p-1.5 border rounded-lg bg-amber-50/50 text-xs outline-none">
+      <!-- 📦 그룹 1: 기본 부품 및 담당 정보 (공통) -->
+      <div class="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2">
+        <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+          <span>🏷️</span> 부품 및 영업 정보
         </div>
-
-        <div>
-          <label class="text-slate-600 block mb-0.5 text-[11px]">제품명 (Part No)</label>
-          <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-        </div>
-
-        <div>
-          <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">제조주기 (D/C)</label>
-          <input type="text" id="inputDateCode" placeholder="예: 2432+" class="w-full p-2 border rounded-lg bg-indigo-50/30 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none">
-        </div>
-
-        <div>
-          <label class="text-slate-600 block mb-0.5 text-[11px]">담당 Sales</label>
-          <select id="selectOwner" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-            <option value="본사 일반재고">본사 일반재고</option>
-            <option value="Dustin">Dustin</option>
-            <option value="Steve">Steve</option>
-            <option value="Eric">Eric</option>
-            <option value="William">William</option>
-            <option value="Allen">Allen</option>
-            <option value="Kelly">Kelly</option>
-            <option value="Joye">Joye</option>
-            <option value="Paul">Paul</option>
-            <option value="__CUSTOM_OWNER__">기타 (직접 입력)</option>
-          </select>
-          <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1.5 p-2 border rounded-lg bg-amber-50/50 text-xs outline-none">
-        </div>
-
-        <div>
-          <label class="text-slate-600 block mb-0.5 text-[11px]">고객사 (Account)</label>
-          <input type="text" id="inputCustomer" placeholder="예: LG전자" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
-        </div>
-
-        <div class="sales-only-field">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">선적 매입가 ($)</label>
-          <input type="number" id="inputUsd" value="2.50" step="0.001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
-        </div>
-
-        <div class="sales-only-field">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">협의 판매가 ($)</label>
-          <input type="number" id="inputSoldPrice" placeholder="실납품단가" step="0.001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-bold text-indigo-700 outline-none">
-        </div>
-
-        <div class="sales-only-field">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">수량 (EA)</label>
-          <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
-        </div>
-
-        <div class="sales-only-field">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">선적 환율 (₩)</label>
-          <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
-        </div>
-
-        <div class="sales-only-field">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">
-            부대비용 (%)
-            <span id="overheadDisplay" class="text-[9px] text-indigo-600 font-bold ml-0.5"></span>
-          </label>
-          <input type="number" id="inputOverhead" value="3.0" step="0.1" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
-        </div>
-
-        <!-- 💡 수정된 부분: PC(lg)에서는 1칸만 차지하도록 lg:col-span-1 적용 -->
-        <div class="sales-only-field col-span-2 lg:col-span-1">
-          <div class="flex items-center justify-between mb-0.5">
-            <label class="text-slate-600 text-[11px]">특가 승인 (SPA)</label>
-            <label class="inline-flex items-center gap-1 cursor-pointer">
-              <input type="checkbox" id="checkIsSpa" class="rounded border-slate-300 text-indigo-600">
-              <span class="text-[10px] text-cyan-700 font-bold">SPA 적용</span>
-            </label>
-          </div>
-          <div id="spaDebitWrapper" class="hidden">
-            <input type="number" id="inputApprovedDebit" placeholder="승인 실매입가 ($)" step="0.001" class="w-full p-2 border rounded-lg bg-cyan-50/50 text-xs font-bold text-cyan-900 border-cyan-300 outline-none">
-          </div>
-        </div>
-
-        <div>
-          <label class="text-slate-600 block mb-0.5 text-[11px]">선적일</label>
-          <input type="date" id="inputEntryDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
-        </div>
-
-        <!-- 📋 출하/채권 모드 필드 -->
-        <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">상태 (Status)</label>
-          <select id="selectOrderStatus" class="w-full p-2 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-            <option value="배정요청">배정요청</option>
-            <option value="출하준비">출하준비</option>
-            <option value="출하완료">출하완료</option>
-            <option value="정산마감">정산마감</option>
-            <option value="출하보류">⚠️ 출하보류</option>
-            <option value="무상지원">🎁 샘플지원</option>
-            <option value="반품검토">🔄 반품검토</option>
-          </select>
-        </div>
-
-        <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">결제 조건</label>
-          <div class="grid grid-cols-2 gap-1">
-            <select id="selectCurrency" class="p-2 border rounded-lg bg-slate-50 text-[11px] font-bold text-slate-800 outline-none">
-              <option value="USD">USD</option>
-              <option value="KRW">KRW</option>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
+          <div>
+            <label class="text-slate-600 block mb-0.5 text-[11px]">제조사 (Maker)</label>
+            <select id="selectMaker" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <option value="GigaDevice">GigaDevice</option>
+              <option value="ISSI">ISSI</option>
+              <option value="Lumissil">Lumissil</option>
+              <option value="XMOS">XMOS</option>
+              <option value="Silicon Motion">Silicon Motion</option>
+              <option value="ESMT">ESMT</option>
+              <option value="Innodisk">Innodisk</option>
+              <option value="SSSTC">SSSTC (Kioxia Group)</option>
+              <option value="Giantec">Giantec</option>
+              <option value="WIZnet">WIZnet</option>
+              <option value="Intelligent Memory">Intelligent Memory (I'M)</option>
+              <option value="Chiplus">Chiplus</option>
+              <option value="Bel Fuse">Bel Fuse</option>
+              <option value="Link-PP">Link-PP</option>
+              <option value="Eta-Semi">Eta-Semi</option>
+              <option value="AMS">AMS</option>
+              <option value="Belling">Belling</option>
+              <option value="__CUSTOM_MAKER__">기타 (직접 입력)</option>
             </select>
-            <select id="selectPaymentTerms" class="p-2 border rounded-lg bg-slate-50 text-[11px] font-semibold outline-none">
-              <option value="Net 30">Net 30</option>
-              <option value="Net 60">Net 60</option>
-              <option value="익월말현금">익월말</option>
-              <option value="선입금/현금">선입금</option>
+            <input type="text" id="inputCustomMaker" placeholder="제조사 직접 입력..." class="hidden w-full mt-1 p-1.5 border rounded-lg bg-amber-50/50 text-xs outline-none">
+          </div>
+
+          <div>
+            <label class="text-slate-600 block mb-0.5 text-[11px]">제품명 (Part No)</label>
+            <input type="text" id="inputPartName" value="GD32F303CGT6" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+
+          <div>
+            <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">제조주기 (D/C)</label>
+            <input type="text" id="inputDateCode" placeholder="예: 2432+" class="w-full p-2 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+
+          <div>
+            <label class="text-slate-600 block mb-0.5 text-[11px]">담당 Sales</label>
+            <select id="selectOwner" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <option value="본사 일반재고">본사 일반재고</option>
+              <option value="Dustin">Dustin</option>
+              <option value="Steve">Steve</option>
+              <option value="Eric">Eric</option>
+              <option value="William">William</option>
+              <option value="Allen">Allen</option>
+              <option value="Kelly">Kelly</option>
+              <option value="Joye">Joye</option>
+              <option value="Paul">Paul</option>
+              <option value="__CUSTOM_OWNER__">기타 (직접 입력)</option>
             </select>
+            <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1 p-1.5 border rounded-lg bg-amber-50/50 text-xs outline-none">
+          </div>
+        </div>
+      </div>
+
+      <!-- 💼 그룹 2-A: [영업 수주 모드] 거래처 및 단가/환율/마진 정보 -->
+      <div class="sales-only-field space-y-3">
+        <!-- 거래처 & 수량 -->
+        <div class="bg-indigo-50/30 p-3 rounded-xl border border-indigo-100/80 space-y-2">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+            <span>🤝</span> 수주 거래처 및 수량
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 text-xs font-medium">
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">고객사 (Account)</label>
+              <input type="text" id="inputCustomer" placeholder="예: LG전자, 도원텍" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">수주/보유 수량 (EA)</label>
+              <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
+            </div>
+            <div class="col-span-2 lg:col-span-1">
+              <label class="text-slate-600 block mb-0.5 text-[11px]">선적일 (Shipping Date)</label>
+              <input type="date" id="inputEntryDate" class="w-full p-2 border rounded-lg bg-white text-xs outline-none">
+            </div>
           </div>
         </div>
 
-        <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">인보이스 번호</label>
-          <input type="text" id="inputInvoiceNo" placeholder="INV-2026-001" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
+        <!-- 단가 및 원가/환율 -->
+        <div class="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+            <span>💰</span> 매입/판매 단가 및 환율
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">선적 매입단가 ($/EA)</label>
+              <input type="number" id="inputUsd" value="2.50" step="0.001" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">협의 실판매단가 ($/EA)</label>
+              <input type="number" id="inputSoldPrice" placeholder="실납품단가" step="0.001" class="w-full p-2 border rounded-lg bg-white text-xs font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">선적 환율 (기준 KRW)</label>
+              <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">
+                부대비용/관세 (%)
+                <span id="overheadDisplay" class="text-[9px] text-indigo-600 font-bold ml-0.5"></span>
+              </label>
+              <input type="number" id="inputOverhead" value="3.0" step="0.1" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
+            </div>
+
+            <!-- SPA 특가 승인 -->
+            <div class="col-span-2 lg:col-span-2 bg-cyan-50/50 p-2 rounded-lg border border-cyan-200/70">
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-cyan-900 font-bold text-[11px]">본사 특가 승인 (SPA / Debit)</label>
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input type="checkbox" id="checkIsSpa" class="rounded border-slate-300 text-indigo-600">
+                  <span class="text-[10px] text-cyan-800 font-bold">SPA 적용</span>
+                </label>
+              </div>
+              <div id="spaDebitWrapper" class="hidden">
+                <input type="number" id="inputApprovedDebit" placeholder="본사 승인 실매입가 ($ 입력)" step="0.001" class="w-full p-1.5 border rounded-lg bg-white text-xs font-bold text-cyan-900 border-cyan-300 outline-none">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 📋 그룹 2-B: [출하 및 정산 모드] 물류 상태 및 채권/인보이스 정보 -->
+      <div class="fulfillment-only-field hidden space-y-3">
+        <!-- 물류 & 출하 정보 -->
+        <div class="bg-indigo-50/30 p-3 rounded-xl border border-indigo-100/80 space-y-2">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+            <span>🚚</span> 출하 및 물류 관리
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">진행 상태 (Status)</label>
+              <select id="selectOrderStatus" class="w-full p-2 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+                <option value="배정요청">배정요청</option>
+                <option value="출하준비">출하준비</option>
+                <option value="출하완료">출하완료</option>
+                <option value="정산마감">정산마감</option>
+                <option value="출하보류">⚠️ 출하보류</option>
+                <option value="무상지원">🎁 샘플지원</option>
+                <option value="반품검토">🔄 반품검토</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">운송장 / B/L 번호</label>
+              <input type="text" id="inputTrackingNo" placeholder="택배/화물 송장번호" class="w-full p-2 border rounded-lg bg-white text-xs outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px] font-semibold text-indigo-900">실물 출하일</label>
+              <input type="date" id="inputShippedDate" class="w-full p-2 border rounded-lg bg-white text-xs font-bold text-indigo-950 outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">인보이스 / 계산서</label>
+              <input type="text" id="inputInvoiceNo" placeholder="INV-2026-001" class="w-full p-2 border rounded-lg bg-white text-xs outline-none">
+            </div>
+          </div>
         </div>
 
-        <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">송장 / B/L</label>
-          <input type="text" id="inputTrackingNo" placeholder="운송장 번호" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
-        </div>
+        <!-- 채권 & 수금 정산 -->
+        <div class="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+            <span>💳</span> 세금계산서 및 수금 정산
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">통화 및 결제조건</label>
+              <div class="grid grid-cols-2 gap-1">
+                <select id="selectCurrency" class="p-2 border rounded-lg bg-white text-[11px] font-bold text-slate-800 outline-none">
+                  <option value="USD">USD</option>
+                  <option value="KRW">KRW</option>
+                </select>
+                <select id="selectPaymentTerms" class="p-2 border rounded-lg bg-white text-[11px] font-semibold outline-none">
+                  <option value="Net 30">Net 30</option>
+                  <option value="Net 60">Net 60</option>
+                  <option value="익월말현금">익월말</option>
+                  <option value="선입금/현금">선입금</option>
+                </select>
+              </div>
+            </div>
 
-        <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">수금 상태</label>
-          <select id="selectPaymentStatus" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none cursor-pointer">
-            <option value="미수">미수 (Unpaid)</option>
-            <option value="완료">수금완료 (Paid)</option>
-          </select>
-        </div>
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">수금 상태</label>
+              <select id="selectPaymentStatus" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none cursor-pointer">
+                <option value="미수">미수 (Unpaid)</option>
+                <option value="완료">수금완료 (Paid)</option>
+              </select>
+            </div>
 
-        <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">수금 만기일</label>
-          <input type="date" id="inputDueDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
-        </div>
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">수금 만기일 (Due Date)</label>
+              <input type="date" id="inputDueDate" class="w-full p-2 border rounded-lg bg-white text-xs outline-none">
+            </div>
 
-        <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-0.5 text-[11px] font-semibold text-indigo-900">출하일</label>
-          <input type="date" id="inputShippedDate" class="w-full p-2 border rounded-lg bg-indigo-50/30 text-xs font-bold text-indigo-950 outline-none">
-        </div>
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">실입금 완료일</label>
+              <input type="date" id="inputSettledDate" class="w-full p-2 border rounded-lg bg-white text-xs outline-none">
+            </div>
 
-        <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">수금 환율 (Settled FX)</label>
-          <input type="number" id="inputSettledFx" placeholder="입금 당시 환율" step="1" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-bold outline-none">
-          <div id="fxVarianceDisplay"></div>
+            <div class="col-span-2 lg:col-span-4">
+              <label class="text-slate-600 block mb-0.5 text-[11px]">수금 완료 환율 (Settled FX Rate)</label>
+              <input type="number" id="inputSettledFx" placeholder="실제 입금 환율 입력 시 환차손익 자동 계산" step="1" class="w-full p-2 border rounded-lg bg-white text-xs font-bold outline-none">
+              <div id="fxVarianceDisplay"></div>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <div class="fulfillment-only-field hidden">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">실입금 완료일</label>
-          <input type="date" id="inputSettledDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
-        </div>
-
-        <div class="col-span-2 lg:col-span-4">
-          <label class="text-slate-600 block mb-0.5 text-[11px]">비고 (창고 위치, 포장, 특이사항)</label>
-          <input type="text" id="inputMemo" placeholder="창고 랙 번호 또는 결제 특이사항" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
-        </div>
+      <!-- 📝 그룹 3: 업무 비고 (공통) -->
+      <div>
+        <label class="text-slate-600 block mb-0.5 text-[11px]">업무 비고 (창고 랙 위치, 포장 단위, 결제 특이사항)</label>
+        <input type="text" id="inputMemo" placeholder="예: 본사 A랙 3열 보관 / Reel 2500EA 단위 포장 / 담당자 구두 협의 완료" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
       </div>
     </div>
 
@@ -520,7 +560,7 @@
           <input type="number" id="splitPriceInput" required step="0.001" class="w-full p-2 border rounded-lg bg-slate-50 font-bold text-indigo-700 outline-none">
         </div>
         <div>
-          <label class="text-slate-600 block mb-0.5 font-semibold text-[11px]">담당 Sales</label>
+          <label class="text-slate-600 block mb-0.5 text-[11px]">담당 Sales</label>
           <select id="splitRepInput" class="w-full p-2 border rounded-lg bg-slate-50 font-semibold outline-none">
             <option value="Dustin">Dustin</option>
             <option value="Steve">Steve</option>
