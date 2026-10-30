@@ -108,7 +108,6 @@ function updateFormVisibility() {
   const salesFields = document.querySelectorAll('.sales-only-field');
   const fulfillmentFields = document.querySelectorAll('.fulfillment-only-field');
   const saveBtn = document.getElementById('saveItemBtn');
-  const formSection = document.getElementById('formSection');
 
   const canEdit = isCsOrAdminUser();
 
@@ -126,10 +125,8 @@ function updateFormVisibility() {
     fulfillmentFields.forEach(el => el.classList.remove('hidden'));
   }
 
-  // 💡 관리자가 아니면 '수주/배정 저장' 버튼을 아예 숨김 (티 안 나게 처리)
   if (!canEdit) {
     if (saveBtn) saveBtn.classList.add('hidden');
-    // 입력 필드들도 자연스럽게 읽기 전용으로 잠금
     const formInputs = document.querySelectorAll('#formSection input, #formSection select');
     formInputs.forEach(inp => {
       inp.disabled = true;
@@ -454,7 +451,7 @@ function applyFilters() {
 }
 
 function loadFormFromItem(id) {
-  if (!isCsOrAdminUser()) return; // 관리자가 아니면 수정 모드 진입 안 함
+  if (!isCsOrAdminUser()) return;
   const item = getCachedItem(id);
   if (!item) return;
 
@@ -561,9 +558,7 @@ async function saveCurrentForm() {
     return;
   }
 
-  if (!isCsOrAdminUser()) {
-    return;
-  }
+  if (!isCsOrAdminUser()) return;
 
   const partName = document.getElementById('inputPartName')?.value.trim();
   if (!partName) {
@@ -641,7 +636,6 @@ function updateAuthUI() {
   const sub = document.getElementById('authSubtitle');
 
   if (isAuth) {
-    // 💡 'Sales(조회전용)' 같은 구분 없이 자연스럽게 '사내 인증됨'으로만 표시
     if (badge) {
       badge.className = "text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-900 border border-indigo-200";
       badge.innerHTML = "🔓 사내 인증됨";
@@ -693,6 +687,9 @@ window.openChangePasswordModal = () => {
   document.getElementById('changePasswordModal')?.classList.remove('hidden');
 };
 
+// ==========================================
+// 📖 시스템 매뉴얼 뷰어 및 내부 목차 스크롤 이동 기능
+// ==========================================
 function initManualViewer() {
   const openBtn = document.getElementById('openManualBtn');
   const manualModal = document.getElementById('manualModal');
@@ -708,6 +705,20 @@ function initManualViewer() {
         renderManualContent(manualRawText);
       } catch (err) {
         if (contentEl) contentEl.innerText = "매뉴얼을 불러오는 중 오류가 발생했습니다: " + err.message;
+      }
+    }
+  });
+
+  // 💡 목차 링크(#sec-xxx) 클릭 시 모달 내부 해당 섹션으로 부드럽게 스크롤 이동
+  contentEl?.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href^="#"]');
+    if (link) {
+      e.preventDefault();
+      const targetId = link.getAttribute('href').slice(1);
+      const targetEl = document.getElementById(targetId);
+      if (targetEl && contentEl) {
+        const topPos = targetEl.offsetTop - contentEl.offsetTop;
+        contentEl.scrollTo({ top: topPos - 10, behavior: 'smooth' });
       }
     }
   });
@@ -735,10 +746,18 @@ function renderManualContent(text) {
 
   const lines = text.split('\n');
   const html = lines.map(line => {
+    // 앵커 태그(<div id="..."></div>)는 그대로 통과
+    if (line.trim().startsWith('<div id=')) {
+      return line.trim();
+    }
+
     let l = escapeHtml(line);
     l = l.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
     l = l.replace(/\*\*/g, '');
     l = l.replace(/\`(.*?)\`/g, '<code class="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-[11px] font-mono border border-indigo-100">$1</code>');
+    
+    // 💡 [목차명](#링크)을 클릭 가능한 파란색 밑줄 링크 태그로 변환
+    l = l.replace(/\[(.*?)\]\((#.*?)\)/g, '<a href="$2" class="text-indigo-600 hover:text-indigo-800 font-semibold underline underline-offset-2 cursor-pointer transition-colors">$1</a>');
     l = l.replace(/\[(.*?)\]\((.*?)\)/g, '<span class="text-indigo-600 font-semibold">$1</span>');
 
     if (line.startsWith('# ')) {
