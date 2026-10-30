@@ -14,7 +14,7 @@
 <body class="bg-slate-100 text-slate-800 p-2 sm:p-5 md:p-8 min-h-screen font-sans antialiased">
   <div class="max-w-6xl mx-auto space-y-3 sm:space-y-5">
     
-    <!-- 1. 헤더 (모바일 컴팩트 레이아웃) -->
+    <!-- 1. 헤더 -->
     <header class="bg-[#0b2046] text-white p-3.5 sm:p-6 rounded-2xl shadow-md border border-slate-700/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
       <div class="flex items-center justify-between w-full md:w-auto">
         <div class="flex items-center gap-2.5 sm:gap-3.5">
@@ -57,7 +57,7 @@
       </div>
     </header>
 
-    <!-- 2. 비즈니스 탭 스위처 바 (모바일 균등 분할) -->
+    <!-- 2. 비즈니스 탭 스위처 바 -->
     <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-1.5">
       <div class="grid grid-cols-2 gap-1.5 w-full md:w-auto">
         <button id="tabSales" class="py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors">
@@ -87,7 +87,6 @@
         </div>
       </div>
 
-      <!-- 견적 카드 (모바일 1열, 태블릿 이상 2열) -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
         <!-- 달러 우선 카드 1 -->
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
@@ -122,7 +121,6 @@
         </div>
       </div>
 
-      <!-- 타겟 단가 검증 및 Tier 테이블 -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-center">
         <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-1.5 items-center">
           <div>
@@ -155,7 +153,7 @@
       </div>
     </div>
 
-    <!-- 4. 전문화 입력 폼 (모바일 2열 압축 배치) -->
+    <!-- 4. 전문화 입력 폼 (모바일 2열, PC 4열 정렬) -->
     <div id="formSection" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
       <div class="border-b pb-2 flex justify-between items-center">
         <div>
@@ -172,7 +170,6 @@
         <button onclick="document.getElementById('editingBanner').classList.add('hidden')" class="text-indigo-600 hover:text-indigo-800 font-bold text-[10px]">✕ 리셋</button>
       </div>
 
-      <!-- 💡 모바일 2열 그리드로 스크롤 대폭 단축 -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
         <div>
           <label class="text-slate-600 block mb-0.5 text-[11px]">제조사 (Maker)</label>
@@ -223,7 +220,7 @@
             <option value="Paul">Paul</option>
             <option value="__CUSTOM_OWNER__">기타 (직접 입력)</option>
           </select>
-          <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1 p-1.5 border rounded-lg bg-amber-50/50 text-xs outline-none">
+          <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1.5 p-2 border rounded-lg bg-amber-50/50 text-xs outline-none">
         </div>
 
         <div>
@@ -259,9 +256,10 @@
           <input type="number" id="inputOverhead" value="3.0" step="0.1" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-semibold outline-none">
         </div>
 
-        <div class="sales-only-field col-span-2">
+        <!-- 💡 수정된 부분: PC(lg)에서는 1칸만 차지하도록 lg:col-span-1 적용 -->
+        <div class="sales-only-field col-span-2 lg:col-span-1">
           <div class="flex items-center justify-between mb-0.5">
-            <label class="text-slate-600 text-[11px]">본사 특가 승인 (SPA)</label>
+            <label class="text-slate-600 text-[11px]">특가 승인 (SPA)</label>
             <label class="inline-flex items-center gap-1 cursor-pointer">
               <input type="checkbox" id="checkIsSpa" class="rounded border-slate-300 text-indigo-600">
               <span class="text-[10px] text-cyan-700 font-bold">SPA 적용</span>
@@ -270,6 +268,11 @@
           <div id="spaDebitWrapper" class="hidden">
             <input type="number" id="inputApprovedDebit" placeholder="승인 실매입가 ($)" step="0.001" class="w-full p-2 border rounded-lg bg-cyan-50/50 text-xs font-bold text-cyan-900 border-cyan-300 outline-none">
           </div>
+        </div>
+
+        <div>
+          <label class="text-slate-600 block mb-0.5 text-[11px]">선적일</label>
+          <input type="date" id="inputEntryDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
         </div>
 
         <!-- 📋 출하/채권 모드 필드 -->
@@ -325,20 +328,20 @@
           <input type="date" id="inputDueDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
         </div>
 
-        <div>
-          <label class="text-slate-600 block mb-0.5 text-[11px]">선적일</label>
-          <input type="date" id="inputEntryDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
-        </div>
-
         <div class="fulfillment-only-field hidden">
           <label class="text-slate-600 block mb-0.5 text-[11px] font-semibold text-indigo-900">출하일</label>
           <input type="date" id="inputShippedDate" class="w-full p-2 border rounded-lg bg-indigo-50/30 text-xs font-bold text-indigo-950 outline-none">
         </div>
 
-        <div class="fulfillment-only-field hidden col-span-2">
+        <div class="fulfillment-only-field hidden">
           <label class="text-slate-600 block mb-0.5 text-[11px]">수금 환율 (Settled FX)</label>
           <input type="number" id="inputSettledFx" placeholder="입금 당시 환율" step="1" class="w-full p-2 border rounded-lg bg-slate-50 text-xs font-bold outline-none">
           <div id="fxVarianceDisplay"></div>
+        </div>
+
+        <div class="fulfillment-only-field hidden">
+          <label class="text-slate-600 block mb-0.5 text-[11px]">실입금 완료일</label>
+          <input type="date" id="inputSettledDate" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
         </div>
 
         <div class="col-span-2 lg:col-span-4">
@@ -366,7 +369,6 @@
         </div>
       </div>
 
-      <!-- 미로그인 오버레이 -->
       <div id="lockedOverlay" class="p-6 text-center bg-slate-50/90 rounded-xl border border-dashed border-slate-300 space-y-2">
         <div class="text-2xl">🔐</div>
         <div class="font-bold text-slate-800 text-xs">보안을 위해 데이터가 보호되어 있습니다.</div>
@@ -375,7 +377,6 @@
         </button>
       </div>
 
-      <!-- 언락 테이블 & 다중 필터 영역 -->
       <div id="unlockedContent" class="hidden space-y-2.5">
         <div class="bg-slate-50 p-2 rounded-xl border border-slate-200/80 grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-center">
           <div class="col-span-2 relative">
@@ -427,10 +428,8 @@
           <span id="itemCount" class="font-bold text-indigo-700">총 0건</span>
         </div>
 
-        <!-- 모바일 카드 뷰 (모바일 기본) -->
         <div id="inventoryCardContainer" class="block md:hidden space-y-2"></div>
 
-        <!-- 데스크톱 테이블 뷰 -->
         <div class="hidden md:block overflow-x-auto">
           <table class="w-full text-left text-xs">
             <thead id="inventoryTableHeader" class="bg-slate-50 text-slate-500 border-b uppercase font-semibold"></thead>
