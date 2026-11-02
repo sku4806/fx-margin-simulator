@@ -1,11 +1,25 @@
-import { openTrackingModal } from './modules/courier.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
-import { evaluatePackaging, fetchPackagingStandards, getStandardSpq, getAllStandards, savePackagingStandard } from './modules/packaging.js';
+import { 
+  evaluatePackaging, 
+  fetchPackagingStandards, 
+  getStandardSpq, 
+  getAllStandards, 
+  savePackagingStandard 
+} from './modules/packaging.js';
+import { openTrackingModal } from './modules/courier.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
-import { fetchInventoryItems, upsertInventoryItem, splitInventoryShipment, deleteInventoryItem, filterItems, getCachedItem, renderInventoryUI } from './inventory.js';
+import { 
+  fetchInventoryItems, 
+  upsertInventoryItem, 
+  splitInventoryShipment, 
+  deleteInventoryItem, 
+  filterItems, 
+  getCachedItem, 
+  renderInventoryUI 
+} from './inventory.js';
 
 let rawFxRate = 1380.0;
 let appliedFxRate = 1380.0;
@@ -30,6 +44,7 @@ export async function bootstrap() {
     console.warn("FX 기본값 유지", err);
   }
   updateFxDisplay();
+
   await fetchPackagingStandards();
   renderPackagingTable();
 
@@ -125,24 +140,125 @@ function updateFxDisplay() {
   runEngine();
 }
 
+function updateSpqNotice() {
+  const stockEl = document.getElementById('inputStock');
+  const spqEl = document.getElementById('inputSpq');
+  const container = document.getElementById('spqFeedbackContainer');
+  if (!stockEl || !container) return;
+
+  const qty = parseInt(stockEl.value) || 0;
+  const spq = parseInt(spqEl?.value) || 0;
+  const res = evaluatePackaging(qty, spq);
+
+  if (res.isValid || qty === 0 || spq === 0) {
+    container.classList.add('hidden');
+    container.innerHTML = '';
+  } else {
+    container.classList.remove('hidden');
+    container.innerHTML = `
+      <div class="p-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] space-y-1">
+        <div class="text-amber-800 font-bold flex items-center justify-between">
+          <span>⚠️ Reel 포장단위(${res.spq.toLocaleString()} EA) 불일치</span>
+          <span class="text-rose-600 font-black">-${res.missingForFullReel.toLocaleString()} EA 자투리</span>
+        </div>
+        <div class="flex items-center gap-1 pt-0.5">
+          <button type="button" class="spq-fix-btn flex-1 bg-white hover:bg-amber-100 text-slate-700 font-bold py-0.5 px-1 rounded border border-amber-300 transition-colors" data-target="${res.downQty}">
+            ${res.downQty.toLocaleString()} EA 하향
+          </button>
+          <button type="button" class="spq-fix-btn flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-0.5 px-1 rounded transition-colors" data-target="${res.upQty}">
+            ${res.upQty.toLocaleString()} EA 상향
+          </button>
+        </div>
+      </div>
+    `;
+    container.querySelectorAll('.spq-fix-btn').forEach(btn => {
+      btn.onclick = () => {
+        stockEl.value = btn.dataset.target;
+        updateSpqNotice();
+        runEngine();
+      };
+    });
+  }
+}
+
+function renderPackagingTable() {
+  const tbody = document.getElementById('packagingConfigTbody');
+  if (!tbody) return;
+  const standards = getAllStandards();
+  const keys = Object.keys(standards);
+  if (keys.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">등록된 라인별 CS 포장 기준이 없습니다.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = keys.map(k => {
+    const item = standards[k];
+    return `
+      <tr class="hover:bg-indigo-50/50">
+        <td class="py-2 px-2 font-bold text-slate-900">${k}</td>
+        <td class="py-2 px-2 font-semibold text-indigo-700">${item.csManager || '-'}</td>
+        <td class="py-2 px-2 font-bold text-slate-800">${item.spq ? item.spq.toLocaleString() + ' EA' : '-'}</td>
+        <td class="py-2 px-2 text-slate-600">${item.moq ? item.moq.toLocaleString() + ' EA' : '-'}</td>
+        <td class="py-2 px-2 text-slate-500 text-[11px]">${item.memo || '-'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
 function bindInputs() {
   ['inputUsd', 'inputStock', 'inputShipFx', 'inputOverhead', 'inputTargetOffer', 'inputApprovedDebit'].forEach(id => {
     safeAddListener(id, 'input', runEngine);
   });
 
+  safeAddListener('inputStock', 'input', updateSpqNotice);
+  safeAddListener('inputSpq', 'input', updateSpqNotice);
+
+  safeAddListener('selectMaker', 'change', () => {
+    const maker = document.getElementById('selectMaker')?.value;
+    const spqEl = document.getElementById('inputSpq');
+    if (spqEl) {
+      const csSpq = getStandardSpq(maker);
+      spqEl.value = csSpq !== null ? csSpq : '';
+    }
+    updateSpqNotice();
+  });
+
+  safeAddListener('openPackagingConfigBtn', 'click', () => {
+    if (!isCsOrAdminUser()) {
+      alert("포장단위 기준 마스터 관리는 CS 및 관리자 권한만 가능합니다.");
+      return;
+    }
+    renderPackagingTable();
+    document.getElementById('packagingConfigModal')?.classList.remove('hidden');
+  });
+
+  const pkgConfigForm = document.getElementById('packagingConfigForm');
+  if (pkgConfigForm) {
+    pkgConfigForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const maker = document.getElementById('pkgConfigMaker')?.value;
+      const cs = document.getElementById('pkgConfigCs')?.value.trim();
+      const spq = document.getElementById('pkgConfigSpq')?.value;
+      const moq = document.getElementById('pkgConfigMoq')?.value;
+      const memo = document.getElementById('pkgConfigMemo')?.value.trim();
+
+      try {
+        await savePackagingStandard(maker, cs, spq, moq, memo);
+        alert(`[${maker}] 라인의 CS 포장 단위 기준이 성공적으로 저장되었습니다.`);
+        renderPackagingTable();
+        const curMaker = document.getElementById('selectMaker')?.value;
+        if (curMaker === maker) {
+          const spqInp = document.getElementById('inputSpq');
+          if (spqInp) spqInp.value = spq || '';
+          updateSpqNotice();
+        }
+      } catch (err) {
+        alert("저장 실패: " + err.message);
+      }
+    };
+  }
+
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
-
-  safeAddListener('inputStock', 'change', () => {
-    const maker = document.getElementById('selectMaker')?.value;
-    const qty = parseInt(document.getElementById('inputStock')?.value) || 0;
-    const spqResult = validateSpq(maker, qty);
-    if (!spqResult.isValid) {
-      alert(`[포장단위 안내] ${maker} 라인의 표준 Reel 단위는 ${spqResult.spq.toLocaleString()} EA 입니다.
-입력 수량(${qty.toLocaleString()} EA) 진행 시 자투리 잉여재고가 발생할 수 있습니다.
-권장 수량: ${spqResult.recommendedQty.toLocaleString()} EA`);
-    }
-  });
 
   const spaCheck = document.getElementById('checkIsSpa');
   const spaDebitWrapper = document.getElementById('spaDebitWrapper');
@@ -152,57 +268,6 @@ function bindInputs() {
   });
 
   safeAddListener('inputSettledFx', 'input', updateFxVarianceFeedback);
-  const updateSpqNotice = () => {
-    const stockEl = document.getElementById('inputStock');
-    const spqEl = document.getElementById('inputSpq');
-    const container = document.getElementById('spqFeedbackContainer');
-
-    const qty = parseInt(stockEl.value) || 0;
-    const spq = parseInt(spqEl?.value) || 1000;
-    const res = evaluatePackaging(qty, spq);
-
-    if (res.isValid || qty === 0) {
-      container.classList.add('hidden');
-      container.innerHTML = '';
-    } else {
-      container.classList.remove('hidden');
-      container.innerHTML = `
-        <div class="p-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] space-y-1">
-          <div class="text-amber-800 font-bold flex items-center justify-between">
-            <span>⚠️ Reel 포장단위(${res.spq.toLocaleString()} EA) 불일치</span>
-            <span class="text-rose-600 font-black">-${res.missingForFullReel.toLocaleString()} EA 자투리</span>
-          </div>
-          <div class="flex items-center gap-1 pt-0.5">
-            <button type="button" class="spq-fix-btn flex-1 bg-white hover:bg-amber-100 text-slate-700 font-bold py-0.5 px-1 rounded border border-amber-300 transition-colors" data-target="${res.downQty}">
-              ${res.downQty.toLocaleString()} EA 하향
-            </button>
-            <button type="button" class="spq-fix-btn flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-0.5 px-1 rounded transition-colors" data-target="${res.upQty}">
-              ${res.upQty.toLocaleString()} EA 상향
-            </button>
-          </div>
-        </div>
-      `;
-      container.querySelectorAll('.spq-fix-btn').forEach(btn => {
-        btn.onclick = () => {
-          stockEl.value = btn.dataset.target;
-          updateSpqNotice();
-          runEngine();
-        };
-      });
-    }
-  };
-
-  safeAddListener('inputStock', 'input', updateSpqNotice);
-    safeAddListener('selectMaker', 'change', () => {
-    const maker = document.getElementById('selectMaker')?.value;
-    const spqEl = document.getElementById('inputSpq');
-    if (spqEl) {
-      const csSpq = getStandardSpq(maker);
-      spqEl.value = csSpq !== null ? csSpq : '';
-    }
-    updateSpqNotice();
-  });
-  safeAddListener('inputSpq', 'input', updateSpqNotice);
 
   bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
   bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
@@ -217,20 +282,17 @@ function bindInputs() {
     document.getElementById('landedCostModal')?.classList.remove('hidden');
   });
 
-  // 💡 엑셀 내보내기 안전 실행
   safeAddListener('excelExportBtn', 'click', () => {
     try {
       const q = document.getElementById('searchInput')?.value || "";
       const maker = document.getElementById('filterMaker')?.value || "";
       const owner = document.getElementById('filterOwner')?.value || "";
       const pay = document.getElementById('filterPayment')?.value || "";
-      const status = document.getElementById('filterStatus')?.value || "";
 
       const filtered = filterItems({
         query: q,
         filterMaker: maker,
         filterOwner: owner,
-        filterStatus: status,
         filterPayment: pay
       });
 
@@ -241,7 +303,6 @@ function bindInputs() {
     }
   });
 
-  // 💡 패킹리스트 파일 선택 이벤트
   const fileInp = document.getElementById('excelFileInput');
   fileInp?.addEventListener('change', (e) => {
     if (!isCsOrAdminUser()) {
@@ -256,7 +317,6 @@ function bindInputs() {
     }
   });
 
-  // 💡 패킹리스트 DB 등록 실행
   safeAddListener('excelConfirmUploadBtn', 'click', async () => {
     const btn = document.getElementById('excelConfirmUploadBtn');
     if (btn) btn.disabled = true;
@@ -465,12 +525,11 @@ function applyFilters() {
     query: document.getElementById('searchInput')?.value || "",
     filterMaker: document.getElementById('filterMaker')?.value || "",
     filterOwner: document.getElementById('filterOwner')?.value || "",
-    filterStatus: document.getElementById('filterStatus')?.value || "",
     filterPayment: document.getElementById('filterPayment')?.value || ""
   });
+
   renderInventoryUI(filtered, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, canEdit);
-  
-  // 🚚 배송조회 버튼 클릭 이벤트
+
   document.querySelectorAll('.tracking-btn').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -480,14 +539,6 @@ function applyFilters() {
         return;
       }
       openTrackingModal(trk);
-    };
-  });
-  
-  // 🚚 운송장 번호 클릭 시 실시간 배송조회 팝업 연동
-  document.querySelectorAll('.tracking-link').forEach(el => {
-    el.onclick = (e) => {
-      e.stopPropagation();
-      openTrackingModal(el.dataset.tracking);
     };
   });
 }
@@ -525,7 +576,7 @@ function loadFormFromItem(id) {
   setVal('inputMemo', item.memo);
   setVal('inputUsd', item.unitUsd);
   setVal('inputShipFx', item.shipFx);
-  setVal('inputStock', item.stock);
+  setVal('inputStock', item.stock || '');
   setVal('inputSpq', item.spq || getStandardSpq(item.maker) || '');
 
   const spaCheck = document.getElementById('checkIsSpa');
@@ -544,6 +595,7 @@ function loadFormFromItem(id) {
   }
 
   updateFxVarianceFeedback();
+  updateSpqNotice();
   runEngine();
   document.getElementById('formSection')?.scrollIntoView({ behavior: 'smooth' });
 }
@@ -629,7 +681,7 @@ async function saveCurrentForm() {
     unit_usd: parseFloat(document.getElementById('inputUsd')?.value) || 0,
     ship_fx: parseFloat(document.getElementById('inputShipFx')?.value) || 1350,
     stock: parseInt(document.getElementById('inputStock')?.value) || 0,
-    spq: parseInt(document.getElementById('inputSpq')?.value) || 1000,
+    spq: parseInt(document.getElementById('inputSpq')?.value) || null,
     margin: 20,
     is_spa: isSpa,
     approved_debit_usd: isSpa ? approvedDebit : 0
@@ -668,69 +720,8 @@ function copyQuotation() {
   const totalReplace = document.getElementById('minSaleTotalReplace')?.innerText || "-";
   const fxRateText = document.getElementById('liveFx')?.innerText || "-";
 
-  const quote = `[견적 안내] ${partName} (D/C: ${dateCode})
-- 수량: ${qty.toLocaleString()} EA
-- 공급단가: ${unitUsd} ${unitKrw}
-- 총견적액: ${totalReplace}
-* 기준환율: ${fxRateText}`;
+  const quote = `[견적 안내] ${partName} (D/C: ${dateCode})\n- 수량: ${qty.toLocaleString()} EA\n- 공급단가: ${unitUsd} ${unitKrw}\n- 총견적액: ${totalReplace}\n* 기준환율: ${fxRateText}`;
   navigator.clipboard.writeText(quote).then(() => alert("견적서 텍스트가 복사되었습니다!"));
-}
-
-
-function renderPackagingTable() {
-  const tbody = document.getElementById('packagingConfigTbody');
-  const standards = getAllStandards();
-  const keys = Object.keys(standards);
-  if (keys.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">등록된 라인별 CS 포장 기준이 없습니다.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = keys.map(k => {
-    const item = standards[k];
-    return `
-      <tr class="hover:bg-indigo-50/50">
-        <td class="py-2 px-2 font-bold text-slate-900">${k}</td>
-        <td class="py-2 px-2 font-semibold text-indigo-700">${item.csManager || '-'}</td>
-        <td class="py-2 px-2 font-bold text-slate-800">${item.spq ? item.spq.toLocaleString() + ' EA' : '-'}</td>
-        <td class="py-2 px-2 text-slate-600">${item.moq ? item.moq.toLocaleString() + ' EA' : '-'}</td>
-        <td class="py-2 px-2 text-slate-500 text-[11px]">${item.memo || '-'}</td>
-      </tr>
-    `;
-  }).join('');
-}
-
-safeAddListener('openPackagingConfigBtn', 'click', () => {
-    alert("포장단위 기준 마스터 관리는 CS 및 관리자 권한만 가능합니다.");
-    return;
-  }
-  renderPackagingTable();
-  document.getElementById('packagingConfigModal')?.classList.remove('hidden');
-});
-
-const pkgConfigForm = document.getElementById('packagingConfigForm');
-if (pkgConfigForm) {
-  pkgConfigForm.onsubmit = async (e) => {
-    e.preventDefault();
-    const maker = document.getElementById('pkgConfigMaker')?.value;
-    const cs = document.getElementById('pkgConfigCs')?.value.trim();
-    const spq = document.getElementById('pkgConfigSpq')?.value;
-    const moq = document.getElementById('pkgConfigMoq')?.value;
-    const memo = document.getElementById('pkgConfigMemo')?.value.trim();
-
-    try {
-      await savePackagingStandard(maker, cs, spq, moq, memo);
-      alert(`[${maker}] 라인의 CS 포장 단위 기준이 성공적으로 저장되었습니다.`);
-      renderPackagingTable();
-      // 현재 선택된 제조사와 같으면 폼에도 즉시 반영
-      const curMaker = document.getElementById('selectMaker')?.value;
-      if (curMaker === maker) {
-        document.getElementById('inputSpq').value = spq || '';
-        updateSpqNotice();
-      }
-    } catch (err) {
-      alert("저장 실패: " + err.message);
-    }
-  };
 }
 
 bootstrap();
