@@ -1,195 +1,163 @@
 /**
- * 📄 빅샤인 코리아(BIGSHINE KOREA CO., LTD) 공식 실무 견적서 발행 모듈
+ * 📄 pdf-lib 기반 빅샤인 코리아 원본 PDF 템플릿 오버레이 모듈
  */
 
-export function openQuotationPrintModal(data) {
+export async function generateOfficialQuotationPdf(data) {
+  if (!window.PDFLib) {
+    alert("PDF 생성 모듈(pdf-lib)을 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+    return;
+  }
+
+  const { PDFDocument, rgb, StandardFonts } = window.PDFLib;
+
+  try {
+    // 1. 템플릿 PDF 로드
+    const templateBytes = await fetch('/quotation_template.pdf').then(res => {
+      if (!res.ok) throw new Error("원본 템플릿(quotation_template.pdf)을 찾을 수 없습니다.");
+      return res.arrayBuffer();
+    });
+
+    const pdfDoc = await PDFDocument.load(templateBytes);
+    if (window.fontkit) {
+      pdfDoc.registerFontkit(window.fontkit);
+    }
+
+    const pages = pdfDoc.getPages();
+    const firstPage = pages[0];
+    const { width, height } = firstPage.getSize();
+
+    // 폰트 로드 (영문 및 숫자용)
+    const fontHelvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontHelveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontCourier = await pdfDoc.embedFont(StandardFonts.CourierBold);
+
+    // 날짜 및 REF 번호 계산
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const yy = String(yyyy).slice(2);
+    const refNo = `QBK${yy}${mm}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // 통화 및 단가 계산
+    const isKrw = data.currency === 'KRW';
+    const qty = Number(data.qty) || 0;
+    const unitPrice = Number(data.unitPriceUsd) || 0;
+    
+    let subtotal = 0;
+    let vat = 0;
+    let total = 0;
+    let unitPriceText = '';
+    let subtotalText = '';
+    let vatText = '';
+    let totalText = '';
+
+    if (isKrw) {
+      const upKrw = Math.round(data.unitPriceKrw || (unitPrice * data.appliedFx));
+      subtotal = upKrw * qty;
+      vat = Math.round(subtotal * 0.1);
+      total = subtotal + vat;
+      unitPriceText = `\\${upKrw.toLocaleString()}`;
+      subtotalText = `\\${subtotal.toLocaleString()}`;
+      vatText = `\\${vat.toLocaleString()}`;
+      totalText = `\\${total.toLocaleString()}`;
+    } else {
+      subtotal = unitPrice * qty;
+      vat = subtotal * 0.1;
+      total = subtotal + vat;
+      unitPriceText = `$${unitPrice.toFixed(3)}`;
+      subtotalText = `$${subtotal.toFixed(2)}`;
+      vatText = `$${vat.toFixed(2)}`;
+      totalText = `$${total.toFixed(2)}`;
+    }
+
+    // --- 🛠️ 2. 기존 가변 영역 흰색 마스킹 (지우기) ---
+    const mask = (x, y, w, h) => {
+      firstPage.drawRectangle({
+        x, y, width: w, height: h,
+        color: rgb(1, 1, 1),
+      });
+    };
+
+    // TO / ATTN 영역 마스킹
+    mask(68, height - 88, 180, 48);
+
+    // DATE / REF / FROM 영역 마스킹
+    mask(455, height - 165, 110, 45);
+
+    // 1번 품목 행 데이터 영역 마스킹 (No 1 제외한 나머지 행 내용)
+    mask(58, height - 250, 490, 20);
+
+    // AMOUNT, VAT, TOTAL AMOUNT 영역 마스킹
+    mask(450, height - 335, 110, 65);
+
+    // --- ✍️ 3. 새 데이터 오버레이 렌더링 ---
+    const drawText = (txt, x, y, size = 9, font = fontHelvetica, color = rgb(0, 0, 0)) => {
+      firstPage.drawText(String(txt || ''), { x, y, size, font, color });
+    };
+
+    // 3-1. 수신처 정보
+    drawText(data.customer || 'Customer', 72, height - 58, 10, fontHelveticaBold);
+    drawText(data.attn || 'Purchasing / R&D Team', 72, height - 73, 9, fontHelvetica);
+
+    // 3-2. 견적 메타 정보 (DATE, REF, FROM)
+    drawText(dateStr, 460, height - 131, 8.5, fontHelveticaBold);
+    drawText(refNo, 460, height - 146, 8.5, fontCourier, rgb(0.05, 0.15, 0.4));
+    drawText(data.salesRep || 'Nathan Kim', 460, height - 161, 8.5, fontHelveticaBold);
+
+    // 3-3. 품목 행 (No, Part#, MFG, QTY, U/P, AMOUNT, DELIVERY)
+    drawText(data.partName || '-', 65, height - 242, 9, fontHelveticaBold);
+    drawText(data.maker || '-', 215, height - 242, 8.5, fontHelvetica);
+    drawText(`${qty.toLocaleString()} ${data.unitLabel || 'EA'}`, 280, height - 242, 8.5, fontHelvetica);
+    drawText(unitPriceText, 350, height - 242, 9, fontCourier);
+    drawText(subtotalText, 430, height - 242, 9, fontCourier);
+    drawText(data.delivery || 'Stock / 2-3WKS', 505, height - 242, 8, fontHelvetica);
+
+    // 3-4. 우측 정산 금액 영역
+    drawText(subtotalText, 475, height - 283, 9, fontCourier);
+    drawText(vatText, 475, height - 303, 9, fontCourier);
+    drawText(totalText, 475, height - 325, 9.5, fontCourier, rgb(0.1, 0.1, 0.1));
+
+    // 4. 완료된 PDF 바이트 추출 및 Blob URL 생성
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const pdfUrl = URL.createObjectURL(blob);
+
+    // 5. 모달 내 iframe 미리보기 및 다운로드 연동
+    openQuotationPdfModal(pdfUrl, `${data.customer || 'BigShine'}_Quotation_${data.partName || ''}.pdf`);
+
+  } catch (err) {
+    console.error("[PDF-Lib Error]", err);
+    alert("공식 견적서 생성 중 오류가 발생했습니다: " + err.message);
+  }
+}
+
+/**
+ * 생성된 순정 PDF 미리보기 및 다운로드 모달 열기
+ */
+function openQuotationPdfModal(pdfUrl, downloadFilename) {
   const modal = document.getElementById('quotationPdfModal');
   const preview = document.getElementById('quotationPrintArea');
   if (!modal || !preview) return;
 
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  const dateStr = `${yyyy}-${mm}-${dd}`;
-
-  // 빅샤인 코리아 공식 견적 REF 번호 생성 (예: QBK2611-1025)
-  const yy = String(yyyy).slice(2);
-  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-  const refNo = `QBK${yy}${mm}-${randomSuffix}`;
-
-  // 통화 및 단가 계산
-  const isKrw = data.currency === 'KRW' || (data.unitPriceKrw && !data.unitPriceUsd);
-  const qty = Number(data.qty) || 0;
-  
-  let unitPriceFormatted = '';
-  let subtotal = 0;
-  let vat = 0;
-  let totalAmount = 0;
-  let currencySymbol = '';
-
-  if (isKrw) {
-    currencySymbol = '₩';
-    const upKrw = Math.round(data.unitPriceKrw || (data.unitPriceUsd * data.appliedFx));
-    subtotal = upKrw * qty;
-    vat = Math.round(subtotal * 0.1);
-    totalAmount = subtotal + vat;
-    unitPriceFormatted = `₩${upKrw.toLocaleString()}`;
-  } else {
-    currencySymbol = '$';
-    const upUsd = Number(data.unitPriceUsd) || 0;
-    subtotal = upUsd * qty;
-    vat = subtotal * 0.1;
-    totalAmount = subtotal + vat;
-    unitPriceFormatted = `$${upUsd.toFixed(3)}`;
-  }
-
-  const formatMoney = (val) => {
-    return isKrw 
-      ? `₩${Math.round(val).toLocaleString()}` 
-      : `$${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-  };
-
   preview.innerHTML = `
-    <div class="bg-white text-slate-900 mx-auto font-sans text-[11px] leading-tight p-6 sm:p-10 max-w-4xl border border-slate-300 shadow-md print:border-0 print:shadow-none print:p-0 print:w-full">
-      
-      <!-- 상단 1: TO(고객사) & 공급자 정보 (2단 레이아웃) -->
-      <div class="grid grid-cols-2 gap-4 pb-4 border-b border-slate-900">
-        <!-- 좌측 수신자 -->
-        <div class="space-y-1.5 pt-1">
-          <div class="flex items-start">
-            <span class="w-14 font-black text-slate-900 shrink-0">TO:</span>
-            <span class="font-bold text-sm text-slate-900">${data.customer || '고객사'}</span>
-          </div>
-          <div class="flex items-start">
-            <span class="w-14 font-bold text-slate-600 shrink-0">ATTN:</span>
-            <span class="font-bold text-slate-900">${data.attn || '구매/개발 담당자'} 님</span>
-          </div>
-          <div class="flex items-center text-slate-600">
-            <span class="w-14 shrink-0">TEL:</span>
-            <span>${data.customerTel || '-'}</span>
-          </div>
-          <div class="flex items-center text-slate-600">
-            <span class="w-14 shrink-0">FAX:</span>
-            <span>${data.customerFax || '-'}</span>
-          </div>
-        </div>
-
-        <!-- 우측 공급자 정보 -->
-        <div class="text-right space-y-1 text-slate-700">
-          <div class="text-base font-black tracking-tight text-[#0b2046]">BIGSHINE KOREA CO., LTD</div>
-          <div class="text-[10px] text-slate-600 leading-snug font-medium">
-            B-601, Yongin TechnoValley, 357 Guseong-ro, Giheung-gu,<br>
-            Yongin-si, Gyeonggi-do 16914, Rep. of Korea
-          </div>
-          <div class="text-[10px] text-slate-600 pt-0.5">
-            <span class="font-bold">Tel:</span> 82-31-711-8881 &nbsp;|&nbsp; <span class="font-bold">Fax:</span> 82-31-711-8174
-          </div>
-        </div>
+    <div class="w-full h-[78vh] flex flex-col space-y-2">
+      <div class="flex justify-between items-center bg-slate-800 text-white p-2.5 rounded-xl text-xs">
+        <span class="font-bold flex items-center gap-1.5">
+          <span>📄</span> 원본 규격 공식 견적서가 생성되었습니다.
+        </span>
+        <a href="${pdfUrl}" download="${downloadFilename}" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors">
+          <span>💾</span> PDF 파일 저장 (다운로드)
+        </a>
       </div>
-
-      <!-- 상단 2: 견적 메타 정보 -->
-      <div class="py-3 border-b-2 border-slate-900 flex justify-between items-center">
-        <h1 class="text-2xl font-black tracking-widest text-[#0b2046] m-0">QUOTATION</h1>
-        
-        <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px] text-right font-medium">
-          <div><strong class="text-slate-500">DATE:</strong> <span class="font-mono font-bold">${dateStr}</span></div>
-          <div><strong class="text-slate-500">PAGE:</strong> <span class="font-bold">1 OF 1</span></div>
-          <div><strong class="text-slate-500">REF:</strong> <span class="font-mono font-bold text-indigo-900">${refNo}</span></div>
-          <div><strong class="text-slate-500">FROM:</strong> <span class="font-bold">${data.salesRep || '김경래'}</span></div>
-        </div>
-      </div>
-
-      <!-- 본문: 품목 견적 테이블 -->
-      <table class="w-full text-left border-collapse border border-slate-900 mt-4 text-[11px]">
-        <thead>
-          <tr class="bg-slate-100 text-slate-900 font-bold border-b border-slate-900 text-center">
-            <th class="border-r border-slate-900 py-2 px-1 w-10">No</th>
-            <th class="border-r border-slate-900 py-2 px-3 text-left">PART#</th>
-            <th class="border-r border-slate-900 py-2 px-2 w-28">MFG</th>
-            <th class="border-r border-slate-900 py-2 px-2 w-20">QTY</th>
-            <th class="border-r border-slate-900 py-2 px-3 text-right w-28">U/P</th>
-            <th class="border-r border-slate-900 py-2 px-3 text-right w-32">AMOUNT</th>
-            <th class="py-2 px-2 text-center w-24">DELIVERY</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="border-b border-slate-300">
-            <td class="border-r border-slate-900 py-3 px-1 text-center font-bold">1</td>
-            <td class="border-r border-slate-900 py-3 px-3 font-black text-slate-900">
-              <div>${data.partName}</div>
-              ${data.dateCode && data.dateCode !== '-' ? `<div class="text-[10px] text-slate-500 font-normal">D/C: ${data.dateCode}</div>` : ''}
-              ${data.spq ? `<div class="text-[9px] text-slate-400 font-normal">SPQ: ${Number(data.spq).toLocaleString()} EA</div>` : ''}
-            </td>
-            <td class="border-r border-slate-900 py-3 px-2 text-center font-bold text-slate-700">${data.maker}</td>
-            <td class="border-r border-slate-900 py-3 px-2 text-center font-bold text-slate-900">${qty.toLocaleString()} ${data.unitLabel || 'EA'}</td>
-            <td class="border-r border-slate-900 py-3 px-3 text-right font-black font-mono">${unitPriceFormatted}</td>
-            <td class="border-r border-slate-900 py-3 px-3 text-right font-black font-mono text-slate-900">${formatMoney(subtotal)}</td>
-            <td class="py-3 px-2 text-center font-bold text-slate-700">${data.delivery || '즉시 출고'}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <!-- 합계 및 공급 조건 (2단 그리드) -->
-      <div class="grid grid-cols-12 gap-4 mt-3">
-        <!-- 좌측 거래 조건 -->
-        <div class="col-span-7 space-y-1 text-[10.5px]">
-          <div class="flex items-center"><strong class="w-36 text-slate-700">* PAYMENT TERMS:</strong> <span class="font-bold text-slate-900">${data.paymentTerms || '선입금 (VAT 포함)'}</span></div>
-          <div class="flex items-center"><strong class="w-36 text-slate-700">* INCO TERMS:</strong> <span class="font-bold text-slate-900">${data.incoTerms || 'DOMESTIC'}</span></div>
-          <div class="flex items-center"><strong class="w-36 text-slate-700">* ORIGIN:</strong> <span class="font-bold text-slate-900">${data.origin || 'Hong Kong'}</span></div>
-          <div class="flex items-center"><strong class="w-36 text-slate-700">SHIPPING PORT:</strong> <span class="font-bold text-slate-900">${data.shippingPort || 'H.K.'}</span></div>
-          <div class="flex items-center"><strong class="w-36 text-slate-700">* VALIDITY:</strong> <span class="font-bold text-indigo-900">${data.validity || '7 DAYS'}</span></div>
-          ${data.memo ? `<div class="flex items-start pt-0.5"><strong class="w-36 text-slate-700">REMARKS:</strong> <span class="font-medium text-slate-800">${data.memo}</span></div>` : ''}
-        </div>
-
-        <!-- 우측 금액 합계 정산 테이블 -->
-        <div class="col-span-5 border border-slate-900 divide-y divide-slate-300 text-[11px] self-start">
-          <div class="flex justify-between py-1.5 px-3">
-            <span class="font-bold text-slate-700">AMOUNT:</span>
-            <span class="font-mono font-bold">${formatMoney(subtotal)}</span>
-          </div>
-          <div class="flex justify-between py-1.5 px-3">
-            <span class="font-bold text-slate-700">VAT (10%):</span>
-            <span class="font-mono font-bold">${formatMoney(vat)}</span>
-          </div>
-          <div class="flex justify-between py-2 px-3 bg-slate-100 font-black text-slate-950 border-t-2 border-slate-900">
-            <span>* TOTAL AMOUNT :</span>
-            <span class="font-mono text-xs">${formatMoney(totalAmount)}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 공식 레터 문구 -->
-      <div class="mt-4 pt-3 border-t border-slate-300 text-[10.5px] text-slate-600 italic">
-        We are pleased to offer you the parts on the terms and conditions described as above.
-      </div>
-
-      <!-- 하단: 입금 계좌 정보 & 결재(Authorized by) 날인란 -->
-      <div class="mt-4 grid grid-cols-2 gap-4 items-end">
-        <!-- 계좌 정보 -->
-        <div class="p-3 bg-slate-50 border border-slate-300 rounded-lg text-[10.5px] leading-relaxed">
-          <div class="font-bold text-slate-900 mb-1 flex items-center gap-1">
-            <span>🏦</span> * ACCOUNT INFO: <span class="text-indigo-900 font-black">- 원화(₩) 계좌 -</span>
-          </div>
-          <div class="text-slate-700">KEB하나은행으로 송금부탁드립니다.</div>
-          <div class="text-slate-900 font-bold">예금주: (주)빅샤인코리아</div>
-          <div class="font-mono font-black text-slate-950 text-xs mt-0.5">계좌번호 : 374-890003-50704 (144-22-01385-8)</div>
-        </div>
-
-        <!-- 결재 및 직인 서명란 -->
-        <div class="text-right space-y-2 pr-2">
-          <div class="text-[11px] text-slate-500 font-semibold">CC: D.I.Lee</div>
-          <div class="text-sm font-black text-slate-900 tracking-wide flex items-center justify-end gap-2">
-            <span>* Authorized by</span>
-            <span class="inline-block border-b-2 border-slate-800 w-28 text-center text-xs font-serif text-slate-400 font-normal">
-              (주)빅샤인코리아
-            </span>
-          </div>
-        </div>
-      </div>
-
+      <iframe src="${pdfUrl}#toolbar=1" class="w-full flex-1 border border-slate-300 rounded-xl bg-white shadow-inner"></iframe>
     </div>
   `;
 
   modal.classList.remove('hidden');
+}
+
+export function openQuotationPrintModal(data) {
+  generateOfficialQuotationPdf(data);
 }
