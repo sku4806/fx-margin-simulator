@@ -783,6 +783,47 @@ async function saveCurrentForm() {
   }
 }
 
+function resetCurrentForm() {
+  editingItemId = null;
+  const banner = document.getElementById('editingBanner');
+  if (banner) banner.classList.add('hidden');
+
+  // 감사 이력 영역 숨김 및 초기화
+  const auditContainer = document.getElementById('auditHistoryContainer');
+  if (auditContainer) {
+    auditContainer.classList.add('hidden');
+    auditContainer.innerHTML = '';
+  }
+
+  // 주요 입력 필드 초기화
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+
+  setVal('inputPartName', '');
+  setVal('inputDateCode', '');
+  setVal('inputCustomer', '');
+  setVal('inputSoldPrice', '');
+  setVal('inputInvoiceNo', '');
+  setVal('inputTrackingNo', '');
+  setVal('inputDueDate', '');
+  setVal('inputShippedDate', '');
+  setVal('inputSettledDate', '');
+  setVal('inputSettledFx', '');
+  setVal('inputMemo', '');
+  setVal('inputStock', '');
+  setVal('inputSpq', '');
+  
+  const spqContainer = document.getElementById('spqFeedbackContainer');
+  if (spqContainer) {
+    spqContainer.classList.add('hidden');
+    spqContainer.innerHTML = '';
+  }
+
+  runEngine();
+}
+
 async function handleDeleteItem(id) {
   if (!isCsOrAdminUser()) return;
   if (!confirm("해당 건을 영구 삭제하시겠습니까?")) return;
@@ -790,8 +831,7 @@ async function handleDeleteItem(id) {
     const delTarget = getCachedItem(id);
     await recordAuditLog(id, delTarget?.partName || '부품', 'DELETE', `항목 영구 삭제 (수량: ${delTarget?.stock || 0} EA, 소유: ${delTarget?.owner || '-'})`);
     await deleteInventoryItem(id);
-    editingItemId = null;
-    document.getElementById('editingBanner')?.classList.add('hidden');
+    resetCurrentForm();
     await refreshInventory();
   } catch (err) {
     alert("삭제 실패: " + err.message);
