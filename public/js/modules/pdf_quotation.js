@@ -1,14 +1,37 @@
 /**
- * 📄 pdf-lib 기반 빅샤인 코리아 원본 PDF 템플릿 오버레이 모듈
+ * 📄 pdf-lib 기반 빅샤인 코리아 원본 PDF 템플릿 한글 지원 오버레이 모듈
  */
+
+let cachedFontRegular = null;
+let cachedFontBold = null;
+
+async function loadKoreanFonts() {
+  if (cachedFontRegular && cachedFontBold) {
+    return { fontRegularBytes: cachedFontRegular, fontBoldBytes: cachedFontBold };
+  }
+  
+  const [resReg, resBold] = await Promise.all([
+    fetch('/fonts/NanumGothic.ttf'),
+    fetch('/fonts/NanumGothicBold.ttf')
+  ]);
+
+  if (!resReg.ok || !resBold.ok) {
+    throw new Error("한글 폰트 파일(/fonts/NanumGothic.ttf)을 불러올 수 없습니다.");
+  }
+
+  cachedFontRegular = await resReg.arrayBuffer();
+  cachedFontBold = await resBold.arrayBuffer();
+
+  return { fontRegularBytes: cachedFontRegular, fontBoldBytes: cachedFontBold };
+}
 
 export async function generateOfficialQuotationPdf(data) {
   if (!window.PDFLib) {
-    alert("PDF 생성 모듈(pdf-lib)을 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+    alert("PDF 라이브러리를 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
     return;
   }
 
-  const { PDFDocument, rgb, StandardFonts } = window.PDFLib;
+  const { PDFDocument, rgb } = window.PDFLib;
 
   try {
     // 1. 템플릿 PDF 로드
@@ -18,18 +41,22 @@ export async function generateOfficialQuotationPdf(data) {
     });
 
     const pdfDoc = await PDFDocument.load(templateBytes);
+    
+    // fontkit 등록
     if (window.fontkit) {
       pdfDoc.registerFontkit(window.fontkit);
+    } else {
+      throw new Error("fontkit 모듈이 로드되지 않았습니다.");
     }
+
+    // 2. 한글 TTF 폰트 임베딩
+    const { fontRegularBytes, fontBoldBytes } = await loadKoreanFonts();
+    const fontKrRegular = await pdfDoc.embedFont(fontRegularBytes);
+    const fontKrBold = await pdfDoc.embedFont(fontBoldBytes);
 
     const pages = pdfDoc.getPages();
     const firstPage = pages[0];
     const { width, height } = firstPage.getSize();
-
-    // 폰트 로드 (영문 및 숫자용)
-    const fontHelvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontHelveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const fontCourier = await pdfDoc.embedFont(StandardFonts.CourierBold);
 
     // 날짜 및 REF 번호 계산
     const today = new Date();
@@ -58,10 +85,10 @@ export async function generateOfficialQuotationPdf(data) {
       subtotal = upKrw * qty;
       vat = Math.round(subtotal * 0.1);
       total = subtotal + vat;
-      unitPriceText = `\\${upKrw.toLocaleString()}`;
-      subtotalText = `\\${subtotal.toLocaleString()}`;
-      vatText = `\\${vat.toLocaleString()}`;
-      totalText = `\\${total.toLocaleString()}`;
+      unitPriceText = `₩${upKrw.toLocaleString()}`;
+      subtotalText = `₩${subtotal.toLocaleString()}`;
+      vatText = `₩${vat.toLocaleString()}`;
+      totalText = `₩${total.toLocaleString()}`;
     } else {
       subtotal = unitPrice * qty;
       vat = subtotal * 0.1;
@@ -72,7 +99,7 @@ export async function generateOfficialQuotationPdf(data) {
       totalText = `$${total.toFixed(2)}`;
     }
 
-    // --- 🛠️ 2. 기존 가변 영역 흰색 마스킹 (지우기) ---
+    // --- 🛠️ 3. 기존 원본 가변 영역 흰색 마스킹 (지우기) ---
     const mask = (x, y, w, h) => {
       firstPage.drawRectangle({
         x, y, width: w, height: h,
@@ -80,52 +107,52 @@ export async function generateOfficialQuotationPdf(data) {
       });
     };
 
-    // TO / ATTN 영역 마스킹
+    // TO / ATTN 영역
     mask(68, height - 88, 180, 48);
 
-    // DATE / REF / FROM 영역 마스킹
+    // DATE / REF / FROM 영역
     mask(455, height - 165, 110, 45);
 
-    // 1번 품목 행 데이터 영역 마스킹 (No 1 제외한 나머지 행 내용)
+    // 1번 품목 행 데이터 영역 (No 1 제외한 나머지)
     mask(58, height - 250, 490, 20);
 
-    // AMOUNT, VAT, TOTAL AMOUNT 영역 마스킹
+    // AMOUNT, VAT, TOTAL AMOUNT 영역
     mask(450, height - 335, 110, 65);
 
-    // --- ✍️ 3. 새 데이터 오버레이 렌더링 ---
-    const drawText = (txt, x, y, size = 9, font = fontHelvetica, color = rgb(0, 0, 0)) => {
+    // --- ✍️ 4. 한글 폰트로 새 데이터 오버레이 렌더링 ---
+    const drawText = (txt, x, y, size = 9, font = fontKrRegular, color = rgb(0, 0, 0)) => {
       firstPage.drawText(String(txt || ''), { x, y, size, font, color });
     };
 
-    // 3-1. 수신처 정보
-    drawText(data.customer || 'Customer', 72, height - 58, 10, fontHelveticaBold);
-    drawText(data.attn || 'Purchasing / R&D Team', 72, height - 73, 9, fontHelvetica);
+    // 4-1. 수신처 정보
+    drawText(data.customer || '고객사', 72, height - 58, 10, fontKrBold);
+    drawText(`${data.attn || '구매/개발 담당자'} 님`, 72, height - 73, 9, fontKrRegular);
 
-    // 3-2. 견적 메타 정보 (DATE, REF, FROM)
-    drawText(dateStr, 460, height - 131, 8.5, fontHelveticaBold);
-    drawText(refNo, 460, height - 146, 8.5, fontCourier, rgb(0.05, 0.15, 0.4));
-    drawText(data.salesRep || 'Nathan Kim', 460, height - 161, 8.5, fontHelveticaBold);
+    // 4-2. 견적 메타 정보 (DATE, REF, FROM)
+    drawText(dateStr, 460, height - 131, 8.5, fontKrBold);
+    drawText(refNo, 460, height - 146, 8.5, fontKrBold, rgb(0.05, 0.15, 0.4));
+    drawText(data.salesRep || 'Nathan Kim', 460, height - 161, 8.5, fontKrBold);
 
-    // 3-3. 품목 행 (No, Part#, MFG, QTY, U/P, AMOUNT, DELIVERY)
-    drawText(data.partName || '-', 65, height - 242, 9, fontHelveticaBold);
-    drawText(data.maker || '-', 215, height - 242, 8.5, fontHelvetica);
-    drawText(`${qty.toLocaleString()} ${data.unitLabel || 'EA'}`, 280, height - 242, 8.5, fontHelvetica);
-    drawText(unitPriceText, 350, height - 242, 9, fontCourier);
-    drawText(subtotalText, 430, height - 242, 9, fontCourier);
-    drawText(data.delivery || 'Stock / 2-3WKS', 505, height - 242, 8, fontHelvetica);
+    // 4-3. 품목 행 (PART#, MFG, QTY, U/P, AMOUNT, DELIVERY)
+    drawText(data.partName || '-', 65, height - 242, 8.5, fontKrBold);
+    drawText(data.maker || '-', 215, height - 242, 8.5, fontKrRegular);
+    drawText(`${qty.toLocaleString()} ${data.unitLabel || 'EA'}`, 280, height - 242, 8.5, fontKrRegular);
+    drawText(unitPriceText, 350, height - 242, 8.5, fontKrBold);
+    drawText(subtotalText, 430, height - 242, 8.5, fontKrBold);
+    drawText(data.delivery || '2-3WKS', 505, height - 242, 8, fontKrRegular);
 
-    // 3-4. 우측 정산 금액 영역
-    drawText(subtotalText, 475, height - 283, 9, fontCourier);
-    drawText(vatText, 475, height - 303, 9, fontCourier);
-    drawText(totalText, 475, height - 325, 9.5, fontCourier, rgb(0.1, 0.1, 0.1));
+    // 4-4. 우측 정산 금액 영역
+    drawText(subtotalText, 470, height - 283, 8.5, fontKrBold);
+    drawText(vatText, 470, height - 303, 8.5, fontKrBold);
+    drawText(totalText, 470, height - 325, 9, fontKrBold, rgb(0.1, 0.1, 0.1));
 
-    // 4. 완료된 PDF 바이트 추출 및 Blob URL 생성
+    // 5. PDF 바이트 생성
     const pdfBytes = await pdfDoc.save();
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const pdfUrl = URL.createObjectURL(blob);
 
-    // 5. 모달 내 iframe 미리보기 및 다운로드 연동
-    openQuotationPdfModal(pdfUrl, `${data.customer || 'BigShine'}_Quotation_${data.partName || ''}.pdf`);
+    // 6. 모달 내 미리보기 및 다운로드 연동
+    openQuotationPdfModal(pdfUrl, `${data.customer || 'BigShine'}_견적서_${data.partName || ''}.pdf`);
 
   } catch (err) {
     console.error("[PDF-Lib Error]", err);
@@ -133,9 +160,6 @@ export async function generateOfficialQuotationPdf(data) {
   }
 }
 
-/**
- * 생성된 순정 PDF 미리보기 및 다운로드 모달 열기
- */
 function openQuotationPdfModal(pdfUrl, downloadFilename) {
   const modal = document.getElementById('quotationPdfModal');
   const preview = document.getElementById('quotationPrintArea');
