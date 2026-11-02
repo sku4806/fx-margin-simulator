@@ -1,4 +1,3 @@
-import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
@@ -11,6 +10,7 @@ import {
 } from './modules/packaging.js';
 import { openTrackingModal } from './modules/courier.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
+import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { 
   fetchInventoryItems, 
@@ -260,6 +260,16 @@ function bindInputs() {
 
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
+
+  // 📊 KPI 서머리 바 펼치기/접기 토글
+  safeAddListener('toggleKpiBtn', 'click', () => {
+    const bar = document.getElementById('kpiSummaryBar');
+    const arrow = document.getElementById('kpiToggleArrow');
+    if (!bar) return;
+    const isHidden = bar.classList.toggle('hidden');
+    if (arrow) {
+      arrow.innerText = isHidden ? '▼' : '▲';
+    }
   });
 
   const spaCheck = document.getElementById('checkIsSpa');
@@ -282,16 +292,6 @@ function bindInputs() {
   safeAddListener('saveItemBtn', 'click', saveCurrentForm);
   safeAddListener('openLandedCostBtn', 'click', () => {
     document.getElementById('landedCostModal')?.classList.remove('hidden');
-  });
-
-    // 📊 KPI 서머리 바 펼치기/접기 토글
-  safeAddListener('toggleKpiBtn', 'click', () => {
-    const bar = document.getElementById('kpiSummaryBar');
-    const arrow = document.getElementById('kpiToggleArrow');
-    const isHidden = bar.classList.toggle('hidden');
-    if (arrow) {
-      arrow.innerText = isHidden ? '▼' : '▲';
-    }
   });
 
   safeAddListener('excelExportBtn', 'click', () => {
@@ -610,7 +610,9 @@ function loadFormFromItem(id) {
   updateFxVarianceFeedback();
   updateSpqNotice();
   runEngine();
-  if (item && item.id) { renderAuditHistory('auditHistoryContainer', item.id, item.partName); }
+  if (item && item.id) {
+    renderAuditHistory('auditHistoryContainer', item.id, item.partName);
+  }
   document.getElementById('formSection')?.scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -707,7 +709,6 @@ async function saveCurrentForm() {
     const savedItem = await upsertInventoryItem(payload, editingItemId);
     const targetId = editingItemId || savedItem?.id;
 
-    // 📝 변경 전/후 상세 비교 로그 생성
     let auditDetail = "";
     if (isNew) {
       auditDetail = `신규 등록: ${payload.maker} / ${payload.stock.toLocaleString()} EA / 매입원가 $${payload.unit_usd}`;
@@ -733,8 +734,7 @@ async function saveCurrentForm() {
 
     if (targetId) {
       await recordAuditLog(targetId, payload.part_name, isNew ? 'CREATE' : 'UPDATE', auditDetail);
-      // 저장 후 타임라인 즉시 새로고침
-      if (targetId) { await renderAuditHistory('auditHistoryContainer', targetId, payload.part_name); }
+      await renderAuditHistory('auditHistoryContainer', targetId, payload.part_name);
     }
 
     alert(`[${payload.part_name}] 데이터가 안전하게 저장되었습니다.`);
@@ -749,14 +749,12 @@ function resetCurrentForm() {
   const banner = document.getElementById('editingBanner');
   if (banner) banner.classList.add('hidden');
 
-  // 감사 이력 영역 숨김 및 초기화
   const auditContainer = document.getElementById('auditHistoryContainer');
   if (auditContainer) {
     auditContainer.classList.add('hidden');
     auditContainer.innerHTML = '';
   }
 
-  // 주요 입력 필드 초기화
   const setVal = (id, val) => {
     const el = document.getElementById(id);
     if (el) el.value = val;
