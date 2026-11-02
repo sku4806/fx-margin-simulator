@@ -284,21 +284,23 @@ function bindInputs() {
       ? soldPrice
       : (parseFloat(document.getElementById('minSaleUnitReplaceUsd')?.innerText.replace('$', '')) || 0);
 
+    const ownerVal = (owner === '본사 일반재고' || owner === '미배정' || !owner) ? '' : owner;
+
     downloadOfficialQuotationExcel({
-      partName,
+      partName: partName,
       maker: maker || '',
-      dateCode,
-      customer: customer || '고객사 귀중',
-      attn: '구매/개발 담당자 님',
-      qty,
-      spq,
-      currency,
+      dateCode: dateCode,
+      customer: customer || '',
+      attn: '',
+      qty: qty,
+      spq: spq,
+      currency: currency,
       unitPriceUsd: currency === 'USD' ? unitPrice : 0,
       unitPriceKrw: currency === 'KRW' ? Math.round(unitPrice * appliedFxRate) : 0,
       appliedFx: appliedFxRate,
-      paymentTerms,
+      paymentTerms: paymentTerms,
       delivery: '즉시 출고 (2-3WKS)',
-      salesRep: document.getElementById('selectOwner')?.value || '황 환'
+      salesRep: ownerVal
     });
   });
 
