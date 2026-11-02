@@ -411,6 +411,9 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-end">
+          <button type="button" id="toggleKpiBtn" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1.5 rounded-lg border border-indigo-200 flex items-center gap-1 shadow-sm transition-colors">
+            <span>📊</span> KPI 지표 <span id="kpiToggleArrow" class="text-[9px]">▼</span>
+          </button>
           <button id="excelExportBtn" class="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors">
             <span>📥</span> 엑셀 다운로드
           </button>
@@ -438,7 +441,7 @@
       </div>
 
       <div id="unlockedContent" class="hidden space-y-2.5">
-        <div id="kpiSummaryBar" class="pt-1"></div>
+        <div id="kpiSummaryBar" class="pt-1 hidden transition-all duration-200"></div>
 
         <div class="bg-slate-50 p-2 rounded-xl border border-slate-200/80 grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-center">
           <div class="col-span-2 relative">

@@ -282,6 +282,16 @@ function bindInputs() {
     document.getElementById('landedCostModal')?.classList.remove('hidden');
   });
 
+    // 📊 KPI 서머리 바 펼치기/접기 토글
+  safeAddListener('toggleKpiBtn', 'click', () => {
+    const bar = document.getElementById('kpiSummaryBar');
+    const arrow = document.getElementById('kpiToggleArrow');
+    const isHidden = bar.classList.toggle('hidden');
+    if (arrow) {
+      arrow.innerText = isHidden ? '▼' : '▲';
+    }
+  });
+
   safeAddListener('excelExportBtn', 'click', () => {
     try {
       const q = document.getElementById('searchInput')?.value || "";
