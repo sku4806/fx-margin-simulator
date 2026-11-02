@@ -160,7 +160,11 @@
           <h2 id="formTitle" class="font-bold text-xs sm:text-base text-slate-900">수주 및 재고 배정 등록 (Sales Order Entry)</h2>
           <p id="formSubtitle" class="text-[10px] sm:text-[11px] text-slate-400">공식 배정 물량, 협의 단가 및 Date Code를 설정합니다.</p>
         </div>
-        <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-sm">
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="openPackagingConfigBtn" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1 transition-colors">
+            <span>📦</span> 라인별 포장기준 설정
+          </button>
+          <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-sm">
           저장
         </button>
       </div>
@@ -243,12 +247,12 @@
             </div>
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px]">수주/보유 수량 (EA)</label>
-              <input type="number" id="inputStock" value="5000" step="100" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
+              <input type="number" id="inputStock" value="" placeholder="수량 입력" step="100" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
               <div id="spqFeedbackContainer" class="hidden mt-1"></div>
             </div>
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">포장 단위 (SPQ / Reel)</label>
-              <input type="number" id="inputSpq" value="2500" step="100" placeholder="예: 2500" class="w-full p-2 border rounded-lg bg-indigo-50/30 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none">
+              <input type="number" id="inputSpq" value="" placeholder="포장단위 입력" step="100" placeholder="예: 2500" class="w-full p-2 border rounded-lg bg-indigo-50/30 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
             <div class="col-span-2 lg:col-span-1">
               <label class="text-slate-600 block mb-0.5 text-[11px]">선적일 (Shipping Date)</label>
@@ -552,6 +556,75 @@
       </div>
       <div class="flex-1 w-full bg-slate-50 border rounded-xl overflow-hidden relative">
         <iframe id="trackingIframe" src="" class="w-full h-full border-0"></iframe>
+      </div>
+    </div>
+  </div>
+
+  
+  <div id="packagingConfigModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 hidden">
+    <div class="bg-white w-full max-w-2xl max-h-[85vh] rounded-2xl p-4 sm:p-6 shadow-2xl border border-slate-200 flex flex-col space-y-3">
+      <div class="flex justify-between items-center border-b pb-2.5">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📦</span>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900">라인별 CS 포장 단위(SPQ/MOQ) 마스터 설정</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">담당 CS가 라인별 표준 Reel/포장 단위를 등록해두면 수주 시 자동 연동됩니다.</p>
+          </div>
+        </div>
+        <button onclick="document.getElementById('packagingConfigModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-1.5">✕</button>
+      </div>
+
+      <form id="packagingConfigForm" class="p-3 bg-slate-50 border rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div>
+          <label class="text-slate-600 block mb-0.5 font-semibold text-[11px]">제조사 라인</label>
+          <select id="pkgConfigMaker" class="w-full p-2 border rounded-lg bg-white font-bold outline-none cursor-pointer">
+            <option value="GigaDevice">GigaDevice</option>
+            <option value="ISSI">ISSI</option>
+            <option value="Lumissil">Lumissil</option>
+            <option value="XMOS">XMOS</option>
+            <option value="Silicon Motion">Silicon Motion</option>
+            <option value="ESMT">ESMT</option>
+            <option value="Innodisk">Innodisk</option>
+            <option value="SSSTC">SSSTC</option>
+            <option value="Giantec">Giantec</option>
+            <option value="WIZnet">WIZnet</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-slate-600 block mb-0.5 font-semibold text-[11px]">담당 CS 매니저</label>
+          <input type="text" id="pkgConfigCs" required placeholder="예: Trisha / Jamie" class="w-full p-2 border rounded-lg bg-white font-semibold outline-none">
+        </div>
+        <div>
+          <label class="text-slate-600 block mb-0.5 font-semibold text-[11px]">표준 포장단위 (SPQ/Reel)</label>
+          <input type="number" id="pkgConfigSpq" placeholder="예: 2500" class="w-full p-2 border rounded-lg bg-white font-bold text-indigo-900 outline-none">
+        </div>
+        <div>
+          <label class="text-slate-600 block mb-0.5 font-semibold text-[11px]">최소 발주단위 (MOQ)</label>
+          <input type="number" id="pkgConfigMoq" placeholder="예: 5000" class="w-full p-2 border rounded-lg bg-white outline-none">
+        </div>
+        <div class="col-span-2 sm:col-span-3">
+          <input type="text" id="pkgConfigMemo" placeholder="패키지 특이사항 비고 (예: SOP Reel 2500EA, Tray 500EA)" class="w-full p-2 border rounded-lg bg-white text-xs outline-none">
+        </div>
+        <div>
+          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg text-xs shadow-sm">
+            기준 저장/수정
+          </button>
+        </div>
+      </form>
+
+      <div class="overflow-y-auto flex-1 border rounded-xl">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-50 text-slate-500 border-b font-semibold sticky top-0">
+            <tr>
+              <th class="py-2 px-2">제조사 라인</th>
+              <th class="py-2 px-2">담당 CS</th>
+              <th class="py-2 px-2">표준 SPQ (Reel)</th>
+              <th class="py-2 px-2">최소 MOQ</th>
+              <th class="py-2 px-2">비고</th>
+            </tr>
+          </thead>
+          <tbody id="packagingConfigTbody" class="divide-y divide-slate-100 font-medium"></tbody>
+        </table>
       </div>
     </div>
   </div>

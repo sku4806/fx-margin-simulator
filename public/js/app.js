@@ -2,7 +2,7 @@ import { openTrackingModal } from './modules/courier.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
-import { evaluatePackaging, getDefaultSpq } from './modules/packaging.js';
+import { evaluatePackaging, fetchPackagingStandards, getStandardSpq, getAllStandards, savePackagingStandard } from './modules/packaging.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { fetchInventoryItems, upsertInventoryItem, splitInventoryShipment, deleteInventoryItem, filterItems, getCachedItem, renderInventoryUI } from './inventory.js';
@@ -30,6 +30,8 @@ export async function bootstrap() {
     console.warn("FX 기본값 유지", err);
   }
   updateFxDisplay();
+  await fetchPackagingStandards();
+  renderPackagingTable();
 
   bindTabSwitch();
   bindInputs();
@@ -195,7 +197,8 @@ function bindInputs() {
     const maker = document.getElementById('selectMaker')?.value;
     const spqEl = document.getElementById('inputSpq');
     if (spqEl) {
-      spqEl.value = getDefaultSpq(maker);
+      const csSpq = getStandardSpq(maker);
+      spqEl.value = csSpq !== null ? csSpq : '';
     }
     updateSpqNotice();
   });
@@ -523,7 +526,7 @@ function loadFormFromItem(id) {
   setVal('inputUsd', item.unitUsd);
   setVal('inputShipFx', item.shipFx);
   setVal('inputStock', item.stock);
-  setVal('inputSpq', item.spq || getDefaultSpq(item.maker));
+  setVal('inputSpq', item.spq || getStandardSpq(item.maker) || '');
 
   const spaCheck = document.getElementById('checkIsSpa');
   const spaDebitWrapper = document.getElementById('spaDebitWrapper');
@@ -671,6 +674,63 @@ function copyQuotation() {
 - 총견적액: ${totalReplace}
 * 기준환율: ${fxRateText}`;
   navigator.clipboard.writeText(quote).then(() => alert("견적서 텍스트가 복사되었습니다!"));
+}
+
+
+function renderPackagingTable() {
+  const tbody = document.getElementById('packagingConfigTbody');
+  const standards = getAllStandards();
+  const keys = Object.keys(standards);
+  if (keys.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">등록된 라인별 CS 포장 기준이 없습니다.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = keys.map(k => {
+    const item = standards[k];
+    return `
+      <tr class="hover:bg-indigo-50/50">
+        <td class="py-2 px-2 font-bold text-slate-900">${k}</td>
+        <td class="py-2 px-2 font-semibold text-indigo-700">${item.csManager || '-'}</td>
+        <td class="py-2 px-2 font-bold text-slate-800">${item.spq ? item.spq.toLocaleString() + ' EA' : '-'}</td>
+        <td class="py-2 px-2 text-slate-600">${item.moq ? item.moq.toLocaleString() + ' EA' : '-'}</td>
+        <td class="py-2 px-2 text-slate-500 text-[11px]">${item.memo || '-'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+safeAddListener('openPackagingConfigBtn', 'click', () => {
+    alert("포장단위 기준 마스터 관리는 CS 및 관리자 권한만 가능합니다.");
+    return;
+  }
+  renderPackagingTable();
+  document.getElementById('packagingConfigModal')?.classList.remove('hidden');
+});
+
+const pkgConfigForm = document.getElementById('packagingConfigForm');
+if (pkgConfigForm) {
+  pkgConfigForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const maker = document.getElementById('pkgConfigMaker')?.value;
+    const cs = document.getElementById('pkgConfigCs')?.value.trim();
+    const spq = document.getElementById('pkgConfigSpq')?.value;
+    const moq = document.getElementById('pkgConfigMoq')?.value;
+    const memo = document.getElementById('pkgConfigMemo')?.value.trim();
+
+    try {
+      await savePackagingStandard(maker, cs, spq, moq, memo);
+      alert(`[${maker}] 라인의 CS 포장 단위 기준이 성공적으로 저장되었습니다.`);
+      renderPackagingTable();
+      // 현재 선택된 제조사와 같으면 폼에도 즉시 반영
+      const curMaker = document.getElementById('selectMaker')?.value;
+      if (curMaker === maker) {
+        document.getElementById('inputSpq').value = spq || '';
+        updateSpqNotice();
+      }
+    } catch (err) {
+      alert("저장 실패: " + err.message);
+    }
+  };
 }
 
 bootstrap();
