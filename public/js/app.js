@@ -1,3 +1,4 @@
+console.log('[App] Booting BSK ERP Engine...');
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
@@ -820,4 +821,12 @@ function copyQuotation() {
   navigator.clipboard.writeText(quote).then(() => alert("견적서 텍스트가 복사되었습니다!"));
 }
 
-bootstrap();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('[App] DOMContentLoaded -> Running bootstrap');
+    bootstrap();
+  });
+} else {
+  console.log('[App] DOM already loaded -> Running bootstrap immediately');
+  bootstrap();
+}
