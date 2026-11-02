@@ -1,3 +1,5 @@
+import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
+import { openQuotationPrintModal } from './modules/pdf_quotation.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
@@ -259,6 +261,45 @@ function bindInputs() {
 
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
+  // 📄 공식 PDF 견적서 발행 버튼 연동
+  safeAddListener('openPdfQuoteBtn', 'click', () => {
+    const partName = document.getElementById('inputPartName')?.value.trim();
+    if (!partName) {
+      alert("부품명을 먼저 입력해주세요.");
+      return;
+    }
+    const maker = (document.getElementById('selectMaker')?.value === '__CUSTOM_MAKER__')
+      ? document.getElementById('inputCustomMaker')?.value.trim() : document.getElementById('selectMaker')?.value;
+    const dateCode = document.getElementById('inputDateCode')?.value.trim();
+    const customer = document.getElementById('inputCustomer')?.value.trim();
+    const qty = parseFloat(document.getElementById('inputStock')?.value) || 0;
+    const spq = document.getElementById('inputSpq')?.value;
+    const paymentTerms = document.getElementById('selectPaymentTerms')?.value || 'Net 30';
+    const memo = document.getElementById('inputMemo')?.value.trim();
+
+    // 단가: 협의 실판매가 우선, 없으면 권고 교체원가선
+    const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value);
+    const unitPrice = (soldPrice && soldPrice > 0)
+      ? soldPrice
+      : (parseFloat(document.getElementById('minSaleUnitReplaceUsd')?.innerText.replace('$', '')) || 0);
+
+    const session = document.getElementById('authActionBtn')?.innerText.includes('로그아웃');
+
+    openQuotationPrintModal({
+      partName,
+      maker: maker || '기타',
+      dateCode,
+      customer,
+      qty,
+      spq,
+      unitPriceUsd: unitPrice,
+      appliedFx: appliedFxRate,
+      paymentTerms,
+      memo,
+      salesRep: document.getElementById('selectOwner')?.value,
+      userEmail: ''
+    });
+  });
 
   const spaCheck = document.getElementById('checkIsSpa');
   const spaDebitWrapper = document.getElementById('spaDebitWrapper');
@@ -419,6 +460,7 @@ function bindModals() {
 
       try {
         await splitInventoryShipment(targetSplitId, qty, price, cust, rep, deadStockAction);
+        await recordAuditLog(targetSplitId, document.getElementById('splitModalTitle')?.innerText || '부품', 'SPLIT', `출하 분할: ${qty.toLocaleString()} EA -> [${cust}] (판매가 $${price}, 잔여: ${deadStockAction})`);
         alert(`${qty.toLocaleString()}개가 [${cust}] 건으로 분할 출하 등록되었습니다.`);
         document.getElementById('splitShipmentModal')?.classList.add('hidden');
         await refreshInventory();
@@ -607,6 +649,7 @@ function loadFormFromItem(id) {
   updateFxVarianceFeedback();
   updateSpqNotice();
   runEngine();
+  renderAuditHistory('auditHistoryContainer', item.id);
   document.getElementById('formSection')?.scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -698,7 +741,15 @@ async function saveCurrentForm() {
   };
 
   try {
+    const isNew = !editingItemId;
     await upsertInventoryItem(payload, editingItemId);
+    
+    // 📝 감사 로그 기록
+    const auditDetail = isNew 
+      ? `신규 등록: ${payload.maker} / ${payload.stock.toLocaleString()} EA / 매입가 $${payload.unit_usd}`
+      : `정보 수정: 수량 ${payload.stock.toLocaleString()} EA, 실판매가 $${payload.sold_price_usd}, 상태: ${payload.order_status}, 수금: ${payload.payment_status}`;
+    await recordAuditLog(editingItemId, payload.part_name, isNew ? 'CREATE' : 'UPDATE', auditDetail);
+
     alert(`[${payload.part_name}] 데이터가 안전하게 저장되었습니다.`);
     editingItemId = null;
     document.getElementById('editingBanner')?.classList.add('hidden');
@@ -712,6 +763,8 @@ async function handleDeleteItem(id) {
   if (!isCsOrAdminUser()) return;
   if (!confirm("해당 건을 영구 삭제하시겠습니까?")) return;
   try {
+    const delTarget = getCachedItem(id);
+    await recordAuditLog(id, delTarget?.partName || '부품', 'DELETE', `항목 영구 삭제 (수량: ${delTarget?.stock || 0} EA, 소유: ${delTarget?.owner || '-'})`);
     await deleteInventoryItem(id);
     editingItemId = null;
     document.getElementById('editingBanner')?.classList.add('hidden');
