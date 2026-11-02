@@ -314,7 +314,10 @@ export function renderInventoryUI(filtered, activeTab, onSelect, onDelete, onSpl
           <td class="py-3 px-2">${dateDisplayHtml}</td>
           <td class="py-3 px-2 font-mono text-[10px] text-slate-600 leading-tight">
             <div>INV: ${item.invoiceNo || '-'}</div>
-            <div>B/L: ${item.trackingNo ? `<span class="tracking-link text-indigo-600 hover:text-indigo-800 font-bold cursor-pointer underline underline-offset-2" data-tracking="${item.trackingNo}">📦 ${item.trackingNo}</span>` : '-'}</div>
+            <div class="mt-1 flex items-center gap-1">
+              <span>B/L: ${item.trackingNo || '-'}</span>
+              <button class="tracking-btn text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded border border-indigo-200" data-tracking="${item.trackingNo || ''}">🚚 조회</button>
+            </div>
           </td>
           <td class="py-3 px-2">${payBadge}${fxDiffBadge}</td>
           <td class="py-3 px-2">${dueBadge}</td>

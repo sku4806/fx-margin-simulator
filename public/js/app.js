@@ -417,6 +417,19 @@ function applyFilters() {
   });
   renderInventoryUI(filtered, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, canEdit);
   
+  // 🚚 배송조회 버튼 클릭 이벤트
+  document.querySelectorAll('.tracking-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const trk = btn.dataset.tracking;
+      if (!trk || trk.trim() === '' || trk === '-') {
+        alert("운송장(B/L) 번호가 등록되지 않은 건입니다. 먼저 행을 클릭하여 송장 번호를 입력해주세요.");
+        return;
+      }
+      openTrackingModal(trk);
+    };
+  });
+  
   // 🚚 운송장 번호 클릭 시 실시간 배송조회 팝업 연동
   document.querySelectorAll('.tracking-link').forEach(el => {
     el.onclick = (e) => {
