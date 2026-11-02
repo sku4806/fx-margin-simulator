@@ -610,7 +610,10 @@
         <div class="flex items-center gap-2">
           <span class="text-xl">🚚</span>
           <div>
-            <h3 id="trackingModalTitle" class="text-sm sm:text-base font-bold text-slate-900">실시간 배송 현황</h3>
+            <div class="flex items-center gap-2">
+              <h3 id="trackingModalTitle" class="text-sm sm:text-base font-bold text-slate-900">실시간 배송 현황</h3>
+              <select id="trackingCarrierSelect" class="text-xs font-bold bg-slate-100 border border-slate-300 rounded px-1.5 py-0.5 text-indigo-900 outline-none cursor-pointer"></select>
+            </div>
             <p id="trackingInfoText" class="text-[11px] text-indigo-700 font-bold mt-0.5"></p>
           </div>
         </div>

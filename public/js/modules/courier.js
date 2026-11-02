@@ -1,25 +1,31 @@
 /**
- * 🚚 실시간 택배 및 화물 배송조회 모듈 (모바일 최적화 뷰)
+ * 🚚 실시간 택배 및 특송(DHL/FedEx) 배송조회 모듈
  */
 
-const COURIER_CARRIERS = [
+export const COURIER_CARRIERS = [
+  { 
+    id: 'us.dhl', 
+    name: 'DHL Express', 
+    regex: /^(\d{10})$/, 
+    queryUrl: 'https://www.dhl.com/kr-ko/home/tracking/tracking-express.html?submit=1&tracking-id=' 
+  },
   { 
     id: 'kr.cjlogistics', 
     name: 'CJ대한통운', 
-    regex: /^(\d{10}|\d{12})$/, 
-    queryUrl: 'https://m.cjlogistics.com/kor/tool/parcel/tracking?wobNumber=' 
-  },
-  { 
-    id: 'kr.epost', 
-    name: '우체국택배', 
-    regex: /^(\d{13})$/, 
-    queryUrl: 'https://service.epost.go.kr/trace.RetrieveDomRcvtraceList.comm?sid1=' 
+    regex: /^(\d{12})$/, 
+    queryUrl: 'https://trace.cjlogistics.com/next/tracking.html?wblNo=' 
   },
   { 
     id: 'kr.logen', 
     name: '로젠택배', 
     regex: /^(\d{11})$/, 
     queryUrl: 'https://www.ilogen.com/m/personal/trace/' 
+  },
+  { 
+    id: 'kr.epost', 
+    name: '우체국택배', 
+    regex: /^(\d{13})$/, 
+    queryUrl: 'https://service.epost.go.kr/trace.RetrieveDomRcvtraceList.comm?sid1=' 
   },
   { 
     id: 'kr.hanjin', 
@@ -38,17 +44,11 @@ const COURIER_CARRIERS = [
     name: 'FedEx', 
     regex: /^(\d{12}|\d{15})$/, 
     queryUrl: 'https://www.fedex.com/fedextrack/?trknbr=' 
-  },
-  { 
-    id: 'us.dhl', 
-    name: 'DHL Express', 
-    regex: /^(\d{10})$/, 
-    queryUrl: 'https://www.dhl.com/kr-ko/home/tracking/tracking-express.html?submit=1&tracking-id=' 
   }
 ];
 
 export function detectCarrier(trackingNo) {
-  if (!trackingNo) return null;
+  if (!trackingNo) return COURIER_CARRIERS[0];
   const cleanNo = String(trackingNo).replace(/[^a-zA-Z0-9]/g, '');
 
   for (const carrier of COURIER_CARRIERS) {
@@ -70,8 +70,29 @@ export function openTrackingModal(trackingNo) {
   const carrier = detectCarrier(cleanNo);
 
   const modal = document.getElementById('courierTrackingModal');
-  const titleEl = document.getElementById('trackingModalTitle');
   const infoEl = document.getElementById('trackingInfoText');
+  const carrierSelect = document.getElementById('trackingCarrierSelect');
+
+  if (infoEl) infoEl.innerText = `송장번호: ${cleanNo}`;
+
+  // 택배사 셀렉트박스 옵션 초기화 및 선택
+  if (carrierSelect) {
+    carrierSelect.innerHTML = COURIER_CARRIERS.map(c => 
+      `<option value="${c.id}" ${c.id === carrier.id ? 'selected' : ''}>${c.name}</option>`
+    ).join('');
+
+    carrierSelect.onchange = () => {
+      loadCarrierTracking(carrierSelect.value, cleanNo);
+    };
+  }
+
+  loadCarrierTracking(carrier.id, cleanNo);
+  modal?.classList.remove('hidden');
+}
+
+export function loadCarrierTracking(carrierId, cleanNo) {
+  const carrier = COURIER_CARRIERS.find(c => c.id === carrierId) || COURIER_CARRIERS[0];
+  const titleEl = document.getElementById('trackingModalTitle');
   const iframeEl = document.getElementById('trackingIframe');
   const directLinkBtn = document.getElementById('trackingDirectLinkBtn');
 
@@ -81,7 +102,6 @@ export function openTrackingModal(trackingNo) {
   }
 
   if (titleEl) titleEl.innerText = `[${carrier.name}] 실시간 배송 현황`;
-  if (infoEl) infoEl.innerText = `송장번호: ${cleanNo}`;
   if (directLinkBtn) {
     directLinkBtn.href = fullUrl;
     directLinkBtn.target = "_blank";
@@ -90,6 +110,4 @@ export function openTrackingModal(trackingNo) {
   if (iframeEl) {
     iframeEl.src = fullUrl;
   }
-
-  modal?.classList.remove('hidden');
 }
