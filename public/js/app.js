@@ -11,7 +11,6 @@ import {
 import { openTrackingModal } from './modules/courier.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
-import { openQuotationPrintModal } from './modules/pdf_quotation.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { 
   fetchInventoryItems, 
@@ -263,48 +262,7 @@ function bindInputs() {
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
 
   // 📄 공식 PDF 견적서 발행 버튼 연동
-  safeAddListener('openPdfQuoteBtn', 'click', () => {
-    const partName = document.getElementById('inputPartName')?.value.trim();
-    if (!partName) {
-      alert("견적서를 발행할 부품명을 먼저 입력하거나 목록에서 선택해주세요.");
-      return;
-    }
-
-    const maker = (document.getElementById('selectMaker')?.value === '__CUSTOM_MAKER__')
-      ? document.getElementById('inputCustomMaker')?.value.trim() : document.getElementById('selectMaker')?.value;
-    const dateCode = document.getElementById('inputDateCode')?.value.trim();
-    const customer = document.getElementById('inputCustomer')?.value.trim();
-    const qty = parseFloat(document.getElementById('inputStock')?.value) || 0;
-    const spq = document.getElementById('inputSpq')?.value;
-    const currency = document.getElementById('selectCurrency')?.value || 'USD';
-    const paymentTerms = document.getElementById('selectPaymentTerms')?.value || '익월말 현금결제 (VAT 포함)';
-
-    const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value);
-    const unitPrice = (soldPrice && soldPrice > 0)
-      ? soldPrice
-      : (parseFloat(document.getElementById('minSaleUnitReplaceUsd')?.innerText.replace('$', '')) || 0);
-
-    openQuotationPrintModal({
-      partName,
-      maker: maker || '',
-      dateCode,
-      customer: customer || '고객사 귀중',
-      attn: '구매/개발 담당자',
-      qty,
-      spq,
-      currency,
-      unitPriceUsd: currency === 'USD' ? unitPrice : 0,
-      unitPriceKrw: currency === 'KRW' ? Math.round(unitPrice * appliedFxRate) : 0,
-      appliedFx: appliedFxRate,
-      paymentTerms,
-      delivery: '즉시 출고 (2-3WKS)',
-      incoTerms: 'DOMESTIC',
-      origin: 'TAIWAN',
-      shippingPort: 'TAIWAN',
-      validity: '7 DAYS',
-      salesRep: document.getElementById('selectOwner')?.value || 'Nathan Kim'
     });
-  });
 
   // 📊 KPI 서머리 바 토글
   safeAddListener('toggleKpiBtn', 'click', () => {
