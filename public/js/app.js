@@ -261,11 +261,6 @@ function bindInputs() {
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
 
-  // 📄 빅샤인 코리아 원본 서식 기반 공식 견적서 엑셀 다운로드
-    });
-  });
-  });
-
   // 📊 KPI 서머리 바 토글
   safeAddListener('toggleKpiBtn', 'click', () => {
     const bar = document.getElementById('kpiSummaryBar');
