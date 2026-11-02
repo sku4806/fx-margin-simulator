@@ -521,6 +521,32 @@
   </div>
 
   
+  
+  <!-- 📜 모달 9: 전체 변경 이력 조회 모달 -->
+  <div id="allAuditModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 hidden">
+    <div class="bg-white w-full max-w-2xl max-h-[85vh] rounded-2xl p-4 sm:p-6 shadow-2xl border border-slate-200 flex flex-col space-y-3">
+      <div class="flex justify-between items-center border-b pb-2.5">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📜</span>
+          <div>
+            <h3 id="allAuditTitle" class="text-sm sm:text-base font-bold text-slate-900">전체 변경 이력 (Audit Trail)</h3>
+            <p id="allAuditSubtitle" class="text-[11px] text-slate-400 mt-0.5">해당 품목의 등록 이후 모든 수정/분할/작업 내역입니다.</p>
+          </div>
+        </div>
+        <button onclick="document.getElementById('allAuditModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-1.5">✕</button>
+      </div>
+
+      <div class="overflow-y-auto flex-1 pr-1 border rounded-xl p-3 bg-slate-50/50">
+        <ul id="allAuditList" class="space-y-1 divide-y divide-slate-100"></ul>
+      </div>
+
+      <div class="flex justify-between items-center pt-1 border-t text-[11px] text-slate-500">
+        <span id="allAuditCountText">총 0건의 이력</span>
+        <button onclick="document.getElementById('allAuditModal').classList.add('hidden')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-xs">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 📄 모달 8: 고객사 제출용 공식 견적서 (Quotation) 미리보기 & 인쇄 모달 -->
   <div id="quotationPdfModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 hidden">
     <div class="bg-white w-full max-w-4xl max-h-[95vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">

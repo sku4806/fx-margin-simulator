@@ -649,7 +649,7 @@ function loadFormFromItem(id) {
   updateFxVarianceFeedback();
   updateSpqNotice();
   runEngine();
-  if (item && item.id) { renderAuditHistory('auditHistoryContainer', item.id); }
+  if (item && item.id) { renderAuditHistory('auditHistoryContainer', item.id, item.partName); }
   document.getElementById('formSection')?.scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -773,7 +773,7 @@ async function saveCurrentForm() {
     if (targetId) {
       await recordAuditLog(targetId, payload.part_name, isNew ? 'CREATE' : 'UPDATE', auditDetail);
       // 저장 후 타임라인 즉시 새로고침
-      if (targetId) { await renderAuditHistory('auditHistoryContainer', targetId); }
+      if (targetId) { await renderAuditHistory('auditHistoryContainer', targetId, payload.part_name); }
     }
 
     alert(`[${payload.part_name}] 데이터가 안전하게 저장되었습니다.`);
