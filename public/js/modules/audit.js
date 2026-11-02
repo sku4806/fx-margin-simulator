@@ -34,7 +34,7 @@ export async function recordAuditLog(itemId, partName, actionType, details) {
 }
 
 /**
- * 📜 품목의 변경 이력 조회
+ * 📜 품목의 변경 이력 조회 (limit 없으면 전체)
  */
 export async function fetchAuditLogs(itemId, limit = null) {
   if (!sbClient) return [];

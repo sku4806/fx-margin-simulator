@@ -261,6 +261,7 @@ function bindInputs() {
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
 
+  // 📊 KPI 서머리 바 토글
   safeAddListener('toggleKpiBtn', 'click', () => {
     const bar = document.getElementById('kpiSummaryBar');
     const arrow = document.getElementById('kpiToggleArrow');
@@ -609,10 +610,51 @@ function loadFormFromItem(id) {
   updateFxVarianceFeedback();
   updateSpqNotice();
   runEngine();
+
   if (item && item.id) {
     renderAuditHistory('auditHistoryContainer', item.id, item.partName);
   }
   document.getElementById('formSection')?.scrollIntoView({ behavior: 'smooth' });
+}
+
+export function resetCurrentForm() {
+  editingItemId = null;
+  const banner = document.getElementById('editingBanner');
+  if (banner) banner.classList.add('hidden');
+
+  const auditContainer = document.getElementById('auditHistoryContainer');
+  if (auditContainer) {
+    auditContainer.classList.add('hidden');
+    auditContainer.innerHTML = '';
+  }
+
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+
+  setVal('inputPartName', '');
+  setVal('inputDateCode', '');
+  setVal('inputCustomer', '');
+  setVal('inputSoldPrice', '');
+  setVal('inputInvoiceNo', '');
+  setVal('inputTrackingNo', '');
+  setVal('inputDueDate', '');
+  setVal('inputShippedDate', '');
+  setVal('inputSettledDate', '');
+  setVal('inputSettledFx', '');
+  setVal('inputMemo', '');
+  setVal('inputStock', '');
+  setVal('inputSpq', '');
+  setVal('inputUsd', '');
+
+  const spqContainer = document.getElementById('spqFeedbackContainer');
+  if (spqContainer) {
+    spqContainer.classList.add('hidden');
+    spqContainer.innerHTML = '';
+  }
+
+  runEngine();
 }
 
 function handleOpenSplitModal(id) {
@@ -743,46 +785,6 @@ async function saveCurrentForm() {
   }
 }
 
-function resetCurrentForm() {
-  editingItemId = null;
-  const banner = document.getElementById('editingBanner');
-  if (banner) banner.classList.add('hidden');
-
-  // 감사 이력 컨테이너 숨김 및 내용 초기화
-  const auditContainer = document.getElementById('auditHistoryContainer');
-  if (auditContainer) {
-    auditContainer.classList.add('hidden');
-    auditContainer.innerHTML = '';
-  }
-
-  const setVal = (id, val) => {
-    const el = document.getElementById(id);
-    if (el) el.value = val;
-  };
-
-  setVal('inputPartName', '');
-  setVal('inputDateCode', '');
-  setVal('inputCustomer', '');
-  setVal('inputSoldPrice', '');
-  setVal('inputInvoiceNo', '');
-  setVal('inputTrackingNo', '');
-  setVal('inputDueDate', '');
-  setVal('inputShippedDate', '');
-  setVal('inputSettledDate', '');
-  setVal('inputSettledFx', '');
-  setVal('inputMemo', '');
-  setVal('inputStock', '');
-  setVal('inputSpq', '');
-  
-  const spqContainer = document.getElementById('spqFeedbackContainer');
-  if (spqContainer) {
-    spqContainer.classList.add('hidden');
-    spqContainer.innerHTML = '';
-  }
-
-  runEngine();
-}
-
 async function handleDeleteItem(id) {
   if (!isCsOrAdminUser()) return;
   if (!confirm("해당 건을 영구 삭제하시겠습니까?")) return;
@@ -809,5 +811,7 @@ function copyQuotation() {
   const quote = `[견적 안내] ${partName} (D/C: ${dateCode})\n- 수량: ${qty.toLocaleString()} EA\n- 공급단가: ${unitUsd} ${unitKrw}\n- 총견적액: ${totalReplace}\n* 기준환율: ${fxRateText}`;
   navigator.clipboard.writeText(quote).then(() => alert("견적서 텍스트가 복사되었습니다!"));
 }
+
+window.resetCurrentForm = resetCurrentForm;
 
 bootstrap();

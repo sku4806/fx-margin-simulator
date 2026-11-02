@@ -44,7 +44,7 @@ export async function fetchInventoryItems() {
 }
 
 export function getCachedItem(id) {
-  return cachedItems.find(item => item.id === id);
+  return cachedItems.find(item => String(item.id) === String(id));
 }
 
 export function filterItems({ query = '', filterMaker = '', filterOwner = '', filterPayment = '' }) {
@@ -201,7 +201,6 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
 
   tbody.innerHTML = items.map(item => {
     const costKrw = Math.round(item.unitUsd * item.shipFx);
-    const isMine = item.owner === '본사 일반재고' || canEdit;
 
     if (activeTab === 'sales') {
       return `
@@ -324,7 +323,6 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
           <div class="text-right text-[10px] text-slate-500 space-y-1">
             <div>출하: ${item.shippedDate || '미출하'}</div>
             <div>INV: ${item.invoiceNo || '-'}</div>
-            <!-- 💡 모바일 카드 배송조회 버튼 탑재 -->
             <div class="flex items-center justify-end gap-1 mt-1" onclick="event.stopPropagation()">
               <span class="text-[10px] font-mono text-slate-600 truncate max-w-[90px]">B/L: ${item.trackingNo || '-'}</span>
               <button type="button" class="tracking-btn text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded border border-indigo-200 shrink-0" data-tracking="${item.trackingNo || ''}">🚚 조회</button>
