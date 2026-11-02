@@ -78,22 +78,23 @@ export function openTrackingModal(trackingNo) {
     targetUrl = `https://tracker.delivery/#/auto/${cleanNo}`;
   }
 
-  // 모달 상단 헤더 우측(닫기 버튼 좌측)에 정확한 외부 링크 버튼 동적 배치
-  const headerRightArea = modal.querySelector('.flex.justify-between.items-center') || modal.querySelector('h3')?.parentElement;
-  if (headerRightArea) {
+  // 모달 상단 헤더 우측에 정확한 외부 링크 버튼 안전 배치
+  const headerContainer = modal.querySelector('#courierHeaderActionContainer') || modal.querySelector('.flex.justify-between.items-center');
+  if (headerContainer) {
     const extBtn = document.createElement('a');
     extBtn.id = 'carrierHeaderDirectBtn';
     extBtn.href = targetUrl;
     extBtn.target = '_blank';
     extBtn.rel = 'noopener noreferrer';
-    extBtn.className = 'text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 border border-slate-300 transition-colors ml-auto mr-2 shadow-sm';
+    extBtn.className = 'text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1 border border-slate-300 transition-colors mr-2 shadow-sm';
     extBtn.innerHTML = `<span>🔗</span> [${detected.name}] 공식 사이트 새창 조회`;
-    
-    const closeBtn = headerRightArea.querySelector('button');
-    if (closeBtn) {
-      headerRightArea.insertBefore(extBtn, closeBtn);
+
+    // 닫기 버튼 앞에 안전하게 삽입
+    const closeBtn = headerContainer.querySelector('button');
+    if (closeBtn && closeBtn.parentNode === headerContainer) {
+      headerContainer.insertBefore(extBtn, closeBtn);
     } else {
-      headerRightArea.appendChild(extBtn);
+      headerContainer.appendChild(extBtn);
     }
   }
 

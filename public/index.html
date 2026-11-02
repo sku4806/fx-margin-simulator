@@ -795,7 +795,7 @@
         </div>
         <div>
           <label class="text-slate-600 block mb-1 font-semibold">비밀번호</label>
-          <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs outline-none">
+          <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs outline-none">
         </div>
         <div id="loginErrorMsg" class="hidden text-[11px] font-semibold text-red-600 bg-red-50 p-2 rounded-lg"></div>
         <button type="submit" id="loginSubmitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg">
@@ -818,11 +818,11 @@
       <form id="changePasswordForm" class="space-y-3 text-xs">
         <div>
           <label class="text-slate-600 block mb-1 font-semibold">새로운 비밀번호 (6자리 이상)</label>
-          <input type="password" id="newPasswordInput" required minlength="6" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs outline-none">
+          <input type="password" id="newPasswordInput" required minlength="6" autocomplete="new-password" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs outline-none">
         </div>
         <div>
           <label class="text-slate-600 block mb-1 font-semibold">새 비밀번호 확인</label>
-          <input type="password" id="confirmPasswordInput" required minlength="6" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs outline-none">
+          <input type="password" id="confirmPasswordInput" required minlength="6" autocomplete="new-password" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs outline-none">
         </div>
         <div id="changePwdErrorMsg" class="hidden text-[11px] font-semibold text-red-600 bg-red-50 p-2 rounded-lg"></div>
         <button type="submit" id="changePwdSubmitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg">
