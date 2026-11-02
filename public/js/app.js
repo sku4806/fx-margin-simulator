@@ -306,6 +306,7 @@ function bindInputs() {
     });
   });
   });
+  });
 
   // 📊 KPI 서머리 바 토글
   safeAddListener('toggleKpiBtn', 'click', () => {
