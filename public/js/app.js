@@ -1,4 +1,3 @@
-import { openQuotationPrintModal } from './modules/pdf_quotation.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
@@ -12,6 +11,7 @@ import {
 import { openTrackingModal } from './modules/courier.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
+import { openQuotationPrintModal } from './modules/pdf_quotation.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { 
   fetchInventoryItems, 
@@ -305,8 +305,6 @@ function bindInputs() {
       salesRep: document.getElementById('selectOwner')?.value || 'Nathan Kim'
     });
   });
-  // 📄 공식 PDF 견적서 발행 버튼 연동
-    });
 
   // 📊 KPI 서머리 바 토글
   safeAddListener('toggleKpiBtn', 'click', () => {
