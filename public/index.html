@@ -527,6 +527,30 @@
     </div>
   </div>
 
+  <!-- 🚚 모달 6: 실시간 배송조회 모달 -->
+  <div id="courierTrackingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 hidden">
+    <div class="bg-white w-full max-w-2xl h-[80vh] rounded-2xl p-4 sm:p-6 shadow-2xl border border-slate-200 flex flex-col space-y-3">
+      <div class="flex justify-between items-center border-b pb-2.5">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🚚</span>
+          <div>
+            <h3 id="trackingModalTitle" class="text-sm sm:text-base font-bold text-slate-900">실시간 배송 조회</h3>
+            <p id="trackingInfoText" class="text-[11px] text-indigo-700 font-bold mt-0.5"></p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <a id="trackingDirectLinkBtn" href="#" target="_blank" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1.5 rounded-lg border border-indigo-200 flex items-center gap-1">
+            <span>🔗</span> 택배사 공식창 열기
+          </a>
+          <button onclick="document.getElementById('courierTrackingModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-1.5">✕</button>
+        </div>
+      </div>
+      <div class="flex-1 w-full bg-slate-50 border rounded-xl overflow-hidden relative">
+        <iframe id="trackingIframe" src="" class="w-full h-full border-0"></iframe>
+      </div>
+    </div>
+  </div>
+
   <!-- 모달 0: 시스템 가이드북 -->
   <div id="manualModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 hidden">
     <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl p-4 sm:p-6 shadow-2xl border border-slate-200 flex flex-col space-y-3">

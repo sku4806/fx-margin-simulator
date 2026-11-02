@@ -1,3 +1,4 @@
+import { openTrackingModal } from './modules/courier.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
@@ -415,6 +416,14 @@ function applyFilters() {
     filterPayment: document.getElementById('filterPayment')?.value || ""
   });
   renderInventoryUI(filtered, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, canEdit);
+  
+  // 🚚 운송장 번호 클릭 시 실시간 배송조회 팝업 연동
+  document.querySelectorAll('.tracking-link').forEach(el => {
+    el.onclick = (e) => {
+      e.stopPropagation();
+      openTrackingModal(el.dataset.tracking);
+    };
+  });
 }
 
 function loadFormFromItem(id) {
