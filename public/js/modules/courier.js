@@ -60,7 +60,7 @@ export function openTrackingModal(trackingNo) {
   const detected = detectCarrier(trackingNo);
   const cleanNo = detected.clean;
 
-  // 특송사별 공식 직통 URL 결정
+  // 특송사별 공식 URL
   let targetUrl = '';
   if (detected.type === 'dhl') {
     targetUrl = `https://www.dhl.com/kr-ko/home/tracking/tracking-express.html?submit=1&tracking-id=${cleanNo}`;
@@ -72,12 +72,12 @@ export function openTrackingModal(trackingNo) {
     targetUrl = `https://tracker.delivery/#/auto/${cleanNo}`;
   }
 
-  // 상단 타이틀 업데이트
+  // 모달 헤더 업데이트
   if (titleEl) {
     titleEl.innerText = `실시간 배송 현황 - [${detected.name}] ${cleanNo}`;
   }
 
-  // 상단 우측 새창 버튼 세팅
+  // 상단 새창 링크 세팅
   if (directBtn) {
     directBtn.href = targetUrl;
     directBtn.innerHTML = `<span>🔗</span> [${detected.name}] 새창 조회`;
@@ -86,14 +86,14 @@ export function openTrackingModal(trackingNo) {
   }
 
   if (detected.type === 'domestic') {
-    // 🚚 국내 택배: iframe 열람
+    // 국내 택배: iframe
     if (card) card.classList.add('hidden');
     if (iframe) {
       iframe.classList.remove('hidden');
       iframe.src = targetUrl;
     }
   } else {
-    // ✈️ 해외 특송사 (DHL, SF, FedEx): Iframe 보안 차단 방지를 위해 카드 표시
+    // 해외 특송사: iframe 차단 방지용 전용 카드
     if (iframe) {
       iframe.classList.add('hidden');
       iframe.src = 'about:blank';
@@ -109,7 +109,7 @@ export function openTrackingModal(trackingNo) {
             운송장(B/L) 번호: <span class="font-mono font-black text-slate-950 text-base bg-white px-2.5 py-0.5 rounded border border-slate-300 select-all">${cleanNo}</span>
           </div>
           <p class="text-[11px] text-slate-500 leading-relaxed pt-1">
-            글로벌 특송사 자체 보안 규정(Iframe 외부 삽입 제한)에 따라 공식 페이지로 안전하게 직통 연결됩니다.
+            글로벌 특송사 자체 보안 정책(Iframe 외부 삽입 제한)에 따라 공식 페이지로 안전하게 직통 연결됩니다.
           </p>
         </div>
         <div class="pt-2">
