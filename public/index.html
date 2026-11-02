@@ -7,18 +7,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-  <script src="https://unpkg.com/@pdf-lib/fontkit@0.0.4/dist/fontkit.umd.min.js"></script>
   <style>
     input, select, button { -webkit-tap-highlight-color: transparent; }
     .word-keep { word-break: keep-all; }
-    @media print {
-      body * { visibility: hidden; }
-      #quotationPrintArea, #quotationPrintArea * { visibility: visible; }
-      #quotationPrintArea { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
-      #quotationPdfModal { background: white !important; position: static !important; }
-      .no-print { display: none !important; }
-    }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 p-2 sm:p-5 md:p-8 min-h-screen font-sans antialiased">
@@ -90,9 +81,6 @@
         <div class="flex items-center gap-1.5 w-full sm:w-auto justify-end">
           <button id="openLandedCostBtn" class="flex-1 sm:flex-none text-[11px] sm:text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg border border-slate-300 flex items-center justify-center gap-1">
             <span>🚢</span> 부대비용 자동배부
-          </button>
-          <button id="openPdfQuoteBtn" type="button" class="flex-1 sm:flex-none text-[11px] sm:text-xs bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors">
-            <span>📄</span> 공식 견적서 발행
           </button>
           <button id="copyQuoteBtn" class="flex-1 sm:flex-none text-[11px] sm:text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm">
             <span>📋</span> 견적 복사
@@ -549,28 +537,7 @@
     </div>
   </div>
 
-  <!-- 📄 모달 8: 고객사 제출용 공식 견적서 (Quotation) 미리보기 & 인쇄 모달 -->
-  <div id="quotationPdfModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 hidden">
-    <div class="bg-white w-full max-w-4xl max-h-[95vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
-      <div class="no-print p-3 sm:p-4 bg-slate-900 text-white flex justify-between items-center border-b">
-        <div class="flex items-center gap-2">
-          <span class="text-lg">📄</span>
-          <div>
-            <h3 class="text-xs sm:text-sm font-bold">고객사용 공식 견적서 (A4 규격 미리보기)</h3>
-            <p class="text-[10px] text-slate-300">인쇄창에서 'PDF로 저장'을 선택하면 PDF 파일로 다운로드됩니다.</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button onclick="window.print()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm">
-            <span>🖨️</span> PDF 인쇄 / 다운로드
-          </button>
-          <button onclick="document.getElementById('quotationPdfModal').classList.add('hidden')" class="text-slate-300 hover:text-white text-lg font-bold px-2">✕</button>
-        </div>
-      </div>
-      <div class="overflow-y-auto flex-1 p-2 sm:p-6 bg-slate-100 print:bg-white print:p-0">
-        <div id="quotationPrintArea"></div>
-      </div>
-    </div>
+  
   </div>
 
   <!-- 📦 모달 7: 라인별 CS 포장단위 기준 설정 모달 -->

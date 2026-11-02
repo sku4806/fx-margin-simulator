@@ -1,5 +1,4 @@
 import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
-import { openQuotationPrintModal } from './modules/pdf_quotation.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
@@ -261,54 +260,6 @@ function bindInputs() {
 
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
-  // 📄 공식 PDF 견적서 발행 버튼 연동
-  safeAddListener('openPdfQuoteBtn', 'click', () => {
-    const partName = document.getElementById('inputPartName')?.value.trim();
-    if (!partName) {
-      alert("부품명을 먼저 입력해주세요.");
-      return;
-    }
-    const maker = (document.getElementById('selectMaker')?.value === '__CUSTOM_MAKER__')
-      ? document.getElementById('inputCustomMaker')?.value.trim() : document.getElementById('selectMaker')?.value;
-    const dateCode = document.getElementById('inputDateCode')?.value.trim();
-    const customer = document.getElementById('inputCustomer')?.value.trim();
-    const qty = parseFloat(document.getElementById('inputStock')?.value) || 0;
-    const spq = document.getElementById('inputSpq')?.value;
-    const paymentTerms = document.getElementById('selectPaymentTerms')?.value || 'Net 30';
-    const memo = document.getElementById('inputMemo')?.value.trim();
-
-    // 단가: 협의 실판매가 우선, 없으면 권고 교체원가선
-    const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value);
-    const unitPrice = (soldPrice && soldPrice > 0)
-      ? soldPrice
-      : (parseFloat(document.getElementById('minSaleUnitReplaceUsd')?.innerText.replace('$', '')) || 0);
-
-    const session = document.getElementById('authActionBtn')?.innerText.includes('로그아웃');
-
-    const currency = document.getElementById('selectCurrency')?.value || 'USD';
-    const deliveryInput = document.getElementById('inputShippedDate')?.value ? `${document.getElementById('inputShippedDate')?.value} 예정` : '즉시 출고 (2-3WKS)';
-
-    openQuotationPrintModal({
-      partName,
-      maker: maker || '기타',
-      dateCode,
-      customer: customer || '고객사 귀중',
-      attn: '구매/개발 담당자',
-      qty,
-      spq,
-      currency,
-      unitPriceUsd: currency === 'USD' ? unitPrice : 0,
-      unitPriceKrw: currency === 'KRW' ? Math.round(unitPrice * appliedFxRate) : 0,
-      appliedFx: appliedFxRate,
-      paymentTerms,
-      delivery: deliveryInput,
-      incoTerms: 'DOMESTIC',
-      origin: 'Hong Kong',
-      shippingPort: 'H.K.',
-      validity: '7 DAYS',
-      memo,
-      salesRep: document.getElementById('selectOwner')?.value || '김경래'
-    });
   });
 
   const spaCheck = document.getElementById('checkIsSpa');
