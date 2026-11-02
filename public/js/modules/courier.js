@@ -1,22 +1,15 @@
 /**
- * 🚚 실시간 택배 및 특송(DHL/FedEx) 배송조회 모듈
+ * 🚚 실시간 배송조회 모듈 (로젠 / CJ / 해외특송 17TRACK)
  */
 
 export const COURIER_CARRIERS = [
   { 
-    id: 'us.dhl', 
-    name: 'DHL Express', 
-    regex: /^(\d{10})$/, 
-    // 17TRACK 모바일 임베드 허용 엔드포인트 (DHL 공식 iframe 차단 우회)
+    id: 'global.17track', 
+    name: '해외특송 (DHL / FedEx / SF)', 
+    // 영문/숫자 혼합 또는 10자리(DHL), 12/15자리(FedEx), SF(12~15자리) 등
+    regex: /^([a-zA-Z0-9]{10,20})$/, 
     iframeUrl: 'https://t.17track.net/ko#nums=',
-    officialUrl: 'https://www.dhl.com/kr-ko/home/tracking/tracking-express.html?submit=1&tracking-id='
-  },
-  { 
-    id: 'kr.cjlogistics', 
-    name: 'CJ대한통운', 
-    regex: /^(\d{12})$/, 
-    iframeUrl: 'https://trace.cjlogistics.com/next/tracking.html?wblNo=',
-    officialUrl: 'https://trace.cjlogistics.com/next/tracking.html?wblNo='
+    officialUrl: 'https://t.17track.net/ko#nums='
   },
   { 
     id: 'kr.logen', 
@@ -26,32 +19,11 @@ export const COURIER_CARRIERS = [
     officialUrl: 'https://www.ilogen.com/m/personal/trace/'
   },
   { 
-    id: 'kr.epost', 
-    name: '우체국택배', 
-    regex: /^(\d{13})$/, 
-    iframeUrl: 'https://service.epost.go.kr/trace.RetrieveDomRcvtraceList.comm?sid1=',
-    officialUrl: 'https://service.epost.go.kr/trace.RetrieveDomRcvtraceList.comm?sid1='
-  },
-  { 
-    id: 'kr.hanjin', 
-    name: '한진택배', 
-    regex: /^(\d{10}|\d{12})$/, 
-    iframeUrl: 'https://www.hanjin.com/kor/CMS/DeliveryMgr/WaybillResult.do?mCode=MN038&wblnum=',
-    officialUrl: 'https://www.hanjin.com/kor/CMS/DeliveryMgr/WaybillResult.do?mCode=MN038&wblnum='
-  },
-  { 
-    id: 'kr.kdexp', 
-    name: '경동택배', 
-    regex: /^(\d{16})$/, 
-    iframeUrl: 'https://kdexp.com/service/delivery/delivery_view.do?barcode=',
-    officialUrl: 'https://kdexp.com/service/delivery/delivery_view.do?barcode='
-  },
-  { 
-    id: 'us.fedex', 
-    name: 'FedEx', 
-    regex: /^(\d{12}|\d{15})$/, 
-    iframeUrl: 'https://t.17track.net/ko#nums=',
-    officialUrl: 'https://www.fedex.com/fedextrack/?trknbr='
+    id: 'kr.cjlogistics', 
+    name: 'CJ대한통운', 
+    regex: /^(\d{12})$/, 
+    iframeUrl: 'https://trace.cjlogistics.com/next/tracking.html?wblNo=',
+    officialUrl: 'https://trace.cjlogistics.com/next/tracking.html?wblNo='
   }
 ];
 
@@ -59,12 +31,17 @@ export function detectCarrier(trackingNo) {
   if (!trackingNo) return COURIER_CARRIERS[0];
   const cleanNo = String(trackingNo).replace(/[^a-zA-Z0-9]/g, '');
 
-  for (const carrier of COURIER_CARRIERS) {
-    if (carrier.regex.test(cleanNo)) {
-      return carrier;
-    }
+  // 11자리는 로젠택배 우선 매칭
+  if (/^\d{11}$/.test(cleanNo)) {
+    return COURIER_CARRIERS.find(c => c.id === 'kr.logen');
   }
 
+  // 12자리 숫자는 CJ대한통운 또는 해외특송
+  if (/^\d{12}$/.test(cleanNo)) {
+    return COURIER_CARRIERS.find(c => c.id === 'kr.cjlogistics');
+  }
+
+  // 그 외 10자리(DHL) 및 영문 혼합/기타 번호는 해외특송(17TRACK) 기본 매칭
   return COURIER_CARRIERS[0];
 }
 
@@ -83,6 +60,7 @@ export function openTrackingModal(trackingNo) {
 
   if (infoEl) infoEl.innerText = `송장번호: ${cleanNo}`;
 
+  // 드롭다운에 [해외특송, 로젠택배, CJ대한통운]만 간결하게 노출
   if (carrierSelect) {
     carrierSelect.innerHTML = COURIER_CARRIERS.map(c => 
       `<option value="${c.id}" ${c.id === carrier.id ? 'selected' : ''}>${c.name}</option>`
