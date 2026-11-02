@@ -1,4 +1,3 @@
-import { downloadOfficialQuotationExcel } from './modules/excel_quotation.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
@@ -263,48 +262,7 @@ function bindInputs() {
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
 
   // 📄 빅샤인 코리아 원본 서식 기반 공식 견적서 엑셀 다운로드
-  safeAddListener('downloadOfficialQuoteExcelBtn', 'click', () => {
-    const partName = document.getElementById('inputPartName')?.value.trim();
-    if (!partName) {
-      alert("견적서를 발행할 부품명을 먼저 입력하거나 목록에서 선택해주세요.");
-      return;
-    }
-
-    const maker = (document.getElementById('selectMaker')?.value === '__CUSTOM_MAKER__')
-      ? document.getElementById('inputCustomMaker')?.value.trim() : document.getElementById('selectMaker')?.value;
-    const dateCode = document.getElementById('inputDateCode')?.value.trim();
-    const customer = document.getElementById('inputCustomer')?.value.trim();
-    const qty = parseFloat(document.getElementById('inputStock')?.value) || 0;
-    const spq = document.getElementById('inputSpq')?.value;
-    const currency = document.getElementById('selectCurrency')?.value || 'USD';
-    const paymentTerms = document.getElementById('selectPaymentTerms')?.value || (currency === 'KRW' ? '익월말 현금결제 (VAT 포함)' : '선입금 (VAT 포함)');
-
-    const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value);
-    const unitPrice = (soldPrice && soldPrice > 0)
-      ? soldPrice
-      : (parseFloat(document.getElementById('minSaleUnitReplaceUsd')?.innerText.replace('$', '')) || 0);
-
-    // 세일즈 담당자가 '본사 일반재고'이면 배정 전이므로 빈칸 처리
-    const rawOwner = document.getElementById('selectOwner')?.value;
-    const salesRep = (rawOwner && rawOwner !== '본사 일반재고' && rawOwner !== '__CUSTOM_OWNER__') ? rawOwner : '';
-
-    downloadOfficialQuotationExcel({
-      partName,
-      maker: maker || '',
-      dateCode,
-      customer: customer || '',
-      attn: '',
-      qty,
-      spq,
-      currency,
-      unitPriceUsd: currency === 'USD' ? unitPrice : 0,
-      unitPriceKrw: currency === 'KRW' ? Math.round(unitPrice * appliedFxRate) : 0,
-      appliedFx: appliedFxRate,
-      paymentTerms,
-      delivery: '즉시 출고 (2-3WKS)',
-      salesRep: salesRep
     });
-  });
   });
   });
 
