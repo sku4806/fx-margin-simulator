@@ -742,17 +742,41 @@ async function saveCurrentForm() {
 
   try {
     const isNew = !editingItemId;
-    await upsertInventoryItem(payload, editingItemId);
-    
-    // 📝 감사 로그 기록
-    const auditDetail = isNew 
-      ? `신규 등록: ${payload.maker} / ${payload.stock.toLocaleString()} EA / 매입가 $${payload.unit_usd}`
-      : `정보 수정: 수량 ${payload.stock.toLocaleString()} EA, 실판매가 $${payload.sold_price_usd}, 상태: ${payload.order_status}, 수금: ${payload.payment_status}`;
-    await recordAuditLog(editingItemId, payload.part_name, isNew ? 'CREATE' : 'UPDATE', auditDetail);
+    const oldItem = editingItemId ? getCachedItem(editingItemId) : null;
+    const savedItem = await upsertInventoryItem(payload, editingItemId);
+    const targetId = editingItemId || savedItem?.id;
+
+    // 📝 변경 전/후 상세 비교 로그 생성
+    let auditDetail = "";
+    if (isNew) {
+      auditDetail = `신규 등록: ${payload.maker} / ${payload.stock.toLocaleString()} EA / 매입원가 $${payload.unit_usd}`;
+    } else {
+      const changes = [];
+      if (oldItem && oldItem.stock !== payload.stock) {
+        changes.push(`수량: ${oldItem.stock.toLocaleString()} -> ${payload.stock.toLocaleString()} EA`);
+      }
+      if (oldItem && oldItem.soldPriceUsd !== payload.sold_price_usd) {
+        changes.push(`판매가: $${oldItem.soldPriceUsd} -> $${payload.sold_price_usd}`);
+      }
+      if (oldItem && oldItem.orderStatus !== payload.order_status) {
+        changes.push(`상태: ${oldItem.orderStatus} -> ${payload.order_status}`);
+      }
+      if (oldItem && oldItem.trackingNo !== payload.tracking_no) {
+        changes.push(`송장번호: ${oldItem.trackingNo || '없음'} -> ${payload.tracking_no || '없음'}`);
+      }
+      if (changes.length === 0) {
+        changes.push(`기타 정보 수정 (수량 ${payload.stock.toLocaleString()} EA)`);
+      }
+      auditDetail = changes.join(', ');
+    }
+
+    if (targetId) {
+      await recordAuditLog(targetId, payload.part_name, isNew ? 'CREATE' : 'UPDATE', auditDetail);
+      // 저장 후 타임라인 즉시 새로고침
+      await renderAuditHistory('auditHistoryContainer', targetId);
+    }
 
     alert(`[${payload.part_name}] 데이터가 안전하게 저장되었습니다.`);
-    editingItemId = null;
-    document.getElementById('editingBanner')?.classList.add('hidden');
     await refreshInventory();
   } catch (err) {
     alert("저장 실패: " + err.message);

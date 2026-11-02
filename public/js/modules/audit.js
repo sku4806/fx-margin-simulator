@@ -5,20 +5,32 @@ import { getSession } from './auth.js';
  * 📝 변경 감사 로그 기록
  */
 export async function recordAuditLog(itemId, partName, actionType, details) {
-  if (!sbClient) return;
+  if (!sbClient) {
+    console.error("[Audit] Supabase 클라이언트가 초기화되지 않았습니다.");
+    return;
+  }
   const session = getSession();
   const userEmail = session?.user?.email || '시스템/익명';
 
   try {
-    await sbClient.from('inventory_audit_logs').insert([{
-      item_id: itemId || null,
+    const payload = {
+      item_id: itemId ? Number(itemId) : null,
       part_name: partName || '-',
       action_type: actionType,
       user_email: userEmail,
       details: details
-    }]);
+    };
+    
+    console.log("[Audit] 로그 저장 시도:", payload);
+    const { data, error } = await sbClient.from('inventory_audit_logs').insert([payload]).select();
+
+    if (error) {
+      console.error("[Audit] DB 저장 실패 에러:", error);
+    } else {
+      console.log("[Audit] 로그 저장 성공:", data);
+    }
   } catch (err) {
-    console.warn("감사 로그 저장 실패:", err);
+    console.error("[Audit] 예외 발생:", err);
   }
 }
 
@@ -31,14 +43,17 @@ export async function fetchAuditLogs(itemId) {
     const { data, error } = await sbClient
       .from('inventory_audit_logs')
       .select('*')
-      .eq('item_id', itemId)
+      .eq('item_id', Number(itemId))
       .order('created_at', { ascending: false })
       .limit(10);
 
-    if (error) throw error;
+    if (error) {
+      console.error("[Audit] 조회 실패 에러:", error);
+      throw error;
+    }
     return data || [];
   } catch (err) {
-    console.warn("감사 로그 조회 실패:", err);
+    console.warn("[Audit] 감사 로그 조회 실패:", err);
     return [];
   }
 }
@@ -62,7 +77,7 @@ export async function renderAuditHistory(containerId, itemId) {
   if (logs.length === 0) {
     container.innerHTML = `
       <div class="text-[10px] text-slate-400 p-2 bg-slate-50 rounded-lg border border-slate-200">
-        최근 기록된 변경 내역이 없습니다.
+        기록된 변경 이력이 없습니다.
       </div>
     `;
     return;
@@ -71,20 +86,20 @@ export async function renderAuditHistory(containerId, itemId) {
   const listHtml = logs.map(log => {
     const d = new Date(log.created_at);
     const timeStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    const userShort = log.user_email.split('@')[0];
+    const userShort = log.user_email ? log.user_email.split('@')[0] : '익명';
 
-    let actionBadge = `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-700">${log.action_type}</span>`;
-    if (log.action_type === 'CREATE') actionBadge = `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-green-100 text-green-800">신규등록</span>`;
-    if (log.action_type === 'UPDATE') actionBadge = `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-800">정보수정</span>`;
-    if (log.action_type === 'SPLIT') actionBadge = `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-800">출하분할</span>`;
-    if (log.action_type === 'DELETE') actionBadge = `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-800">삭제</span>`;
+    let actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700">${log.action_type}</span>`;
+    if (log.action_type === 'CREATE') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-800">신규등록</span>`;
+    if (log.action_type === 'UPDATE') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">정보수정</span>`;
+    if (log.action_type === 'SPLIT') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800">출하분할</span>`;
+    if (log.action_type === 'DELETE') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800">삭제</span>`;
 
     return `
-      <li class="flex items-start gap-2 py-1 text-[11px] border-b border-slate-100 last:border-0">
+      <li class="flex items-start gap-2 py-1.5 text-[11px] border-b border-slate-100 last:border-0">
         <span class="text-slate-400 font-mono shrink-0">${timeStr}</span>
         <span class="font-bold text-slate-700 shrink-0">[${userShort}]</span>
         ${actionBadge}
-        <span class="text-slate-800 break-all font-medium">${escapeHtml(log.details)}</span>
+        <span class="text-slate-800 break-all font-medium leading-relaxed">${escapeHtml(log.details)}</span>
       </li>
     `;
   }).join('');

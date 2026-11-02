@@ -71,16 +71,20 @@ export async function upsertInventoryItem(payload, editingItemId = null) {
   if (!sbClient) throw new Error("클라이언트 미연결");
 
   if (editingItemId) {
-    const { error } = await sbClient
+    const { data, error } = await sbClient
       .from('inventory_items')
       .update(payload)
-      .eq('id', editingItemId);
+      .eq('id', editingItemId)
+      .select();
     if (error) throw error;
+    return data && data[0] ? data[0] : { id: editingItemId, ...payload };
   } else {
-    const { error } = await sbClient
+    const { data, error } = await sbClient
       .from('inventory_items')
-      .insert([payload]);
+      .insert([payload])
+      .select();
     if (error) throw error;
+    return data && data[0] ? data[0] : payload;
   }
 }
 
