@@ -285,19 +285,29 @@ function bindInputs() {
 
     const session = document.getElementById('authActionBtn')?.innerText.includes('로그아웃');
 
+    const currency = document.getElementById('selectCurrency')?.value || 'USD';
+    const deliveryInput = document.getElementById('inputShippedDate')?.value ? `${document.getElementById('inputShippedDate')?.value} 예정` : '즉시 출고 (2-3WKS)';
+
     openQuotationPrintModal({
       partName,
       maker: maker || '기타',
       dateCode,
-      customer,
+      customer: customer || '고객사 귀중',
+      attn: '구매/개발 담당자',
       qty,
       spq,
-      unitPriceUsd: unitPrice,
+      currency,
+      unitPriceUsd: currency === 'USD' ? unitPrice : 0,
+      unitPriceKrw: currency === 'KRW' ? Math.round(unitPrice * appliedFxRate) : 0,
       appliedFx: appliedFxRate,
       paymentTerms,
+      delivery: deliveryInput,
+      incoTerms: 'DOMESTIC',
+      origin: 'Hong Kong',
+      shippingPort: 'H.K.',
+      validity: '7 DAYS',
       memo,
-      salesRep: document.getElementById('selectOwner')?.value,
-      userEmail: ''
+      salesRep: document.getElementById('selectOwner')?.value || '김경래'
     });
   });
 
