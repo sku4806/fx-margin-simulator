@@ -1,11 +1,11 @@
 let parsedRowsCache = [];
 
 /**
- * 📥 현재 조회된 재고 리스트를 엑셀(.xlsx) 또는 UTF-8 CSV로 내보내기
+ * 📥 현재 조회된 재고 리스트를 엑셀(.xlsx) 또는 CSV로 내보내기
  */
 export function exportToExcel(items, filenamePrefix = "BSK_Inventory_Master") {
   if (!items || items.length === 0) {
-    alert("내보낼 데이터가 없습니다. 로그인 상태나 검색 필터를 확인해주세요.");
+    alert("내보낼 데이터가 없습니다. 검색 조건이나 로그인 상태를 확인해주세요.");
     return;
   }
 
@@ -37,7 +37,6 @@ export function exportToExcel(items, filenamePrefix = "BSK_Inventory_Master") {
 
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
-  // 1. SheetJS(XLSX) 라이브러리가 로드되어 있으면 .xlsx 파일 생성
   if (typeof XLSX !== 'undefined') {
     try {
       const worksheet = XLSX.utils.json_to_sheet(excelData);
@@ -55,11 +54,10 @@ export function exportToExcel(items, filenamePrefix = "BSK_Inventory_Master") {
       XLSX.writeFile(workbook, `${filenamePrefix}_${dateStr}.xlsx`);
       return;
     } catch (err) {
-      console.warn("SheetJS 생성 실패, CSV 폴백으로 자동 전환합니다:", err);
+      console.warn("SheetJS export 실패, CSV로 다운로드합니다.", err);
     }
   }
 
-  // 2. SheetJS가 없거나 실패 시 브라우저 기본 CSV 파일로 즉시 다운로드 (한글 안 깨지는 UTF-8 BOM 적용)
   exportToCsvFallback(excelData, `${filenamePrefix}_${dateStr}.csv`);
 }
 
@@ -68,18 +66,17 @@ function exportToCsvFallback(dataArray, filename) {
   const headers = Object.keys(dataArray[0]);
   const csvRows = [];
   
-  csvRows.push(headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','));
+  csvRows.push(headers.map(h => '"' + String(h).replace(/"/g, '""') + '"').join(','));
   
   dataArray.forEach(row => {
     const values = headers.map(h => {
       const val = row[h] === null || row[h] === undefined ? '' : String(row[h]);
-      return `"${val.replace(/"/g, '""')}"`;
+      return '"' + val.replace(/"/g, '""') + '"';
     });
     csvRows.push(values.join(','));
   });
 
-  const csvContent = '﻿' + csvRows.join('
-');
+  const csvContent = '\uFEFF' + csvRows.join('\r\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -92,13 +89,13 @@ function exportToCsvFallback(dataArray, filename) {
 }
 
 /**
- * 📤 패킹리스트 파일(Excel/CSV) 선택 시 파싱 및 미리보기 모달
+ * 📤 패킹리스트 파일(Excel/CSV) 선택 시 파싱 및 미리보기
  */
 export function handleExcelFileSelect(file, onParsedSuccess) {
   if (!file) return;
 
   if (typeof XLSX === 'undefined') {
-    alert("엑셀 엔진을 로드하지 못했습니다. 페이지를 강력 새로고침(Ctrl + Shift + R) 해주세요.");
+    alert("엑셀 엔진을 로드하지 못했습니다. 새로고침 후 다시 시도해주세요.");
     return;
   }
 
@@ -117,7 +114,7 @@ export function handleExcelFileSelect(file, onParsedSuccess) {
       }
 
       const headers = rawRows[0].map(h => String(h || '').trim().toUpperCase());
-      const findColIdx = (aliases) => headers.findIndex(h => aliases.some(a => h.includes(a.toUpperCase())));
+      const findColIdx = (aliases) => headers.findIndex(h => aliases.some(a => h.indexOf(a.toUpperCase()) !== -1));
 
       const makerIdx = findColIdx(['MAKER', '라인', '제조사', 'BRAND']);
       const partIdx = findColIdx(['PART', '제품명', 'P/N', 'ITEM', 'DESCRIPTION']);
