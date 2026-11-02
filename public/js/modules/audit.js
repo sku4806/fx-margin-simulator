@@ -5,24 +5,28 @@ import { getSession } from './auth.js';
  * 📝 변경 감사 로그 기록
  */
 export async function recordAuditLog(itemId, partName, actionType, details) {
-  if (!sbClient) {
-    console.error("[Audit] Supabase 클라이언트가 초기화되지 않았습니다.");
-    return;
-  }
+  if (!sbClient) return;
   const session = getSession();
   const userEmail = session?.user?.email || '시스템/익명';
 
+  // itemId가 유효하지 않으면 null로 저장
+  const safeId = (itemId !== undefined && itemId !== null && String(itemId) !== 'NaN' && String(itemId).trim() !== '') 
+    ? String(itemId) 
+    : null;
+
   try {
     const payload = {
-      item_id: itemId ? Number(itemId) : null,
+      item_id: safeId,
       part_name: partName || '-',
       action_type: actionType,
       user_email: userEmail,
       details: details
     };
     
-    console.log("[Audit] 로그 저장 시도:", payload);
-    const { data, error } = await sbClient.from('inventory_audit_logs').insert([payload]).select();
+    const { data, error } = await sbClient
+      .from('inventory_audit_logs')
+      .insert([payload])
+      .select();
 
     if (error) {
       console.error("[Audit] DB 저장 실패 에러:", error);
@@ -38,18 +42,25 @@ export async function recordAuditLog(itemId, partName, actionType, details) {
  * 📜 특정 품목의 최근 변경 이력 조회 (최신 10건)
  */
 export async function fetchAuditLogs(itemId) {
-  if (!sbClient || !itemId) return [];
+  if (!sbClient) return [];
+  
+  // itemId가 없거나 'NaN'이면 조회를 즉시 중단
+  if (!itemId || String(itemId) === 'NaN' || String(itemId).trim() === '') {
+    return [];
+  }
+
   try {
+    const queryId = String(itemId).trim();
     const { data, error } = await sbClient
       .from('inventory_audit_logs')
       .select('*')
-      .eq('item_id', Number(itemId))
+      .eq('item_id', queryId)
       .order('created_at', { ascending: false })
       .limit(10);
 
     if (error) {
       console.error("[Audit] 조회 실패 에러:", error);
-      throw error;
+      return [];
     }
     return data || [];
   } catch (err) {
@@ -65,7 +76,7 @@ export async function renderAuditHistory(containerId, itemId) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  if (!itemId) {
+  if (!itemId || String(itemId) === 'NaN' || String(itemId).trim() === '') {
     container.classList.add('hidden');
     container.innerHTML = '';
     return;
@@ -74,9 +85,9 @@ export async function renderAuditHistory(containerId, itemId) {
   const logs = await fetchAuditLogs(itemId);
   container.classList.remove('hidden');
 
-  if (logs.length === 0) {
+  if (!logs || logs.length === 0) {
     container.innerHTML = `
-      <div class="text-[10px] text-slate-400 p-2 bg-slate-50 rounded-lg border border-slate-200">
+      <div class="text-[10px] text-slate-400 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
         기록된 변경 이력이 없습니다.
       </div>
     `;
