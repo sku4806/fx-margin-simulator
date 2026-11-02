@@ -2,7 +2,7 @@ import { openTrackingModal } from './modules/courier.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
-import { evaluatePackaging } from './modules/packaging.js';
+import { evaluatePackaging, getDefaultSpq } from './modules/packaging.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { fetchInventoryItems, upsertInventoryItem, splitInventoryShipment, deleteInventoryItem, filterItems, getCachedItem, renderInventoryUI } from './inventory.js';
@@ -151,12 +151,13 @@ function bindInputs() {
 
   safeAddListener('inputSettledFx', 'input', updateFxVarianceFeedback);
   const updateSpqNotice = () => {
-    const maker = document.getElementById('selectMaker')?.value;
     const stockEl = document.getElementById('inputStock');
+    const spqEl = document.getElementById('inputSpq');
     const container = document.getElementById('spqFeedbackContainer');
 
     const qty = parseInt(stockEl.value) || 0;
-    const res = evaluatePackaging(maker, qty);
+    const spq = parseInt(spqEl?.value) || 1000;
+    const res = evaluatePackaging(qty, spq);
 
     if (res.isValid || qty === 0) {
       container.classList.add('hidden');
@@ -190,7 +191,15 @@ function bindInputs() {
   };
 
   safeAddListener('inputStock', 'input', updateSpqNotice);
-  safeAddListener('selectMaker', 'change', updateSpqNotice);
+    safeAddListener('selectMaker', 'change', () => {
+    const maker = document.getElementById('selectMaker')?.value;
+    const spqEl = document.getElementById('inputSpq');
+    if (spqEl) {
+      spqEl.value = getDefaultSpq(maker);
+    }
+    updateSpqNotice();
+  });
+  safeAddListener('inputSpq', 'input', updateSpqNotice);
 
   bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
   bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
@@ -514,6 +523,7 @@ function loadFormFromItem(id) {
   setVal('inputUsd', item.unitUsd);
   setVal('inputShipFx', item.shipFx);
   setVal('inputStock', item.stock);
+  setVal('inputSpq', item.spq || getDefaultSpq(item.maker));
 
   const spaCheck = document.getElementById('checkIsSpa');
   const spaDebitWrapper = document.getElementById('spaDebitWrapper');
@@ -616,6 +626,7 @@ async function saveCurrentForm() {
     unit_usd: parseFloat(document.getElementById('inputUsd')?.value) || 0,
     ship_fx: parseFloat(document.getElementById('inputShipFx')?.value) || 1350,
     stock: parseInt(document.getElementById('inputStock')?.value) || 0,
+    spq: parseInt(document.getElementById('inputSpq')?.value) || 1000,
     margin: 20,
     is_spa: isSpa,
     approved_debit_usd: isSpa ? approvedDebit : 0

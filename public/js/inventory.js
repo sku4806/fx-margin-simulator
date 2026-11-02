@@ -32,6 +32,7 @@ export async function fetchInventoryItems() {
     unitUsd: parseFloat(item.unit_usd) || 0,
     shipFx: parseFloat(item.ship_fx) || 1350,
     stock: parseInt(item.stock) || 0,
+    spq: parseInt(item.spq) || 1000,
     isSpa: !!item.is_spa,
     approvedDebitUsd: parseFloat(item.approved_debit_usd) || 0,
     currency: item.currency || "USD",
