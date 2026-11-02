@@ -1,70 +1,106 @@
-import { sbClient } from '../supabase.js';
-
 let parsedRowsCache = [];
 
 /**
- * 📥 현재 조회된 재고 리스트를 엑셀(.xlsx) 파일로 내보내기
+ * 📥 현재 조회된 재고 리스트를 엑셀(.xlsx) 또는 UTF-8 CSV로 내보내기
  */
 export function exportToExcel(items, filenamePrefix = "BSK_Inventory_Master") {
   if (!items || items.length === 0) {
-    alert("내보낼 데이터가 없습니다.");
+    alert("내보낼 데이터가 없습니다. 로그인 상태나 검색 필터를 확인해주세요.");
     return;
   }
 
-  if (typeof XLSX === 'undefined') {
-    alert("엑셀 엔진(SheetJS)을 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
-    return;
-  }
-
-  // 표준 업무 포맷에 맞춘 헤더 매핑
   const excelData = items.map(item => ({
-    "라인(Maker)": item.maker,
-    "제품명(Part No)": item.partName,
-    "제조주기(D/C)": item.dateCode,
-    "담당 Sales": item.owner,
-    "고객사(Account)": item.customer,
-    "수량(EA)": item.stock,
-    "매입단가(USD)": item.unitUsd,
-    "선적환율(KRW)": item.shipFx,
-    "실판매단가(USD)": item.soldPriceUsd,
-    "진행상태": item.orderStatus,
-    "인보이스 No": item.invoiceNo,
-    "운송장/BL No": item.trackingNo,
-    "결제조건": item.paymentTerms,
-    "통화": item.currency,
-    "수금상태": item.paymentStatus,
-    "수금만기일": item.dueDate,
-    "선적일": item.entryDate,
-    "실물출하일": item.shippedDate,
-    "수금완료일": item.settledDate,
+    "라인(Maker)": item.maker || "-",
+    "제품명(Part No)": item.partName || "-",
+    "제조주기(D/C)": item.dateCode || "-",
+    "담당 Sales": item.owner || "-",
+    "고객사(Account)": item.customer || "-",
+    "수량(EA)": item.stock || 0,
+    "선적매입단가(USD)": item.unitUsd || 0,
+    "선적환율(KRW)": item.shipFx || 1350,
+    "실판매단가(USD)": item.soldPriceUsd || 0,
+    "진행상태": item.orderStatus || "-",
+    "인보이스 No": item.invoiceNo || "-",
+    "운송장/BL No": item.trackingNo || "-",
+    "결제조건": item.paymentTerms || "-",
+    "통화": item.currency || "USD",
+    "수금상태": item.paymentStatus || "-",
+    "수금만기일": item.dueDate || "-",
+    "선적일": item.entryDate || "-",
+    "실물출하일": item.shippedDate || "-",
+    "수금완료일": item.settledDate || "-",
     "수금환율": item.settledFx || "",
     "SPA 특가여부": item.isSpa ? "Y" : "N",
     "SPA 승인가(USD)": item.approvedDebitUsd || "",
-    "비고": item.memo
+    "비고": item.memo || ""
   }));
 
-  const worksheet = XLSX.utils.json_to_sheet(excelData);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
-
-  // 열 너비 자동 조정
-  worksheet['!cols'] = [
-    { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 12 }, { wch: 18 },
-    { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
-    { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 8 },  { wch: 10 },
-    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    { wch: 12 }, { wch: 14 }, { wch: 25 }
-  ];
-
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  XLSX.writeFile(workbook, `${filenamePrefix}_${dateStr}.xlsx`);
+
+  // 1. SheetJS(XLSX) 라이브러리가 로드되어 있으면 .xlsx 파일 생성
+  if (typeof XLSX !== 'undefined') {
+    try {
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+
+      worksheet['!cols'] = [
+        { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 12 }, { wch: 18 },
+        { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+        { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 8 },  { wch: 10 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+        { wch: 12 }, { wch: 14 }, { wch: 25 }
+      ];
+
+      XLSX.writeFile(workbook, `${filenamePrefix}_${dateStr}.xlsx`);
+      return;
+    } catch (err) {
+      console.warn("SheetJS 생성 실패, CSV 폴백으로 자동 전환합니다:", err);
+    }
+  }
+
+  // 2. SheetJS가 없거나 실패 시 브라우저 기본 CSV 파일로 즉시 다운로드 (한글 안 깨지는 UTF-8 BOM 적용)
+  exportToCsvFallback(excelData, `${filenamePrefix}_${dateStr}.csv`);
+}
+
+function exportToCsvFallback(dataArray, filename) {
+  if (!dataArray || dataArray.length === 0) return;
+  const headers = Object.keys(dataArray[0]);
+  const csvRows = [];
+  
+  csvRows.push(headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','));
+  
+  dataArray.forEach(row => {
+    const values = headers.map(h => {
+      const val = row[h] === null || row[h] === undefined ? '' : String(row[h]);
+      return `"${val.replace(/"/g, '""')}"`;
+    });
+    csvRows.push(values.join(','));
+  });
+
+  const csvContent = '﻿' + csvRows.join('
+');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /**
- * 📤 패킹리스트 파일(Excel/CSV) 선택 시 파싱 및 미리보기 모달 팝업
+ * 📤 패킹리스트 파일(Excel/CSV) 선택 시 파싱 및 미리보기 모달
  */
 export function handleExcelFileSelect(file, onParsedSuccess) {
   if (!file) return;
+
+  if (typeof XLSX === 'undefined') {
+    alert("엑셀 엔진을 로드하지 못했습니다. 페이지를 강력 새로고침(Ctrl + Shift + R) 해주세요.");
+    return;
+  }
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -80,7 +116,6 @@ export function handleExcelFileSelect(file, onParsedSuccess) {
         return;
       }
 
-      // 헤더 라인 파싱 및 유연한 컬럼 매핑
       const headers = rawRows[0].map(h => String(h || '').trim().toUpperCase());
       const findColIdx = (aliases) => headers.findIndex(h => aliases.some(a => h.includes(a.toUpperCase())));
 
@@ -148,13 +183,9 @@ export function handleExcelFileSelect(file, onParsedSuccess) {
   reader.readAsArrayBuffer(file);
 }
 
-/**
- * 엑셀 일련번호/날짜 텍스트를 'YYYY-MM-DD'로 안전 변환
- */
 function formatExcelDate(rawVal) {
   if (!rawVal) return new Date().toISOString().slice(0, 10);
   if (typeof rawVal === 'number') {
-    // 엑셀 일련번호 날짜 변환
     const d = new Date((rawVal - (25567 + 2)) * 86400 * 1000);
     return isNaN(d.getTime()) ? new Date().toISOString().slice(0, 10) : d.toISOString().slice(0, 10);
   }
@@ -163,9 +194,6 @@ function formatExcelDate(rawVal) {
   return isNaN(d.getTime()) ? new Date().toISOString().slice(0, 10) : d.toISOString().slice(0, 10);
 }
 
-/**
- * 파싱된 행을 확인하는 미리보기 모달 렌더링
- */
 function showPreviewModal(rows) {
   const modal = document.getElementById('excelPreviewModal');
   const countEl = document.getElementById('excelPreviewCount');
@@ -173,7 +201,7 @@ function showPreviewModal(rows) {
 
   if (countEl) countEl.innerText = `총 ${rows.length.toLocaleString()}건의 부품 데이터가 파싱되었습니다.`;
   if (tbody) {
-    tbody.innerHTML = rows.map((r, i) => `
+    tbody.innerHTML = rows.map((r) => `
       <tr class="hover:bg-indigo-50/50">
         <td class="py-1.5 px-2 font-bold text-slate-800">${r.maker}</td>
         <td class="py-1.5 px-2 font-bold text-indigo-700">${r.part_name}</td>
@@ -189,10 +217,8 @@ function showPreviewModal(rows) {
   modal?.classList.remove('hidden');
 }
 
-/**
- * 🚀 Supabase DB에 일괄 인서트 실행
- */
 export async function executeBatchUpload() {
+  const { sbClient } = await import('../supabase.js');
   if (!sbClient) throw new Error("클라이언트 미연결");
   if (!parsedRowsCache || parsedRowsCache.length === 0) {
     throw new Error("업로드할 데이터가 없습니다.");

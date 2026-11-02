@@ -2,6 +2,7 @@ import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
 import { validateSpq } from './modules/packaging.js';
+import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { fetchInventoryItems, upsertInventoryItem, splitInventoryShipment, deleteInventoryItem, filterItems, getCachedItem, renderInventoryUI } from './inventory.js';
 
@@ -34,7 +35,6 @@ export async function bootstrap() {
   bindModals();
   initManualViewer();
 
-  // 💡 모듈화된 인증 핸들러 시작
   initAuth(async (session, canEdit) => {
     updateFormVisibility(canEdit);
     if (session) {
@@ -130,13 +130,14 @@ function bindInputs() {
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
 
-  // SPQ 포장단위 실시간 피드백
   safeAddListener('inputStock', 'change', () => {
     const maker = document.getElementById('selectMaker')?.value;
     const qty = parseInt(document.getElementById('inputStock')?.value) || 0;
     const spqResult = validateSpq(maker, qty);
     if (!spqResult.isValid) {
-      alert(`[포장단위 안내] ${maker} 라인의 표준 Reel 단위는 ${spqResult.spq.toLocaleString()} EA 입니다.\n입력 수량(${qty.toLocaleString()} EA) 진행 시 자투리 잉여재고가 발생할 수 있습니다.\n권장 수량: ${spqResult.recommendedQty.toLocaleString()} EA`);
+      alert(`[포장단위 안내] ${maker} 라인의 표준 Reel 단위는 ${spqResult.spq.toLocaleString()} EA 입니다.
+입력 수량(${qty.toLocaleString()} EA) 진행 시 자투리 잉여재고가 발생할 수 있습니다.
+권장 수량: ${spqResult.recommendedQty.toLocaleString()} EA`);
     }
   });
 
@@ -160,6 +161,61 @@ function bindInputs() {
   safeAddListener('saveItemBtn', 'click', saveCurrentForm);
   safeAddListener('openLandedCostBtn', 'click', () => {
     document.getElementById('landedCostModal')?.classList.remove('hidden');
+  });
+
+  // 💡 엑셀 내보내기 안전 실행
+  safeAddListener('excelExportBtn', 'click', () => {
+    try {
+      const q = document.getElementById('searchInput')?.value || "";
+      const maker = document.getElementById('filterMaker')?.value || "";
+      const owner = document.getElementById('filterOwner')?.value || "";
+      const pay = document.getElementById('filterPayment')?.value || "";
+      const status = document.getElementById('filterStatus')?.value || "";
+
+      const filtered = filterItems({
+        query: q,
+        filterMaker: maker,
+        filterOwner: owner,
+        filterStatus: status,
+        filterPayment: pay
+      });
+
+      exportToExcel(filtered);
+    } catch (err) {
+      console.error("[Excel Export Error]", err);
+      alert("엑셀 다운로드 중 오류가 발생했습니다: " + err.message);
+    }
+  });
+
+  // 💡 패킹리스트 파일 선택 이벤트
+  const fileInp = document.getElementById('excelFileInput');
+  fileInp?.addEventListener('change', (e) => {
+    if (!isCsOrAdminUser()) {
+      alert("패킹리스트 일괄 업로드는 CS 및 관리자 권한만 가능합니다.");
+      fileInp.value = "";
+      return;
+    }
+    const file = e.target.files?.[0];
+    if (file) {
+      handleExcelFileSelect(file);
+      fileInp.value = "";
+    }
+  });
+
+  // 💡 패킹리스트 DB 등록 실행
+  safeAddListener('excelConfirmUploadBtn', 'click', async () => {
+    const btn = document.getElementById('excelConfirmUploadBtn');
+    if (btn) btn.disabled = true;
+    try {
+      const count = await executeBatchUpload();
+      alert(`[업로드 완료] ${count.toLocaleString()}건의 부품 데이터가 클라우드에 성공적으로 등록되었습니다.`);
+      document.getElementById('excelPreviewModal')?.classList.add('hidden');
+      await refreshInventory();
+    } catch (err) {
+      alert("일괄 업로드 실패: " + err.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   });
 }
 
@@ -341,11 +397,8 @@ function renderTierTable(unitUsd, unitKrw, currentQty) {
 async function refreshInventory() {
   try {
     const items = await fetchInventoryItems();
-    
-    // 💡 KPI 서머리 바 동기화
     const kpiMetrics = computeKpiMetrics(items, rawFxRate);
     renderKpiBar(kpiMetrics);
-
     applyFilters();
   } catch (err) {
     console.error("데이터 로드 실패", err);
@@ -358,6 +411,7 @@ function applyFilters() {
     query: document.getElementById('searchInput')?.value || "",
     filterMaker: document.getElementById('filterMaker')?.value || "",
     filterOwner: document.getElementById('filterOwner')?.value || "",
+    filterStatus: document.getElementById('filterStatus')?.value || "",
     filterPayment: document.getElementById('filterPayment')?.value || ""
   });
   renderInventoryUI(filtered, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, canEdit);
@@ -537,7 +591,11 @@ function copyQuotation() {
   const totalReplace = document.getElementById('minSaleTotalReplace')?.innerText || "-";
   const fxRateText = document.getElementById('liveFx')?.innerText || "-";
 
-  const quote = `[견적 안내] ${partName} (D/C: ${dateCode})\n- 수량: ${qty.toLocaleString()} EA\n- 공급단가: ${unitUsd} ${unitKrw}\n- 총견적액: ${totalReplace}\n* 기준환율: ${fxRateText}`;
+  const quote = `[견적 안내] ${partName} (D/C: ${dateCode})
+- 수량: ${qty.toLocaleString()} EA
+- 공급단가: ${unitUsd} ${unitKrw}
+- 총견적액: ${totalReplace}
+* 기준환율: ${fxRateText}`;
   navigator.clipboard.writeText(quote).then(() => alert("견적서 텍스트가 복사되었습니다!"));
 }
 
