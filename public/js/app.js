@@ -261,9 +261,6 @@ function bindInputs() {
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
 
-  // 📄 공식 PDF 견적서 발행 버튼 연동
-    });
-
   // 📊 KPI 서머리 바 토글
   safeAddListener('toggleKpiBtn', 'click', () => {
     const bar = document.getElementById('kpiSummaryBar');
