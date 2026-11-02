@@ -261,9 +261,15 @@ function bindInputs() {
 
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
+
   // 📄 공식 PDF 견적서 발행 버튼 연동
-  safeAddListener('openPdfQuoteBtn', () => {
+  safeAddListener('openPdfQuoteBtn', 'click', () => {
     const partName = document.getElementById('inputPartName')?.value.trim();
+    if (!partName) {
+      alert("견적서를 발행할 부품명을 먼저 입력하거나 목록에서 선택해주세요.");
+      return;
+    }
+
     const maker = (document.getElementById('selectMaker')?.value === '__CUSTOM_MAKER__')
       ? document.getElementById('inputCustomMaker')?.value.trim() : document.getElementById('selectMaker')?.value;
     const dateCode = document.getElementById('inputDateCode')?.value.trim();
@@ -271,7 +277,7 @@ function bindInputs() {
     const qty = parseFloat(document.getElementById('inputStock')?.value) || 0;
     const spq = document.getElementById('inputSpq')?.value;
     const currency = document.getElementById('selectCurrency')?.value || 'USD';
-    const paymentTerms = document.getElementById('selectPaymentTerms')?.value || '선입금 (VAT 포함)';
+    const paymentTerms = document.getElementById('selectPaymentTerms')?.value || '익월말 현금결제 (VAT 포함)';
 
     const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value);
     const unitPrice = (soldPrice && soldPrice > 0)
@@ -282,8 +288,8 @@ function bindInputs() {
       partName,
       maker: maker || '',
       dateCode,
-      customer: customer || '',
-      attn: '',
+      customer: customer || '고객사 귀중',
+      attn: '구매/개발 담당자',
       qty,
       spq,
       currency,
@@ -296,9 +302,11 @@ function bindInputs() {
       origin: 'TAIWAN',
       shippingPort: 'TAIWAN',
       validity: '7 DAYS',
-      salesRep: document.getElementById('selectOwner')?.value || '김남천 주임'
+      salesRep: document.getElementById('selectOwner')?.value || 'Nathan Kim'
     });
   });
+  // 📄 공식 PDF 견적서 발행 버튼 연동
+    });
 
   // 📊 KPI 서머리 바 토글
   safeAddListener('toggleKpiBtn', 'click', () => {
