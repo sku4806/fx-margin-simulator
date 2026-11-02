@@ -6,6 +6,8 @@
   <title>BIGSHINE KOREA - 영업 견적 & 출하 채권 관리 시스템</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <!-- 💡 SheetJS 엑셀 파싱/생성 엔진 -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     input, select, button { -webkit-tap-highlight-color: transparent; }
     .word-keep { word-break: keep-all; }
@@ -151,7 +153,7 @@
       </div>
     </div>
 
-    <!-- 4. 💡 [핵심 개선] 관련성 기반 그룹화 입력 폼팩터 -->
+    <!-- 4. 그룹화 입력 폼 -->
     <div id="formSection" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
       <div class="border-b pb-2.5 flex justify-between items-center">
         <div>
@@ -168,7 +170,7 @@
         <button onclick="document.getElementById('editingBanner').classList.add('hidden')" class="text-indigo-600 hover:text-indigo-800 font-bold text-[10px]">✕ 리셋</button>
       </div>
 
-      <!-- 📦 그룹 1: 기본 부품 및 담당 정보 (공통) -->
+      <!-- 그룹 1: 기본 부품 및 담당 정보 -->
       <div class="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2">
         <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
           <span>🏷️</span> 부품 및 영업 정보
@@ -223,14 +225,13 @@
               <option value="Paul">Paul</option>
               <option value="__CUSTOM_OWNER__">기타 (직접 입력)</option>
             </select>
-            <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1 p-1.5 border rounded-lg bg-amber-50/50 text-xs outline-none">
+            <input type="text" id="inputCustomOwner" placeholder="담당자명 직접 입력..." class="hidden w-full mt-1.5 p-2 border rounded-lg bg-amber-50/50 text-xs outline-none">
           </div>
         </div>
       </div>
 
-      <!-- 💼 그룹 2-A: [영업 수주 모드] 거래처 및 단가/환율/마진 정보 -->
+      <!-- 그룹 2-A: [영업 수주 모드] 거래처 및 단가/환율/마진 정보 -->
       <div class="sales-only-field space-y-3">
-        <!-- 거래처 & 수량 -->
         <div class="bg-indigo-50/30 p-3 rounded-xl border border-indigo-100/80 space-y-2">
           <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
             <span>🤝</span> 수주 거래처 및 수량
@@ -251,7 +252,6 @@
           </div>
         </div>
 
-        <!-- 단가 및 원가/환율 -->
         <div class="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2">
           <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
             <span>💰</span> 매입/판매 단가 및 환율
@@ -280,7 +280,6 @@
               <input type="number" id="inputOverhead" value="3.0" step="0.1" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
             </div>
 
-            <!-- SPA 특가 승인 -->
             <div class="col-span-2 lg:col-span-2 bg-cyan-50/50 p-2 rounded-lg border border-cyan-200/70">
               <div class="flex items-center justify-between mb-1">
                 <label class="text-cyan-900 font-bold text-[11px]">본사 특가 승인 (SPA / Debit)</label>
@@ -297,9 +296,8 @@
         </div>
       </div>
 
-      <!-- 📋 그룹 2-B: [출하 및 정산 모드] 물류 상태 및 채권/인보이스 정보 -->
+      <!-- 그룹 2-B: [출하 및 정산 모드] 물류 상태 및 채권/인보이스 정보 -->
       <div class="fulfillment-only-field hidden space-y-3">
-        <!-- 물류 & 출하 정보 -->
         <div class="bg-indigo-50/30 p-3 rounded-xl border border-indigo-100/80 space-y-2">
           <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
             <span>🚚</span> 출하 및 물류 관리
@@ -335,7 +333,6 @@
           </div>
         </div>
 
-        <!-- 채권 & 수금 정산 -->
         <div class="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2">
           <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
             <span>💳</span> 세금계산서 및 수금 정산
@@ -384,7 +381,7 @@
         </div>
       </div>
 
-      <!-- 📝 그룹 3: 업무 비고 (공통) -->
+      <!-- 그룹 3: 업무 비고 -->
       <div>
         <label class="text-slate-600 block mb-0.5 text-[11px]">업무 비고 (창고 랙 위치, 포장 단위, 결제 특이사항)</label>
         <input type="text" id="inputMemo" placeholder="예: 본사 A랙 3열 보관 / Reel 2500EA 단위 포장 / 담당자 구두 협의 완료" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none">
@@ -393,13 +390,23 @@
 
     <!-- 5. 마스터 리스트 -->
     <div class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-2.5 sm:space-y-4">
-      <div class="flex justify-between items-center border-b pb-2.5">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-2.5">
         <div>
           <h2 class="font-black text-xs sm:text-base tracking-wide text-slate-900">Inventory &amp; Fulfillment Master</h2>
           <span id="lockStatusBadge" class="text-[9px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full inline-block mt-0.5">🔒 로그인 필요</span>
         </div>
 
-        <div class="flex items-center gap-1.5">
+        <!-- 💡 우측 상단 엑셀 다운로드/업로드 & 계정 버튼 -->
+        <div class="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-end">
+          <button id="excelExportBtn" class="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors">
+            <span>📥</span> 엑셀 다운로드
+          </button>
+          
+          <label id="excelImportLabel" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1 cursor-pointer transition-colors shadow-sm">
+            <span>📤</span> 패킹리스트 업로드
+            <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden">
+          </label>
+
           <button id="changePwdBtn" onclick="openChangePasswordModal()" class="hidden text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2 py-1 rounded-lg border border-slate-300">
             비밀번호 변경
           </button>
@@ -418,6 +425,9 @@
       </div>
 
       <div id="unlockedContent" class="hidden space-y-2.5">
+        <!-- 📊 KPI 서머리 바 -->
+        <div id="kpiSummaryBar" class="pt-1"></div>
+
         <div class="bg-slate-50 p-2 rounded-xl border border-slate-200/80 grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-center">
           <div class="col-span-2 relative">
             <input type="text" id="searchInput" placeholder="Part, D/C, 고객사, 송장 검색..." class="w-full pl-7 pr-2.5 py-1.5 border rounded-lg bg-white text-xs outline-none">
@@ -480,6 +490,41 @@
 
     </div>
 
+  </div>
+
+  <!-- 💡 모달 5: 패킹리스트 엑셀 일괄 업로드 미리보기 모달 -->
+  <div id="excelPreviewModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 hidden">
+    <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl p-4 sm:p-6 shadow-2xl border border-slate-200 flex flex-col space-y-3">
+      <div class="flex justify-between items-center border-b pb-2.5">
+        <div>
+          <h3 class="text-sm sm:text-base font-bold text-slate-900">패킹리스트(Packing List) 일괄 업로드 미리보기</h3>
+          <p id="excelPreviewCount" class="text-[11px] text-indigo-700 font-bold mt-0.5">총 0건의 부품 데이터 파싱됨</p>
+        </div>
+        <button onclick="document.getElementById('excelPreviewModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-1.5">✕</button>
+      </div>
+
+      <div class="overflow-y-auto flex-1 border rounded-xl">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-50 text-slate-500 border-b font-semibold sticky top-0">
+            <tr>
+              <th class="py-2 px-2">라인</th>
+              <th class="py-2 px-2">Part Number</th>
+              <th class="py-2 px-2">D/C</th>
+              <th class="py-2 px-2">수량(EA)</th>
+              <th class="py-2 px-2">매입단가($)</th>
+              <th class="py-2 px-2">선적일</th>
+              <th class="py-2 px-2">소유권</th>
+            </tr>
+          </thead>
+          <tbody id="excelPreviewTbody" class="divide-y divide-slate-100 font-medium"></tbody>
+        </table>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-1 border-t">
+        <button onclick="document.getElementById('excelPreviewModal').classList.add('hidden')" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">취소</button>
+        <button id="excelConfirmUploadBtn" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">클라우드 일괄 등록 실행</button>
+      </div>
+    </div>
   </div>
 
   <!-- 모달 0: 시스템 가이드북 -->
