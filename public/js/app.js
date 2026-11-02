@@ -284,24 +284,27 @@ function bindInputs() {
       ? soldPrice
       : (parseFloat(document.getElementById('minSaleUnitReplaceUsd')?.innerText.replace('$', '')) || 0);
 
-    const ownerVal = (owner === '본사 일반재고' || owner === '미배정' || !owner) ? '' : owner;
+    // 세일즈 담당자가 '본사 일반재고'이면 배정 전이므로 빈칸 처리
+    const rawOwner = document.getElementById('selectOwner')?.value;
+    const salesRep = (rawOwner && rawOwner !== '본사 일반재고' && rawOwner !== '__CUSTOM_OWNER__') ? rawOwner : '';
 
     downloadOfficialQuotationExcel({
-      partName: partName,
+      partName,
       maker: maker || '',
-      dateCode: dateCode,
+      dateCode,
       customer: customer || '',
       attn: '',
-      qty: qty,
-      spq: spq,
-      currency: currency,
+      qty,
+      spq,
+      currency,
       unitPriceUsd: currency === 'USD' ? unitPrice : 0,
       unitPriceKrw: currency === 'KRW' ? Math.round(unitPrice * appliedFxRate) : 0,
       appliedFx: appliedFxRate,
-      paymentTerms: paymentTerms,
+      paymentTerms,
       delivery: '즉시 출고 (2-3WKS)',
-      salesRep: ownerVal
+      salesRep: salesRep
     });
+  });
   });
 
   // 📊 KPI 서머리 바 토글
