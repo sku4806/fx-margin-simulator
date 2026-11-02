@@ -7,43 +7,51 @@ export const COURIER_CARRIERS = [
     id: 'us.dhl', 
     name: 'DHL Express', 
     regex: /^(\d{10})$/, 
-    queryUrl: 'https://www.dhl.com/kr-ko/home/tracking/tracking-express.html?submit=1&tracking-id=' 
+    // 17TRACK 모바일 임베드 허용 엔드포인트 (DHL 공식 iframe 차단 우회)
+    iframeUrl: 'https://t.17track.net/ko#nums=',
+    officialUrl: 'https://www.dhl.com/kr-ko/home/tracking/tracking-express.html?submit=1&tracking-id='
   },
   { 
     id: 'kr.cjlogistics', 
     name: 'CJ대한통운', 
     regex: /^(\d{12})$/, 
-    queryUrl: 'https://trace.cjlogistics.com/next/tracking.html?wblNo=' 
+    iframeUrl: 'https://trace.cjlogistics.com/next/tracking.html?wblNo=',
+    officialUrl: 'https://trace.cjlogistics.com/next/tracking.html?wblNo='
   },
   { 
     id: 'kr.logen', 
     name: '로젠택배', 
     regex: /^(\d{11})$/, 
-    queryUrl: 'https://www.ilogen.com/m/personal/trace/' 
+    iframeUrl: 'https://www.ilogen.com/m/personal/trace/',
+    officialUrl: 'https://www.ilogen.com/m/personal/trace/'
   },
   { 
     id: 'kr.epost', 
     name: '우체국택배', 
     regex: /^(\d{13})$/, 
-    queryUrl: 'https://service.epost.go.kr/trace.RetrieveDomRcvtraceList.comm?sid1=' 
+    iframeUrl: 'https://service.epost.go.kr/trace.RetrieveDomRcvtraceList.comm?sid1=',
+    officialUrl: 'https://service.epost.go.kr/trace.RetrieveDomRcvtraceList.comm?sid1='
   },
   { 
     id: 'kr.hanjin', 
     name: '한진택배', 
     regex: /^(\d{10}|\d{12})$/, 
-    queryUrl: 'https://www.hanjin.com/kor/CMS/DeliveryMgr/WaybillResult.do?mCode=MN038&wblnum=' 
+    iframeUrl: 'https://www.hanjin.com/kor/CMS/DeliveryMgr/WaybillResult.do?mCode=MN038&wblnum=',
+    officialUrl: 'https://www.hanjin.com/kor/CMS/DeliveryMgr/WaybillResult.do?mCode=MN038&wblnum='
   },
   { 
     id: 'kr.kdexp', 
     name: '경동택배', 
     regex: /^(\d{16})$/, 
-    queryUrl: 'https://kdexp.com/service/delivery/delivery_view.do?barcode=' 
+    iframeUrl: 'https://kdexp.com/service/delivery/delivery_view.do?barcode=',
+    officialUrl: 'https://kdexp.com/service/delivery/delivery_view.do?barcode='
   },
   { 
     id: 'us.fedex', 
     name: 'FedEx', 
     regex: /^(\d{12}|\d{15})$/, 
-    queryUrl: 'https://www.fedex.com/fedextrack/?trknbr=' 
+    iframeUrl: 'https://t.17track.net/ko#nums=',
+    officialUrl: 'https://www.fedex.com/fedextrack/?trknbr='
   }
 ];
 
@@ -75,7 +83,6 @@ export function openTrackingModal(trackingNo) {
 
   if (infoEl) infoEl.innerText = `송장번호: ${cleanNo}`;
 
-  // 택배사 셀렉트박스 옵션 초기화 및 선택
   if (carrierSelect) {
     carrierSelect.innerHTML = COURIER_CARRIERS.map(c => 
       `<option value="${c.id}" ${c.id === carrier.id ? 'selected' : ''}>${c.name}</option>`
@@ -96,18 +103,21 @@ export function loadCarrierTracking(carrierId, cleanNo) {
   const iframeEl = document.getElementById('trackingIframe');
   const directLinkBtn = document.getElementById('trackingDirectLinkBtn');
 
-  let fullUrl = carrier.queryUrl + cleanNo;
+  let embedUrl = carrier.iframeUrl + cleanNo;
+  let officialUrl = carrier.officialUrl + cleanNo;
+
   if (carrier.id === 'kr.logen') {
-    fullUrl = `https://www.ilogen.com/m/personal/trace/${cleanNo}`;
+    embedUrl = `https://www.ilogen.com/m/personal/trace/${cleanNo}`;
+    officialUrl = embedUrl;
   }
 
   if (titleEl) titleEl.innerText = `[${carrier.name}] 실시간 배송 현황`;
   if (directLinkBtn) {
-    directLinkBtn.href = fullUrl;
+    directLinkBtn.href = officialUrl;
     directLinkBtn.target = "_blank";
   }
 
   if (iframeEl) {
-    iframeEl.src = fullUrl;
+    iframeEl.src = embedUrl;
   }
 }
