@@ -2,7 +2,7 @@ import { openTrackingModal } from './modules/courier.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
-import { validateSpq } from './modules/packaging.js';
+import { evaluatePackaging } from './modules/packaging.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { fetchInventoryItems, upsertInventoryItem, splitInventoryShipment, deleteInventoryItem, filterItems, getCachedItem, renderInventoryUI } from './inventory.js';
@@ -150,6 +150,47 @@ function bindInputs() {
   });
 
   safeAddListener('inputSettledFx', 'input', updateFxVarianceFeedback);
+  const updateSpqNotice = () => {
+    const maker = document.getElementById('selectMaker')?.value;
+    const stockEl = document.getElementById('inputStock');
+    const container = document.getElementById('spqFeedbackContainer');
+
+    const qty = parseInt(stockEl.value) || 0;
+    const res = evaluatePackaging(maker, qty);
+
+    if (res.isValid || qty === 0) {
+      container.classList.add('hidden');
+      container.innerHTML = '';
+    } else {
+      container.classList.remove('hidden');
+      container.innerHTML = `
+        <div class="p-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] space-y-1">
+          <div class="text-amber-800 font-bold flex items-center justify-between">
+            <span>⚠️ Reel 포장단위(${res.spq.toLocaleString()} EA) 불일치</span>
+            <span class="text-rose-600 font-black">-${res.missingForFullReel.toLocaleString()} EA 자투리</span>
+          </div>
+          <div class="flex items-center gap-1 pt-0.5">
+            <button type="button" class="spq-fix-btn flex-1 bg-white hover:bg-amber-100 text-slate-700 font-bold py-0.5 px-1 rounded border border-amber-300 transition-colors" data-target="${res.downQty}">
+              ${res.downQty.toLocaleString()} EA 하향
+            </button>
+            <button type="button" class="spq-fix-btn flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-0.5 px-1 rounded transition-colors" data-target="${res.upQty}">
+              ${res.upQty.toLocaleString()} EA 상향
+            </button>
+          </div>
+        </div>
+      `;
+      container.querySelectorAll('.spq-fix-btn').forEach(btn => {
+        btn.onclick = () => {
+          stockEl.value = btn.dataset.target;
+          updateSpqNotice();
+          runEngine();
+        };
+      });
+    }
+  };
+
+  safeAddListener('inputStock', 'input', updateSpqNotice);
+  safeAddListener('selectMaker', 'change', updateSpqNotice);
 
   bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
   bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
