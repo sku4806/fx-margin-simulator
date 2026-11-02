@@ -1,3 +1,4 @@
+import { openQuotationPrintModal } from './modules/pdf_quotation.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
@@ -260,6 +261,44 @@ function bindInputs() {
 
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
+  // 📄 공식 PDF 견적서 발행 버튼 연동
+  safeAddListener('openPdfQuoteBtn', () => {
+    const partName = document.getElementById('inputPartName')?.value.trim();
+    const maker = (document.getElementById('selectMaker')?.value === '__CUSTOM_MAKER__')
+      ? document.getElementById('inputCustomMaker')?.value.trim() : document.getElementById('selectMaker')?.value;
+    const dateCode = document.getElementById('inputDateCode')?.value.trim();
+    const customer = document.getElementById('inputCustomer')?.value.trim();
+    const qty = parseFloat(document.getElementById('inputStock')?.value) || 0;
+    const spq = document.getElementById('inputSpq')?.value;
+    const currency = document.getElementById('selectCurrency')?.value || 'USD';
+    const paymentTerms = document.getElementById('selectPaymentTerms')?.value || '선입금 (VAT 포함)';
+
+    const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value);
+    const unitPrice = (soldPrice && soldPrice > 0)
+      ? soldPrice
+      : (parseFloat(document.getElementById('minSaleUnitReplaceUsd')?.innerText.replace('$', '')) || 0);
+
+    openQuotationPrintModal({
+      partName,
+      maker: maker || '',
+      dateCode,
+      customer: customer || '',
+      attn: '',
+      qty,
+      spq,
+      currency,
+      unitPriceUsd: currency === 'USD' ? unitPrice : 0,
+      unitPriceKrw: currency === 'KRW' ? Math.round(unitPrice * appliedFxRate) : 0,
+      appliedFx: appliedFxRate,
+      paymentTerms,
+      delivery: '즉시 출고 (2-3WKS)',
+      incoTerms: 'DOMESTIC',
+      origin: 'TAIWAN',
+      shippingPort: 'TAIWAN',
+      validity: '7 DAYS',
+      salesRep: document.getElementById('selectOwner')?.value || '김남천 주임'
+    });
+  });
 
   // 📊 KPI 서머리 바 토글
   safeAddListener('toggleKpiBtn', 'click', () => {
