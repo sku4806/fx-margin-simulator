@@ -1,11 +1,11 @@
 /**
- * 🚚 실시간 배송 및 B/L 추적 모듈 (국내 택배 인앱 + 해외 특송사 안전 리다이렉트 카드 통합)
+ * 🚚 배송 추적 모듈 (국내 일반택배 인앱 + 해외 특송사 안전 리다이렉트 카드 통합)
  */
 
 export function detectCarrier(trackingNo) {
   const clean = String(trackingNo || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
   
-  if (!clean) return { type: 'unknown', clean: '' };
+  if (!clean) return { type: 'unknown', name: '미등록', clean: '' };
 
   // 1. SF Express (순풍)
   if (clean.startsWith('SF') || (clean.length === 12 && /^\d+$/.test(clean) && clean.startsWith('0'))) {
@@ -18,29 +18,29 @@ export function detectCarrier(trackingNo) {
     };
   }
 
-  // 2. DHL Express (10자리 숫자)
+  // 2. DHL Express (10자리 순수 숫자)
   if (clean.length === 10 && /^\d+$/.test(clean)) {
     return { 
       type: 'dhl', 
       name: 'DHL Express', 
       color: 'bg-amber-50 border-amber-200 text-amber-900', 
-      btnColor: 'bg-amber-500 hover:bg-amber-600 text-black',
+      btnColor: 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black',
       clean 
     };
   }
 
-  // 3. FedEx (12자리 숫자)
+  // 3. FedEx Express (12자리 순수 숫자)
   if (clean.length === 12 && /^\d+$/.test(clean)) {
     return { 
       type: 'fedex', 
       name: 'FedEx Express', 
       color: 'bg-purple-50 border-purple-200 text-purple-900', 
-      btnColor: 'bg-purple-600 hover:bg-purple-700',
+      btnColor: 'bg-purple-600 hover:bg-purple-700 text-white',
       clean 
     };
   }
 
-  // 4. 국내 일반 택배 (CJ, 롯데, 우체국, 로젠, 한진 등)
+  // 4. 국내 일반 택배 (CJ, 우체국, 로젠, 롯데, 한진 등)
   return { 
     type: 'domestic', 
     name: '국내 택배 / 화물', 
@@ -51,17 +51,22 @@ export function detectCarrier(trackingNo) {
 export function openTrackingModal(trackingNo) {
   const modal = document.getElementById('courierTrackingModal');
   const iframe = document.getElementById('courierFrame');
-  const container = iframe?.parentElement;
+  const modalContentArea = iframe?.parentElement;
 
   if (!modal) return;
 
   const detected = detectCarrier(trackingNo);
   const cleanNo = detected.clean;
 
-  // 기존 안내 카드 제거
-  const existingCard = document.getElementById('intlCarrierCard');
-  if (existingCard) existingCard.remove();
+  // 기존 삽입된 국제특송 카드 제거
+  const oldCard = document.getElementById('intlCarrierCard');
+  if (oldCard) oldCard.remove();
 
+  // 기존 헤더의 외부 링크 버튼 제거
+  const oldHeaderBtn = document.getElementById('carrierHeaderDirectBtn');
+  if (oldHeaderBtn) oldHeaderBtn.remove();
+
+  // 특송사별 공식 URL 생성
   let targetUrl = '';
   if (detected.type === 'dhl') {
     targetUrl = `https://www.dhl.com/kr-ko/home/tracking/tracking-express.html?submit=1&tracking-id=${cleanNo}`;
@@ -73,49 +78,60 @@ export function openTrackingModal(trackingNo) {
     targetUrl = `https://tracker.delivery/#/auto/${cleanNo}`;
   }
 
-  // 상단 새창 열기 버튼 동기화
-  const topExternalBtn = document.getElementById('carrierExternalLinkBtn');
-  if (topExternalBtn) {
-    topExternalBtn.href = targetUrl;
-    topExternalBtn.innerHTML = `<span>🔗</span> [${detected.name}] 새창 열기`;
+  // 모달 상단 헤더 우측(닫기 버튼 좌측)에 정확한 외부 링크 버튼 동적 배치
+  const headerRightArea = modal.querySelector('.flex.justify-between.items-center') || modal.querySelector('h3')?.parentElement;
+  if (headerRightArea) {
+    const extBtn = document.createElement('a');
+    extBtn.id = 'carrierHeaderDirectBtn';
+    extBtn.href = targetUrl;
+    extBtn.target = '_blank';
+    extBtn.rel = 'noopener noreferrer';
+    extBtn.className = 'text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 border border-slate-300 transition-colors ml-auto mr-2 shadow-sm';
+    extBtn.innerHTML = `<span>🔗</span> [${detected.name}] 공식 사이트 새창 조회`;
+    
+    const closeBtn = headerRightArea.querySelector('button');
+    if (closeBtn) {
+      headerRightArea.insertBefore(extBtn, closeBtn);
+    } else {
+      headerRightArea.appendChild(extBtn);
+    }
   }
 
   if (detected.type === 'domestic') {
-    // 국내 택배: 기존처럼 iframe 렌더링
+    // 국내 택배는 iframe 정상 노출
     if (iframe) {
       iframe.classList.remove('hidden');
       iframe.src = targetUrl;
     }
   } else {
-    // 해외 특송사(DHL / SF / FedEx): 보안 차단 방지를 위해 iframe 숨기고 안내 카드 노출
+    // DHL, SF, FedEx 등 해외 특송사는 iframe 차단되므로 숨기고 직관적인 다이렉트 카드 표시
     if (iframe) {
       iframe.classList.add('hidden');
       iframe.src = 'about:blank';
     }
 
-    const card = document.createElement('div');
-    card.id = 'intlCarrierCard';
-    card.className = `w-full h-full flex flex-col items-center justify-center p-6 text-center border rounded-xl ${detected.color} space-y-4`;
-    card.innerHTML = `
-      <div class="text-4xl">✈️</div>
-      <div class="space-y-1">
-        <h4 class="text-base sm:text-lg font-black text-slate-900">${detected.name} 국제 특송 조회</h4>
-        <p class="text-xs text-slate-600">
-          운송장 번호: <span class="font-mono font-bold text-slate-900 text-sm select-all">${cleanNo}</span>
-        </p>
-        <p class="text-[11px] text-slate-500 pt-1">
-          특송사 자체 보안 규정(Iframe 제한)에 따라 공식 배송 조회 페이지로 직접 안전하게 연결됩니다.
-        </p>
-      </div>
-      <div class="pt-2">
-        <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white shadow-md text-xs sm:text-sm transition-transform active:scale-95 ${detected.btnColor}">
-          <span>🚀</span> 공식 사이트에서 실시간 위치 조회하기
-        </a>
-      </div>
-    `;
-
-    if (container) {
-      container.appendChild(card);
+    if (modalContentArea) {
+      const card = document.createElement('div');
+      card.id = 'intlCarrierCard';
+      card.className = `w-full h-full flex flex-col items-center justify-center p-6 text-center border-2 border-dashed rounded-2xl ${detected.color} space-y-4 my-auto min-h-[400px]`;
+      card.innerHTML = `
+        <div class="text-5xl">✈️</div>
+        <div class="space-y-1.5">
+          <h4 class="text-lg sm:text-xl font-black text-slate-900">${detected.name} 실시간 화물 추적</h4>
+          <div class="text-xs sm:text-sm text-slate-700">
+            운송장 B/L 번호: <span class="font-mono font-black text-slate-950 text-base bg-white/80 px-2.5 py-0.5 rounded border border-slate-300 select-all">${cleanNo}</span>
+          </div>
+          <p class="text-[11px] text-slate-500 pt-1">
+            해외 특송사의 외부 사이트 삽입(Iframe) 보안 제한으로 인해 아래 버튼을 누르면 공식 페이지로 즉시 연결됩니다.
+          </p>
+        </div>
+        <div class="pt-3">
+          <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold shadow-lg text-sm transition-transform active:scale-95 ${detected.btnColor}">
+            <span>🚀</span> ${detected.name} 공식 배송현황 조회하기
+          </a>
+        </div>
+      `;
+      modalContentArea.appendChild(card);
     }
   }
 
