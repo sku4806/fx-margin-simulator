@@ -34,7 +34,7 @@ export async function recordAuditLog(itemId, partName, actionType, details) {
 }
 
 /**
- * 📜 품목의 변경 이력 조회 (limit 없으면 전체)
+ * 📜 품목의 변경 이력 조회
  */
 export async function fetchAuditLogs(itemId, limit = null) {
   if (!sbClient) return [];
@@ -79,7 +79,6 @@ export async function renderAuditHistory(containerId, itemId, partName = '') {
     return;
   }
 
-  // 1. 전체 건수 확인을 위해 전체 fetch
   const allLogs = await fetchAuditLogs(itemId);
   container.classList.remove('hidden');
 
@@ -92,7 +91,6 @@ export async function renderAuditHistory(containerId, itemId, partName = '') {
     return;
   }
 
-  // 폼 하단에는 최근 5건만 노출
   const previewLogs = allLogs.slice(0, 5);
   const listHtml = previewLogs.map(log => formatLogItemHtml(log)).join('');
 

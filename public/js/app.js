@@ -34,46 +34,36 @@ function safeAddListener(id, event, handler) {
 }
 
 export async function bootstrap() {
+  const entryDateEl = document.getElementById('inputEntryDate');
+  if (entryDateEl) entryDateEl.value = new Date().toISOString().slice(0, 10);
+
   try {
-    const entryDateEl = document.getElementById('inputEntryDate');
-    if (entryDateEl) entryDateEl.value = new Date().toISOString().slice(0, 10);
-
-    try {
-      const fxRes = await fetch('/api/fx-rate');
-      if (fxRes.ok) {
-        const fxData = await fxRes.json();
-        if (fxData && fxData.current_rate) rawFxRate = fxData.current_rate;
-      }
-    } catch (err) {
-      console.warn("FX 기본값 유지", err);
-    }
-    updateFxDisplay();
-
-    try {
-      await fetchPackagingStandards();
-      renderPackagingTable();
-    } catch (pkgErr) {
-      console.warn("포장 기준 로드 실패:", pkgErr);
-    }
-
-    bindTabSwitch();
-    bindInputs();
-    bindModals();
-    try { initManualViewer(); } catch (mErr) { console.warn(mErr); }
-
-    initAuth(async (session, canEdit) => {
-      updateFormVisibility(canEdit);
-      if (session) {
-        await refreshInventory();
-      } else {
-        renderInventoryUI([], activeTab, () => {}, () => {}, () => {}, false);
-      }
-    });
-
-    runEngine();
-  } catch (fatalErr) {
-    console.error("[Bootstrap Fatal Error]", fatalErr);
+    const fxRes = await fetch('/api/fx-rate');
+    const fxData = await fxRes.json();
+    rawFxRate = fxData.current_rate;
+  } catch (err) {
+    console.warn("FX 기본값 유지", err);
   }
+  updateFxDisplay();
+
+  await fetchPackagingStandards();
+  renderPackagingTable();
+
+  bindTabSwitch();
+  bindInputs();
+  bindModals();
+  initManualViewer();
+
+  initAuth(async (session, canEdit) => {
+    updateFormVisibility(canEdit);
+    if (session) {
+      await refreshInventory();
+    } else {
+      renderInventoryUI([], activeTab, () => {}, () => {}, () => {}, false);
+    }
+  });
+
+  runEngine();
 }
 
 function bindTabSwitch() {
@@ -271,7 +261,6 @@ function bindInputs() {
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
 
-  // 📊 KPI 서머리 바 펼치기/접기 토글
   safeAddListener('toggleKpiBtn', 'click', () => {
     const bar = document.getElementById('kpiSummaryBar');
     const arrow = document.getElementById('kpiToggleArrow');
@@ -759,6 +748,7 @@ function resetCurrentForm() {
   const banner = document.getElementById('editingBanner');
   if (banner) banner.classList.add('hidden');
 
+  // 감사 이력 컨테이너 숨김 및 내용 초기화
   const auditContainer = document.getElementById('auditHistoryContainer');
   if (auditContainer) {
     auditContainer.classList.add('hidden');
@@ -820,7 +810,4 @@ function copyQuotation() {
   navigator.clipboard.writeText(quote).then(() => alert("견적서 텍스트가 복사되었습니다!"));
 }
 
-bootstrap(););
-} else {
-  bootstrap();
-}
+bootstrap();
