@@ -4,36 +4,45 @@ function initDynamicFormTabs() {
   const formSection = document.getElementById('formSection');
   if (!formSection) return;
 
-  // 기존에 잘못 삽입된 탭이 있다면 제거
   const oldNav = document.getElementById('dynamicSubTabNav');
   if (oldNav) oldNav.remove();
 
-  // 각 섹션 제목 텍스트를 기준으로 실제 카드 박스 컨테이너를 정확히 찾는 헬퍼
-  const findCardByTitle = (titleKeyword) => {
-    const walker = document.createTreeWalker(formSection, NodeFilter.SHOW_TEXT, null, false);
-    let node;
-    while ((node = walker.nextNode())) {
-      if (node.nodeValue.includes(titleKeyword)) {
-        let cur = node.parentElement;
-        while (cur && cur.parentElement && cur.parentElement !== formSection) {
-          if (cur.parentElement.id === 'formSection') break;
-          cur = cur.parentElement;
+  // 다른 섹션의 제목을 포함하지 않는 '순수 단일 카드 박스'만 정확히 추출하는 함수
+  const allTitles = ['부품 및 영업 정보', '수주 거래처 및 수량', '매입/판매 단가 및 환율', '출하 및 물류 관리', '세금계산서 및 수금 정산'];
+
+  const getIsolatedCard = (targetTitle) => {
+    const otherTitles = allTitles.filter(t => t !== targetTitle);
+    const elements = formSection.querySelectorAll('div, section');
+    for (const el of elements) {
+      // 타겟 타이틀을 포함하고 있으면서
+      if (el.textContent.includes(targetTitle)) {
+        // 다른 타이틀은 전혀 포함하지 않는 가장 바깥쪽 독립 박스
+        const hasOthers = otherTitles.some(ot => el.textContent.includes(ot));
+        if (!hasOthers) {
+          // 부모가 다른 타이틀을 포함하고 있다면, 현재 el이 바로 독립 카드 단위임
+          if (!el.parentElement || otherTitles.some(ot => el.parentElement.textContent.includes(ot)) || el.parentElement.id === 'formSection') {
+            return el;
+          }
         }
-        return cur;
       }
     }
     return null;
   };
 
-  const cardPart = findCardByTitle('부품 및 영업');
-  const cardOrder = findCardByTitle('수주 거래처');
-  const cardPrice = findCardByTitle('매입/판매');
-  const cardShip = findCardByTitle('출하 및 물류');
-  const cardBill = findCardByTitle('세금계산서');
+  const cardPart = getIsolatedCard('부품 및 영업 정보');
+  const cardOrder = getIsolatedCard('수주 거래처 및 수량');
+  const cardPrice = getIsolatedCard('매입/판매 단가 및 환율');
+  const cardShip = getIsolatedCard('출하 및 물류 관리');
+  const cardBill = getIsolatedCard('세금계산서 및 수금 정산');
 
   if (!cardPart) return;
 
-  // 3단계 서브탭 네비게이션 바 생성 (폼 최상단 전체 너비)
+  // 두 카드를 감싸고 있는 상위 부모 래퍼(fulfillment-only-field 등)의 스타일 제약 해제
+  if (cardShip && cardShip.parentElement && cardShip.parentElement !== formSection) {
+    cardShip.parentElement.style.display = 'contents';
+  }
+
+  // 3단계 서브탭 네비게이션 생성
   const nav = document.createElement('div');
   nav.id = 'dynamicSubTabNav';
   nav.className = 'w-full flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl text-xs font-bold mb-3 select-none shadow-inner';
@@ -49,7 +58,6 @@ function initDynamicFormTabs() {
     </button>
   `;
 
-  // 폼 헤더/배너 바로 아래(첫 번째 카드 바로 위)에 폼 전체 폭으로 삽입
   cardPart.parentNode.insertBefore(nav, cardPart);
 
   const btnOrder = document.getElementById('tabBtnOrder');
