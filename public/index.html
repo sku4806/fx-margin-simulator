@@ -526,12 +526,14 @@
           <span id="itemCount" class="font-bold text-indigo-700">총 0건</span>
         </div>
 
-        <div id="inventoryCardContainer" class="block md:hidden space-y-2"></div>
+        <!-- 모바일 카드 내부 스크롤 뷰 -->
+        <div id="inventoryCardContainer" class="block md:hidden space-y-2 max-h-[65vh] overflow-y-auto pr-1"></div>
 
-        <div class="hidden md:block overflow-x-auto">
-          <table class="w-full text-left text-xs">
-            <thead id="inventoryTableHeader" class="bg-slate-50 text-slate-500 border-b uppercase font-semibold"></thead>
-            <tbody id="inventoryTableBody" class="divide-y divide-slate-100 font-medium"></tbody>
+        <!-- 데스크탑 테이블 내부 스크롤 뷰 (헤더 sticky 고정) -->
+        <div class="hidden md:block overflow-x-auto max-h-[65vh] overflow-y-auto border border-slate-200 rounded-xl">
+          <table class="w-full text-left text-xs relative">
+            <thead id="inventoryTableHeader" class="bg-slate-100/95 backdrop-blur-sm text-slate-600 border-b uppercase font-semibold sticky top-0 z-10 shadow-sm"></thead>
+            <tbody id="inventoryTableBody" class="divide-y divide-slate-100 font-medium bg-white"></tbody>
           </table>
         </div>
       </div>
