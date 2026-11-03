@@ -64,21 +64,28 @@ export async function bootstrap() {
   });
 
   runEngine();
+  if (activeTab === 'sales') {
+    document.getElementById('formSection')?.classList.add('hidden');
+  }
 }
 
 function bindTabSwitch() {
   const tabSales = document.getElementById('tabSales');
   const tabFulfillment = document.getElementById('tabFulfillment');
   const salesPanel = document.getElementById('salesQuotationPanel');
+  const formSection = document.getElementById('formSection');
   const csHeaderDesc = document.getElementById('csHeaderDesc');
 
   tabSales?.addEventListener('click', () => {
     activeTab = 'sales';
     tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
     if (tabFulfillment) tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
+    
+    // 영업 탭: 계산기 노출, 입력 폼 숨김
     salesPanel?.classList.remove('hidden');
-    if (csHeaderDesc) csHeaderDesc.innerText = "영업 협의 수주 현황 및 실판매가를 확인합니다.";
-    updateFormVisibility(isCsOrAdminUser());
+    formSection?.classList.add('hidden');
+
+    if (csHeaderDesc) csHeaderDesc.innerText = "부품별 실시간 마진 계산 및 보유 재고 현황을 확인합니다.";
     applyFilters();
   });
 
@@ -86,33 +93,39 @@ function bindTabSwitch() {
     activeTab = 'fulfillment';
     tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
     if (tabSales) tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
+    
+    // 채권/출하 탭: 계산기 숨김, 통합 관리 폼 노출
     salesPanel?.classList.add('hidden');
-    if (csHeaderDesc) csHeaderDesc.innerText = "출하 스케줄, 운송장/인보이스 번호 및 미수금 만기 일정을 관리합니다.";
+    formSection?.classList.remove('hidden');
+
+    if (csHeaderDesc) csHeaderDesc.innerText = "수주 등록, 재고 배정, 출하 스케줄, 세금계산서 및 채권 결제 만기를 통합 관리합니다.";
     updateFormVisibility(isCsOrAdminUser());
     applyFilters();
   });
 }
 
 function updateFormVisibility(canEdit) {
+  const formSection = document.getElementById('formSection');
   const formTitle = document.getElementById('formTitle');
   const formSubtitle = document.getElementById('formSubtitle');
   const salesFields = document.querySelectorAll('.sales-only-field');
   const fulfillmentFields = document.querySelectorAll('.fulfillment-only-field');
   const saveBtn = document.getElementById('saveItemBtn');
 
+  // 영업 탭일 때는 폼 자체를 숨김
   if (activeTab === 'sales') {
-    if (formTitle) formTitle.innerText = "수주 및 재고 배정 등록 (Sales Order Entry)";
-    if (formSubtitle) formSubtitle.innerText = "공식 배정 물량, 협의 단가 및 Date Code를 설정합니다.";
-    if (saveBtn) saveBtn.innerText = "수주/배정 저장";
-    salesFields.forEach(el => el.classList.remove('hidden'));
-    fulfillmentFields.forEach(el => el.classList.add('hidden'));
-  } else {
-    if (formTitle) formTitle.innerText = "출하 처리 및 세금계산서/정산 등록 (Fulfillment & Billing)";
-    if (formSubtitle) formSubtitle.innerText = "실물 출고(송장), 세금계산서(인보이스) 발행 및 채권 결제 만기를 관리합니다.";
-    if (saveBtn) saveBtn.innerText = "출하/정산 업데이트";
-    salesFields.forEach(el => el.classList.add('hidden'));
-    fulfillmentFields.forEach(el => el.classList.remove('hidden'));
+    formSection?.classList.add('hidden');
+    return;
   }
+
+  // 출하/채권 관리 탭일 때는 모든 입력 필드(수주/배정 + 출하/정산)를 통합 노출
+  formSection?.classList.remove('hidden');
+  if (formTitle) formTitle.innerText = "수주 등록 / 재고 배정 및 출하·정산 관리";
+  if (formSubtitle) formSubtitle.innerText = "고객사 수주 배정 물량, 단가, 출고(송장) 및 세금계산서/채권 만기를 통합 설정합니다.";
+  if (saveBtn) saveBtn.innerText = "정보 저장 및 업데이트";
+
+  salesFields.forEach(el => el.classList.remove('hidden'));
+  fulfillmentFields.forEach(el => el.classList.remove('hidden'));
 
   if (!canEdit) {
     if (saveBtn) saveBtn.classList.add('hidden');
@@ -139,6 +152,9 @@ function updateFxDisplay() {
     liveFxEl.innerText = `$1.00 (₩${Math.round(appliedFxRate).toLocaleString()})${bufferText}`;
   }
   runEngine();
+  if (activeTab === 'sales') {
+    document.getElementById('formSection')?.classList.add('hidden');
+  }
 }
 
 function updateSpqNotice() {
@@ -557,8 +573,25 @@ function applyFilters() {
 }
 
 function loadFormFromItem(id) {
-  if (!isCsOrAdminUser()) return;
   const item = getCachedItem(id);
+  if (!item) return;
+
+  // 영업 탭인 경우: 계산기 입력창에 바로 해당 부품 스펙을 채워 빠른 견적 산출 지원
+  if (activeTab === 'sales') {
+    const unitUsdInp = document.getElementById('inputUsd');
+    const stockInp = document.getElementById('inputStock');
+    const shipFxInp = document.getElementById('inputShipFx');
+    if (unitUsdInp) unitUsdInp.value = item.unitUsd;
+    if (stockInp) stockInp.value = item.stock;
+    if (shipFxInp) shipFxInp.value = item.shipFx;
+    
+    // 계산기 즉시 재연산
+    runEngine();
+    document.getElementById('salesQuotationPanel')?.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+
+  if (!isCsOrAdminUser()) return;
   if (!item) return;
 
   editingItemId = item.id;
@@ -665,6 +698,9 @@ export function resetCurrentForm() {
   }
 
   runEngine();
+  if (activeTab === 'sales') {
+    document.getElementById('formSection')?.classList.add('hidden');
+  }
 }
 
 function handleOpenSplitModal(id) {
