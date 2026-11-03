@@ -17,6 +17,7 @@ export async function fetchInventoryItems() {
     partName: item.part_name || '-',
     dateCode: item.date_code || '-',
     stock: parseInt(item.stock) || 0,
+    arrangedQty: parseInt(item.arranged_qty) || 0,
     spq: parseInt(item.spq) || null,
     unitUsd: parseFloat(item.unit_usd) || 0,
     shipFx: parseFloat(item.ship_fx) || 1350,
@@ -24,10 +25,15 @@ export async function fetchInventoryItems() {
     entryDate: item.entry_date || '-',
     owner: item.owner || '본사 일반재고',
     customer: item.customer || '-',
+    realCustomer: item.real_customer || '-',
+    poNo: item.po_no || '',
+    application: item.application || '',
+    bizType: item.biz_type || 'DOMESTIC',
     orderStatus: item.order_status || '배정요청',
     paymentTerms: item.payment_terms || 'Net 30',
     currency: item.currency || 'USD',
     invoiceNo: item.invoice_no || '',
+    taxDate: item.tax_date || '',
     trackingNo: item.tracking_no || '',
     paymentStatus: item.payment_status || '미수',
     dueDate: item.due_date || '',
@@ -54,6 +60,9 @@ export function filterItems({ query = '', filterMaker = '', filterOwner = '', fi
       item.partName.toLowerCase().includes(q) ||
       item.maker.toLowerCase().includes(q) ||
       item.customer.toLowerCase().includes(q) ||
+      item.realCustomer.toLowerCase().includes(q) ||
+      item.poNo.toLowerCase().includes(q) ||
+      item.application.toLowerCase().includes(q) ||
       item.owner.toLowerCase().includes(q) ||
       item.dateCode.toLowerCase().includes(q) ||
       item.trackingNo.toLowerCase().includes(q) ||
@@ -118,6 +127,7 @@ export async function splitInventoryShipment(targetId, splitQty, soldPriceUsd, c
       part_name: orig.partName,
       date_code: orig.dateCode,
       stock: splitQty,
+      arranged_qty: 0,
       spq: orig.spq,
       unit_usd: orig.unitUsd,
       ship_fx: orig.shipFx,
@@ -125,10 +135,15 @@ export async function splitInventoryShipment(targetId, splitQty, soldPriceUsd, c
       entry_date: orig.entryDate,
       owner: owner || orig.owner,
       customer: customer || orig.customer,
+      real_customer: orig.realCustomer,
+      po_no: orig.poNo,
+      application: orig.application,
+      biz_type: orig.bizType,
       order_status: '출하준비',
       payment_terms: orig.paymentTerms,
       currency: orig.currency,
       invoice_no: '',
+      tax_date: null,
       tracking_no: '',
       payment_status: '미수',
       margin: orig.margin,
@@ -167,12 +182,12 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
       <tr>
         <th class="py-2.5 px-2">상태</th>
         <th class="py-2.5 px-2">라인 / Part No</th>
-        <th class="py-2.5 px-2">D/C</th>
+        <th class="py-2.5 px-2">D/C / PO</th>
         <th class="py-2.5 px-2">수량(SPQ)</th>
         <th class="py-2.5 px-2">선적원가(USD/KRW)</th>
         <th class="py-2.5 px-2">협의실판매가</th>
-        <th class="py-2.5 px-2">고객사</th>
-        <th class="py-2.5 px-2">담당 Sales</th>
+        <th class="py-2.5 px-2">계약처 / 실납품처</th>
+        <th class="py-2.5 px-2">적용처 / Sales</th>
         <th class="py-2.5 px-2 text-right">관리</th>
       </tr>
     `;
@@ -180,12 +195,11 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
     thead.innerHTML = `
       <tr>
         <th class="py-2.5 px-2">상태</th>
-        <th class="py-2.5 px-2">고객사</th>
-        <th class="py-2.5 px-2">Part No</th>
-        <th class="py-2.5 px-2">D/C</th>
+        <th class="py-2.5 px-2">계약처 / 실고객사</th>
+        <th class="py-2.5 px-2">Part No / 구분</th>
         <th class="py-2.5 px-2">수량</th>
         <th class="py-2.5 px-2">실판매단가</th>
-        <th class="py-2.5 px-2">선적/출하일</th>
+        <th class="py-2.5 px-2">출하일 / 계산서일</th>
         <th class="py-2.5 px-2">인보이스 / B/L</th>
         <th class="py-2.5 px-2">수금/환차손익</th>
         <th class="py-2.5 px-2">만기일정</th>
@@ -212,7 +226,10 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
             <div class="text-[10px] font-bold text-slate-400">${item.maker}</div>
             <div class="font-bold text-slate-900">${item.partName}</div>
           </td>
-          <td class="py-2.5 px-2 font-mono text-[11px] font-semibold text-slate-600">${item.dateCode}</td>
+          <td class="py-2.5 px-2 font-mono text-[11px] font-semibold text-slate-600">
+            <div>D/C: ${item.dateCode}</div>
+            ${item.poNo ? `<div class="text-[9px] text-indigo-700 font-bold">PO: ${item.poNo}</div>` : ''}
+          </td>
           <td class="py-2.5 px-2">
             <span class="font-black text-slate-900">${item.stock.toLocaleString()} EA</span>
             ${item.spq ? `<div class="text-[9px] text-slate-400 font-semibold">SPQ: ${item.spq.toLocaleString()}</div>` : ''}
@@ -224,8 +241,14 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
           <td class="py-2.5 px-2 text-[11px]">
             ${item.soldPriceUsd > 0 ? `<div class="font-black text-indigo-700">$${item.soldPriceUsd.toFixed(3)}</div>` : '<span class="text-slate-400">-</span>'}
           </td>
-          <td class="py-2.5 px-2 font-bold text-slate-800">${item.customer}</td>
-          <td class="py-2.5 px-2 font-semibold text-slate-700">${item.owner}</td>
+          <td class="py-2.5 px-2 text-xs">
+            <div class="font-bold text-slate-900">${item.customer}</div>
+            ${item.realCustomer !== '-' && item.realCustomer !== item.customer ? `<div class="text-[10px] text-indigo-700 font-semibold">↳ 실고객: ${item.realCustomer}</div>` : ''}
+          </td>
+          <td class="py-2.5 px-2 text-xs">
+            <div class="font-semibold text-slate-700">${item.owner}</div>
+            ${item.application ? `<div class="text-[9px] text-slate-400 font-medium">${item.application}</div>` : ''}
+          </td>
           <td class="py-2.5 px-2 text-right space-x-1" onclick="event.stopPropagation()">
             ${canEdit ? `
               <button class="split-btn text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded" data-id="${item.id}">출하분할</button>
@@ -240,17 +263,19 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
           <td class="py-2.5 px-2">
             <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(item.orderStatus)}">${item.orderStatus}</span>
           </td>
-          <td class="py-2.5 px-2 font-bold text-slate-900">${item.customer}</td>
+          <td class="py-2.5 px-2 font-bold text-slate-900">
+            <div>${item.customer}</div>
+            ${item.realCustomer !== '-' && item.realCustomer !== item.customer ? `<div class="text-[10px] text-indigo-700 font-normal">↳ ${item.realCustomer}</div>` : ''}
+          </td>
           <td class="py-2.5 px-2">
             <div class="font-bold text-indigo-950">${item.partName}</div>
-            <div class="text-[9px] text-slate-400 font-semibold">${item.maker}</div>
+            <div class="text-[9px] text-slate-400 font-semibold">${item.maker} · <span class="text-indigo-600">${item.bizType}</span></div>
           </td>
-          <td class="py-2.5 px-2 font-mono text-[11px] font-semibold text-slate-600">${item.dateCode}</td>
           <td class="py-2.5 px-2 font-bold text-slate-900">${item.stock.toLocaleString()} EA</td>
           <td class="py-2.5 px-2 font-black text-indigo-700">$${item.soldPriceUsd > 0 ? item.soldPriceUsd.toFixed(3) : '-'}</td>
           <td class="py-2.5 px-2 text-[10px] text-slate-600">
-            <div>선적: ${item.entryDate}</div>
-            <div class="text-indigo-900 font-bold">출하: ${item.shippedDate || '미출하'}</div>
+            <div>출하: ${item.shippedDate || '미출하'}</div>
+            <div class="text-indigo-900 font-semibold">계산서: ${item.taxDate || '-'}</div>
           </td>
           <td class="py-2.5 px-2 font-mono text-[10px] text-slate-600 leading-tight">
             <div>INV: ${item.invoiceNo || '-'}</div>
@@ -294,6 +319,7 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
           <div>
             <span class="text-[9px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">${item.maker}</span>
             <span class="text-[10px] font-mono font-bold text-slate-500 ml-1">D/C: ${item.dateCode}</span>
+            ${item.poNo ? `<span class="text-[9px] text-indigo-700 font-bold ml-1">PO: ${item.poNo}</span>` : ''}
             <div class="font-black text-sm text-slate-900 mt-0.5">${item.partName}</div>
           </div>
           <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(item.orderStatus)}">${item.orderStatus}</span>
@@ -301,12 +327,14 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
 
         <div class="grid grid-cols-2 gap-2 text-xs border-y py-2 border-slate-100">
           <div>
-            <span class="text-[10px] text-slate-400 block font-semibold">고객사</span>
+            <span class="text-[10px] text-slate-400 block font-semibold">계약처 / 실납품처</span>
             <div class="font-bold text-slate-800">${item.customer}</div>
+            ${item.realCustomer !== '-' && item.realCustomer !== item.customer ? `<div class="text-[10px] text-indigo-700 font-semibold">↳ ${item.realCustomer}</div>` : ''}
           </div>
           <div>
-            <span class="text-[10px] text-slate-400 block font-semibold">담당 Sales</span>
+            <span class="text-[10px] text-slate-400 block font-semibold">담당 Sales / 적용처</span>
             <div class="font-semibold text-slate-700">${item.owner}</div>
+            ${item.application ? `<div class="text-[9px] text-slate-400">${item.application}</div>` : ''}
           </div>
           <div>
             <span class="text-[10px] text-slate-400 block font-semibold">선적 매입가</span>
@@ -322,7 +350,7 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
           </div>
           <div class="text-right text-[10px] text-slate-500 space-y-1">
             <div>출하: ${item.shippedDate || '미출하'}</div>
-            <div>INV: ${item.invoiceNo || '-'}</div>
+            <div>계산서: ${item.taxDate || '-'}</div>
             <div class="flex items-center justify-end gap-1 mt-1" onclick="event.stopPropagation()">
               <span class="text-[10px] font-mono text-slate-600 truncate max-w-[90px]">B/L: ${item.trackingNo || '-'}</span>
               <button type="button" class="tracking-btn text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded border border-indigo-200 shrink-0" data-tracking="${item.trackingNo || ''}">🚚 조회</button>

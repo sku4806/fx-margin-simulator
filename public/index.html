@@ -244,8 +244,23 @@
           </div>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
             <div>
-              <label class="text-slate-600 block mb-0.5 text-[11px]">고객사 (Account)</label>
-              <input type="text" id="inputCustomer" placeholder="예: LG전자, 도원텍" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+              <label class="text-slate-600 block mb-0.5 text-[11px]">계약 고객사 (Account)</label>
+              <input type="text" id="inputCustomer" placeholder="예: 대리점, 외주EMS" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">실납품처 (Real Customer)</label>
+              <input type="text" id="inputRealCustomer" placeholder="예: 최종 엔드유저 세트사" class="w-full p-2 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">발주번호 (PO NO)</label>
+              <input type="text" id="inputPoNo" placeholder="예: 4500080896" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">적용처 / 프로젝트 (APP)</label>
+              <input type="text" id="inputApplication" placeholder="예: Smart Meter, Robot" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
             </div>
 
             <div>
@@ -341,8 +356,22 @@
             </div>
 
             <div>
-              <label class="text-slate-600 block mb-0.5 text-[11px]">인보이스 / 계산서</label>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">인보이스 / 계산서 번호</label>
               <input type="text" id="inputInvoiceNo" placeholder="INV-2026-001" class="w-full p-2 border rounded-lg bg-white text-xs outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">계산서 발행일 (TAXDT)</label>
+              <input type="date" id="inputTaxDate" class="w-full p-2 border rounded-lg bg-white text-xs outline-none">
+            </div>
+
+            <div>
+              <label class="text-slate-600 block mb-0.5 text-[11px]">거래 구분 (Biz Type)</label>
+              <select id="selectBizType" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none cursor-pointer">
+                <option value="DOMESTIC">국내 (DOMESTIC)</option>
+                <option value="EXPORT">직수출 (EXPORT)</option>
+                <option value="ZERO_TAX">국내 영세율</option>
+              </select>
             </div>
           </div>
         </div>

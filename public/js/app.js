@@ -574,6 +574,11 @@ function loadFormFromItem(id) {
   setVal('inputPartName', item.partName);
   setVal('inputDateCode', item.dateCode !== '-' ? item.dateCode : '');
   setVal('inputCustomer', item.customer !== '-' ? item.customer : '');
+  setVal('inputRealCustomer', item.realCustomer !== '-' ? item.realCustomer : '');
+  setVal('inputPoNo', item.poNo || '');
+  setVal('inputApplication', item.application || '');
+  setVal('inputTaxDate', item.taxDate || '');
+  setVal('selectBizType', item.bizType || 'DOMESTIC');
   setVal('inputSoldPrice', item.soldPriceUsd || '');
   setVal('selectOrderStatus', item.orderStatus);
   setVal('selectPaymentTerms', item.paymentTerms);
@@ -636,6 +641,11 @@ export function resetCurrentForm() {
   setVal('inputPartName', '');
   setVal('inputDateCode', '');
   setVal('inputCustomer', '');
+  setVal('inputRealCustomer', '');
+  setVal('inputPoNo', '');
+  setVal('inputApplication', '');
+  setVal('inputTaxDate', '');
+  setVal('selectBizType', 'DOMESTIC');
   setVal('inputSoldPrice', '');
   setVal('inputInvoiceNo', '');
   setVal('inputTrackingNo', '');
@@ -722,6 +732,11 @@ async function saveCurrentForm() {
     date_code: document.getElementById('inputDateCode')?.value.trim() || "-",
     owner: owner || "본사 일반재고",
     customer: document.getElementById('inputCustomer')?.value.trim() || "-",
+    real_customer: document.getElementById('inputRealCustomer')?.value.trim() || "-",
+    po_no: document.getElementById('inputPoNo')?.value.trim() || "",
+    application: document.getElementById('inputApplication')?.value.trim() || "",
+    biz_type: document.getElementById('selectBizType')?.value || "DOMESTIC",
+    tax_date: document.getElementById('inputTaxDate')?.value || null,
     sold_price_usd: parseFloat(document.getElementById('inputSoldPrice')?.value) || 0,
     order_status: document.getElementById('selectOrderStatus')?.value || "배정요청",
     payment_terms: document.getElementById('selectPaymentTerms')?.value || "Net 30",
