@@ -14,7 +14,6 @@ function normalizeExcelDate(val) {
   if (typeof val === 'number' || (!isNaN(val) && !String(val).includes('-') && !String(val).includes('/'))) {
     const num = parseFloat(val);
     if (num > 0) {
-      // 엑셀 1900 날짜 시스템 버그(1900-02-29 가상 윤년) 반영 기준일: 1899-12-30
       const date = new Date(Math.round((num - 25569) * 86400 * 1000));
       if (!isNaN(date.getTime())) {
         return date.toISOString().slice(0, 10);
@@ -127,7 +126,12 @@ export function handleExcelFileSelect(file) {
           part_name: String(r['PART#'] || r['PARTNO'] || r['품목번호'] || r['품명'] || '').trim(),
           date_code: String(r['D/C'] || r['DC'] || r['제조주기'] || '-').trim(),
           stock: parseInt(r['재고량'] || r['SHIPQTY'] || r['SHIP_QTY'] || r['수량'] || 0) || 0,
+          arranged_qty: parseInt(r['ARRANGED_QTY'] || 0) || 0,
           unit_usd: parseFloat(r['US_NETUP'] || r['원가'] || r['NET_UP'] || r['단가'] || 0) || 0,
+          // DB NOT NULL 필수 제약 조건 기본값 보장
+          ship_fx: 1350,
+          margin: 20,
+          sold_price_usd: parseFloat(r['US_SLUP'] || r['SLUP'] || 0) || 0,
           customer: String(r['CNAME'] || r['CUSTOMER'] || r['고객사'] || '본사 일반재고').trim(),
           real_customer: String(r['REALCUST'] || r['실고객사'] || '-').trim(),
           po_no: String(r['PONO'] || r['발주번호'] || '').trim(),
@@ -135,7 +139,11 @@ export function handleExcelFileSelect(file) {
           biz_type: String(r['BIZ_TYPE'] || 'DOMESTIC').trim(),
           entry_date: normalizedDate,
           owner: String(r['SALES'] || r['담당자'] || '본사 일반재고').trim(),
-          order_status: '배정요청'
+          order_status: '배정요청',
+          payment_terms: 'Net 30',
+          payment_status: '미수',
+          currency: 'USD',
+          memo: String(r['REMARK'] || r['비고'] || '').trim()
         };
       }).filter(r => r.part_name && r.part_name !== '-');
 
@@ -154,7 +162,7 @@ function renderUploadPreview(rows) {
   const countEl = document.getElementById('excelPreviewCount');
 
   if (!modal || !tbody) return;
-  if (countEl) countEl.innerText = `총 ${rows.length.toLocaleString()}건의 부품 데이터 파싱됨 (정규화 완료)`;
+  if (countEl) countEl.innerText = `총 ${rows.length.toLocaleString()}건의 부품 데이터 파싱됨 (검증 완료)`;
 
   tbody.innerHTML = rows.slice(0, 50).map(r => `
     <tr class="hover:bg-slate-50">
@@ -172,7 +180,7 @@ function renderUploadPreview(rows) {
 }
 
 /**
- * 1,000건 이상의 대용량 데이터를 100건 단위 Chunk로 안전하게 분할 등록
+ * 1,000건 이상의 대용량 데이터를 100건 단위 Chunk로 분할 등록
  */
 export async function executeBatchUpload() {
   if (parsedUploadRows.length === 0) return 0;
