@@ -1,3 +1,77 @@
+
+// 🗂️ 폼 서브탭 동적 자동 빌더 (1.수주/배정, 2.출하/물류, 3.계산서/정산)
+function initDynamicFormTabs() {
+  const formSection = document.getElementById('formSection');
+  if (!formSection || document.getElementById('dynamicSubTabNav')) return;
+
+  const getCard = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    let cur = el;
+    while (cur && cur.parentElement && cur.parentElement.id !== 'formSection') {
+      cur = cur.parentElement;
+    }
+    return (cur && cur.parentElement && cur.parentElement.id === 'formSection') ? cur : null;
+  };
+
+  const cardPart = getCard('inputPartName');        // 🏷️ 부품 및 영업 정보
+  const cardOrder = getCard('inputCustomer');       // 🤝 수주 거래처 및 수량
+  const cardPrice = getCard('inputUsd');            // 💰 매입/판매 단가 및 환율
+  const cardShip = getCard('inputTrackingNo');       // 🚚 출하 및 물류 관리
+  const cardBill = getCard('selectPaymentStatus');  // 💳 세금계산서 및 수금 정산
+
+  if (!cardPart) return;
+
+  // 3단계 서브탭 네비게이션 바 생성
+  const nav = document.createElement('div');
+  nav.id = 'dynamicSubTabNav';
+  nav.className = 'flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-bold mb-3 select-none';
+  nav.innerHTML = `
+    <button type="button" id="tabBtnOrder" class="flex-1 py-2 px-2 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center">
+      1. 수주 및 배정 등록
+    </button>
+    <button type="button" id="tabBtnShip" class="flex-1 py-2 px-2 rounded-lg text-slate-600 hover:text-slate-900 transition-all text-center">
+      2. 출하 및 물류 관리 (송장/INV)
+    </button>
+    <button type="button" id="tabBtnBill" class="flex-1 py-2 px-2 rounded-lg text-slate-600 hover:text-slate-900 transition-all text-center">
+      3. 세금계산서 및 수금 정산
+    </button>
+  `;
+
+  // 첫 번째 카드 바로 위에 탭 삽입
+  cardPart.parentNode.insertBefore(nav, cardPart);
+
+  const btnOrder = document.getElementById('tabBtnOrder');
+  const btnShip = document.getElementById('tabBtnShip');
+  const btnBill = document.getElementById('tabBtnBill');
+
+  const activeStyle = "flex-1 py-2 px-2 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center font-bold";
+  const inactiveStyle = "flex-1 py-2 px-2 rounded-lg text-slate-600 hover:text-slate-900 transition-all text-center font-semibold";
+
+  function switchTab(active) {
+    if (btnOrder) btnOrder.className = (active === 'order') ? activeStyle : inactiveStyle;
+    if (btnShip) btnShip.className = (active === 'shipping') ? activeStyle : inactiveStyle;
+    if (btnBill) btnBill.className = (active === 'billing') ? activeStyle : inactiveStyle;
+
+    const isOrder = (active === 'order');
+    const isShip = (active === 'shipping');
+    const isBill = (active === 'billing');
+
+    if (cardPart) cardPart.classList.toggle('hidden', !isOrder);
+    if (cardOrder) cardOrder.classList.toggle('hidden', !isOrder);
+    if (cardPrice) cardPrice.classList.toggle('hidden', !isOrder);
+    if (cardShip) cardShip.classList.toggle('hidden', !isShip);
+    if (cardBill) cardBill.classList.toggle('hidden', !isBill);
+  }
+
+  btnOrder.onclick = () => switchTab('order');
+  btnShip.onclick = () => switchTab('shipping');
+  btnBill.onclick = () => switchTab('billing');
+
+  // 기본값: 1단계 수주 및 배정 등록 표시
+  switchTab('order');
+}
+
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
@@ -64,6 +138,7 @@ export async function bootstrap() {
   });
 
   runEngine();
+  initDynamicFormTabs();
   if (activeTab === 'sales') {
     document.getElementById('formSection')?.classList.add('hidden');
   }
