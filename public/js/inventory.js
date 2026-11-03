@@ -249,10 +249,12 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
             <div class="font-semibold text-slate-700">${item.owner}</div>
             ${item.application ? `<div class="text-[9px] text-slate-400 font-medium">${item.application}</div>` : ''}
           </td>
-          <td class="py-2.5 px-2 text-right space-x-1" onclick="event.stopPropagation()">
+          <td class="py-2.5 px-2 text-right align-middle" onclick="event.stopPropagation()">
             ${canEdit ? `
-              <button class="split-btn text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded" data-id="${item.id}">출하분할</button>
-              <button class="delete-btn text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-1.5 py-1 rounded" data-id="${item.id}">삭제</button>
+              <div class="inline-flex items-center gap-1">
+                <button class="split-btn text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded whitespace-nowrap border border-slate-200 transition-colors" data-id="${item.id}">분할</button>
+                <button class="delete-btn text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-1.5 py-1 rounded whitespace-nowrap border border-rose-200 transition-colors" data-id="${item.id}">삭제</button>
+              </div>
             ` : '-'}
           </td>
         </tr>
@@ -277,21 +279,27 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
             <div>출하: ${item.shippedDate || '미출하'}</div>
             <div class="text-indigo-900 font-semibold">계산서: ${item.taxDate || '-'}</div>
           </td>
-          <td class="py-2.5 px-2 font-mono text-[10px] text-slate-600 leading-tight">
-            <div>INV: ${item.invoiceNo || '-'}</div>
-            <div class="mt-1 flex items-center gap-1">
-              <span>B/L: ${item.trackingNo || '-'}</span>
-              <button type="button" class="tracking-btn text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded border border-indigo-200" data-tracking="${item.trackingNo || ''}">🚚 조회</button>
+          <td class="py-2.5 px-2 text-[10px] text-slate-600 align-middle">
+            <div class="font-mono text-slate-500 truncate max-w-[130px]">INV: ${item.invoiceNo || '-'}</div>
+            <div class="mt-1 flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 max-w-[155px]">
+              <span class="font-mono font-bold text-slate-800 truncate" title="${item.trackingNo || ''}">
+                ${item.trackingNo ? item.trackingNo : '<span class="text-slate-400 font-normal">B/L 미등록</span>'}
+              </span>
+              <button type="button" class="tracking-btn shrink-0 text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded border border-indigo-200 transition-colors" data-tracking="${item.trackingNo || ''}">
+                🚚 조회
+              </button>
             </div>
           </td>
-          <td class="py-2.5 px-2">
-            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${item.paymentStatus === '완료' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">${item.paymentStatus}</span>
+          <td class="py-2.5 px-2 align-middle">
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap ${item.paymentStatus === '완료' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">${item.paymentStatus}</span>
           </td>
-          <td class="py-2.5 px-2 text-[10px] text-slate-600">${item.dueDate || '-'}</td>
-          <td class="py-2.5 px-2 text-right space-x-1" onclick="event.stopPropagation()">
+          <td class="py-2.5 px-2 text-[10px] text-slate-600 whitespace-nowrap align-middle">${item.dueDate || '-'}</td>
+          <td class="py-2.5 px-2 text-right align-middle" onclick="event.stopPropagation()">
             ${canEdit ? `
-              <button class="split-btn text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded" data-id="${item.id}">출하분할</button>
-              <button class="delete-btn text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-1.5 py-1 rounded" data-id="${item.id}">삭제</button>
+              <div class="inline-flex items-center gap-1">
+                <button class="split-btn text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded whitespace-nowrap border border-slate-200 transition-colors" data-id="${item.id}">분할</button>
+                <button class="delete-btn text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-1.5 py-1 rounded whitespace-nowrap border border-rose-200 transition-colors" data-id="${item.id}">삭제</button>
+              </div>
             ` : '-'}
           </td>
         </tr>
