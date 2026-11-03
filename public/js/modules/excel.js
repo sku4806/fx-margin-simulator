@@ -132,7 +132,13 @@ export function handleExcelFileSelect(file) {
           ship_fx: 1350,
           margin: 20,
           sold_price_usd: parseFloat(r['US_SLUP'] || r['SLUP'] || 0) || 0,
-          customer: String(r['CNAME'] || r['CUSTOMER'] || r['고객사'] || '본사 일반재고').trim(),
+          customer: (() => {
+            const rawCust = String(r['CNAME'] || r['CUSTOMER'] || r['고객사'] || '').trim();
+            if (!rawCust || /bigshine/i.test(rawCust) || rawCust === 'BSK') {
+              return '-';
+            }
+            return rawCust;
+          })(),
           real_customer: String(r['REALCUST'] || r['실고객사'] || '-').trim(),
           po_no: String(r['PONO'] || r['발주번호'] || '').trim(),
           application: String(r['APP'] || r['적용처'] || '').trim(),

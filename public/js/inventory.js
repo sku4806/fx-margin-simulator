@@ -24,7 +24,7 @@ export async function fetchInventoryItems() {
     soldPriceUsd: parseFloat(item.sold_price_usd) || 0,
     entryDate: item.entry_date || '-',
     owner: item.owner || '본사 일반재고',
-    customer: item.customer || '-',
+    customer: (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-' || '-',
     realCustomer: item.real_customer || '-',
     poNo: item.po_no || '',
     application: item.application || '',
@@ -59,7 +59,7 @@ export function filterItems({ query = '', filterMaker = '', filterOwner = '', fi
     const matchQuery = !q ||
       item.partName.toLowerCase().includes(q) ||
       item.maker.toLowerCase().includes(q) ||
-      item.customer.toLowerCase().includes(q) ||
+      (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'.toLowerCase().includes(q) ||
       item.realCustomer.toLowerCase().includes(q) ||
       item.poNo.toLowerCase().includes(q) ||
       item.application.toLowerCase().includes(q) ||
@@ -242,8 +242,8 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
             ${item.soldPriceUsd > 0 ? `<div class="font-black text-indigo-700">$${item.soldPriceUsd.toFixed(3)}</div>` : '<span class="text-slate-400">-</span>'}
           </td>
           <td class="py-2.5 px-2 text-xs">
-            <div class="font-bold text-slate-900">${item.customer}</div>
-            ${item.realCustomer !== '-' && item.realCustomer !== item.customer ? `<div class="text-[10px] text-indigo-700 font-semibold">↳ 실고객: ${item.realCustomer}</div>` : ''}
+            <div class="font-bold text-slate-900">${(item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'}</div>
+            ${item.realCustomer !== '-' && item.realCustomer !== (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-' ? `<div class="text-[10px] text-indigo-700 font-semibold">↳ 실고객: ${item.realCustomer}</div>` : ''}
           </td>
           <td class="py-2.5 px-2 text-xs">
             <div class="font-semibold text-slate-700">${item.owner}</div>
@@ -264,8 +264,8 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
             <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(item.orderStatus)}">${item.orderStatus}</span>
           </td>
           <td class="py-2.5 px-2 font-bold text-slate-900">
-            <div>${item.customer}</div>
-            ${item.realCustomer !== '-' && item.realCustomer !== item.customer ? `<div class="text-[10px] text-indigo-700 font-normal">↳ ${item.realCustomer}</div>` : ''}
+            <div>${(item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'}</div>
+            ${item.realCustomer !== '-' && item.realCustomer !== (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-' ? `<div class="text-[10px] text-indigo-700 font-normal">↳ ${item.realCustomer}</div>` : ''}
           </td>
           <td class="py-2.5 px-2">
             <div class="font-bold text-indigo-950">${item.partName}</div>
@@ -328,8 +328,8 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
         <div class="grid grid-cols-2 gap-2 text-xs border-y py-2 border-slate-100">
           <div>
             <span class="text-[10px] text-slate-400 block font-semibold">계약처 / 실납품처</span>
-            <div class="font-bold text-slate-800">${item.customer}</div>
-            ${item.realCustomer !== '-' && item.realCustomer !== item.customer ? `<div class="text-[10px] text-indigo-700 font-semibold">↳ ${item.realCustomer}</div>` : ''}
+            <div class="font-bold text-slate-800">${(item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'}</div>
+            ${item.realCustomer !== '-' && item.realCustomer !== (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-' ? `<div class="text-[10px] text-indigo-700 font-semibold">↳ ${item.realCustomer}</div>` : ''}
           </div>
           <div>
             <span class="text-[10px] text-slate-400 block font-semibold">담당 Sales / 적용처</span>
