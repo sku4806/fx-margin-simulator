@@ -860,6 +860,7 @@
   <script type="module" src="/js/app.js"></script>
 </body>
 </html><section id="formSection" class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 transition-all space-y-3">
+        <-- 고객사란에 들어간 자사 법인명을 '-' ( 미배정 본사재고 ) 로 일괄 폼 상단 헤더 -->
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-slate-100">
           <div>
             <h3 id="formTitle" class="text-sm sm:text-base font-black text-slate-900 tracking-tight flex items-center gap-1.5">
@@ -877,6 +878,7 @@
           </div>
         </div>
 
+        <-- 고객사란에 들어간 자사 법인명을 '-' ( 미배정 본사재고 ) 로 일괄 선택된 부품 미니 요약 뱃지 (수정 모드 시 노출) -->
         <div id="editingBanner" class="hidden p-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-bold text-indigo-900 flex justify-between items-center">
           <div class="flex items-center gap-1.5">
             <span class="text-indigo-600">📌 작업 대상:</span>
@@ -885,6 +887,7 @@
           <button type="button" onclick="window.resetCurrentForm()" class="text-[11px] text-indigo-700 hover:underline">신규 입력 모드로 전환</button>
         </div>
 
+        <-- 고객사란에 들어간 자사 법인명을 '-' ( 미배정 본사재고 ) 로 일괄 3단계 서브 탭 버튼 -->
         <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
           <button type="button" id="subTabOrder" class="flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center">
             1. 수주 및 배정 등록
@@ -897,6 +900,7 @@
           </button>
         </div>
 
+        <-- 고객사란에 들어간 자사 법인명을 '-' ( 미배정 본사재고 ) 로 일괄 STEP 1: 수주 및 재고 배정 -->
         <div id="stepOrderSection" class="space-y-3 pt-1">
           <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
             <div>
@@ -1012,6 +1016,7 @@
           </details>
         </div>
 
+        <-- 고객사란에 들어간 자사 법인명을 '-' ( 미배정 본사재고 ) 로 일괄 STEP 2: 출하 및 배송 관리 -->
         <div id="stepShippingSection" class="hidden space-y-3 pt-1">
           <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
             <div>
@@ -1043,6 +1048,7 @@
           </div>
         </div>
 
+        <-- 고객사란에 들어간 자사 법인명을 '-' ( 미배정 본사재고 ) 로 일괄 STEP 3: 계산서 및 수금 정산 -->
         <div id="stepBillingSection" class="hidden space-y-3 pt-1">
           <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
             <div>
