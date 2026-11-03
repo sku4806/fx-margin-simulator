@@ -221,7 +221,46 @@ function renderPackagingTable() {
   }).join('');
 }
 
+
+function switchSubFormTab(tabName) {
+  const tabOrder = document.getElementById('subTabOrder');
+  const tabShipping = document.getElementById('subTabShipping');
+  const tabBilling = document.getElementById('subTabBilling');
+
+  const secOrder = document.getElementById('stepOrderSection');
+  const secShipping = document.getElementById('stepShippingSection');
+  const secBilling = document.getElementById('stepBillingSection');
+
+  // 탭 스타일 초기화
+  [tabOrder, tabShipping, tabBilling].forEach(t => {
+    if (t) {
+      t.className = "flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all text-center";
+    }
+  });
+
+  // 섹션 숨김 초기화
+  secOrder?.classList.add('hidden');
+  secShipping?.classList.add('hidden');
+  secBilling?.classList.add('hidden');
+
+  if (tabName === 'order') {
+    if (tabOrder) tabOrder.className = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center";
+    secOrder?.classList.remove('hidden');
+  } else if (tabName === 'shipping') {
+    if (tabShipping) tabShipping.className = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center";
+    secShipping?.classList.remove('hidden');
+  } else if (tabName === 'billing') {
+    if (tabBilling) tabBilling.className = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center";
+    secBilling?.classList.remove('hidden');
+  }
+}
+
 function bindInputs() {
+  // 🗂️ 폼 서브탭 전환 리스너
+  safeAddListener('subTabOrder', 'click', () => switchSubFormTab('order'));
+  safeAddListener('subTabShipping', 'click', () => switchSubFormTab('shipping'));
+  safeAddListener('subTabBilling', 'click', () => switchSubFormTab('billing'));
+
   ['inputUsd', 'inputStock', 'inputShipFx', 'inputOverhead', 'inputTargetOffer', 'inputApprovedDebit'].forEach(id => {
     safeAddListener(id, 'input', runEngine);
   });
