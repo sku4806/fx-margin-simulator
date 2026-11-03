@@ -4,23 +4,31 @@ function initDynamicFormTabs() {
   const formSection = document.getElementById('formSection');
   if (!formSection || document.getElementById('dynamicSubTabNav')) return;
 
-  const getCard = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return null;
-    let cur = el;
-    while (cur && cur.parentElement && cur.parentElement.id !== 'formSection') {
+  // 특정 input이 속한 '개별 카드 박스(border 또는 rounded)'를 정확히 찾는 헬퍼
+  const getCardBox = (inputEl) => {
+    if (!inputEl) return null;
+    let cur = inputEl;
+    while (cur && cur.parentElement && cur.parentElement !== formSection) {
+      if (cur.classList.contains('rounded-xl') || cur.classList.contains('border') || cur.classList.contains('p-3') || cur.classList.contains('p-4')) {
+        return cur;
+      }
       cur = cur.parentElement;
     }
-    return (cur && cur.parentElement && cur.parentElement.id === 'formSection') ? cur : null;
+    return cur;
   };
 
-  const cardPart = getCard('inputPartName');        // 🏷️ 부품 및 영업 정보
-  const cardOrder = getCard('inputCustomer');       // 🤝 수주 거래처 및 수량
-  const cardPrice = getCard('inputUsd');            // 💰 매입/판매 단가 및 환율
-  const cardShip = getCard('inputTrackingNo');       // 🚚 출하 및 물류 관리
-  const cardBill = getCard('selectPaymentStatus');  // 💳 세금계산서 및 수금 정산
+  const cardPart = getCardBox(document.getElementById('inputPartName'));
+  const cardOrder = getCardBox(document.getElementById('inputCustomer'));
+  const cardPrice = getCardBox(document.getElementById('inputUsd'));
+  const cardShip = getCardBox(document.getElementById('inputTrackingNo'));
+  const cardBill = getCardBox(document.getElementById('selectPaymentStatus'));
 
   if (!cardPart) return;
+
+  // 만약 cardShip과 cardBill을 감싸고 있는 공통 래퍼가 있다면 hidden 해제 보장
+  if (cardShip && cardShip.parentElement && cardShip.parentElement !== formSection) {
+    cardShip.parentElement.classList.remove('hidden');
+  }
 
   // 3단계 서브탭 네비게이션 바 생성
   const nav = document.createElement('div');
@@ -38,7 +46,7 @@ function initDynamicFormTabs() {
     </button>
   `;
 
-  // 첫 번째 카드 바로 위에 탭 삽입
+  // 최상단 카드 박스 바로 위에 탭 삽입
   cardPart.parentNode.insertBefore(nav, cardPart);
 
   const btnOrder = document.getElementById('tabBtnOrder');
@@ -57,10 +65,15 @@ function initDynamicFormTabs() {
     const isShip = (active === 'shipping');
     const isBill = (active === 'billing');
 
+    // 1단계 카드들
     if (cardPart) cardPart.classList.toggle('hidden', !isOrder);
     if (cardOrder) cardOrder.classList.toggle('hidden', !isOrder);
     if (cardPrice) cardPrice.classList.toggle('hidden', !isOrder);
+
+    // 2단계 카드 (출하 및 물류 관리)
     if (cardShip) cardShip.classList.toggle('hidden', !isShip);
+
+    // 3단계 카드 (세금계산서 및 수금 정산)
     if (cardBill) cardBill.classList.toggle('hidden', !isBill);
   }
 
@@ -68,7 +81,6 @@ function initDynamicFormTabs() {
   btnShip.onclick = () => switchTab('shipping');
   btnBill.onclick = () => switchTab('billing');
 
-  // 기본값: 1단계 수주 및 배정 등록 표시
   switchTab('order');
 }
 
