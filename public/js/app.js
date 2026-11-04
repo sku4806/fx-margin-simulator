@@ -1133,7 +1133,7 @@ async function saveCurrentForm() {
         };
 
         const diffs = [];
-        for (const k of Object.keys(payload)) {
+        for (const k of Object.keys(payload)) { if (k === 'margin') continue;
           const camelKey = k.replace(/_([a-z])/g, (_, g) => g.toUpperCase());
           const oVal = orig[k] !== undefined ? orig[k] : (orig[camelKey] !== undefined ? orig[camelKey] : '');
           const nVal = payload[k];
