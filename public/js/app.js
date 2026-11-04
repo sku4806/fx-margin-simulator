@@ -519,7 +519,7 @@ function applyFilters() {
     filtered = filtered.filter(item => {
       const part = String(item.partName || item.part_name || '').toLowerCase();
       const maker = String(item.maker || '').toLowerCase();
-      const owner = String(item.owner || '').toLowerCase();
+      // const owner removed (undefined item fix)
       const cust = String(item.customer || '').toLowerCase();
       const realCust = String(item.realCustomer || item.real_customer || '').toLowerCase();
       const dc = String(item.dateCode || item.date_code || '').toLowerCase();
@@ -828,7 +828,7 @@ function bindInputs() {
       const spq = document.getElementById('pkgConfigSpq')?.value;
       const moq = document.getElementById('pkgConfigMoq')?.value;
       const memo = document.getElementById('pkgConfigMemo')?.value.trim();
-      const owner = String(item.owner || '').toLowerCase();
+      // const owner removed (undefined item fix)
 
       try {
         await savePackagingStandard(maker, cs, spq, moq, memo);
@@ -1046,6 +1046,7 @@ function bindModals() {
       alert(`[배부 완료${surchargeInfo}] 부대비용 가산율 +${calculatedOverheadRate.toFixed(2)}%가 적용되었습니다.`);
     };
   }
+}
 
 function runEngine() {
   const unitUsd = parseFloat(document.getElementById('inputUsd')?.value) || 0;
@@ -1277,4 +1278,5 @@ function handleOpenSplitModal(id) {
   } else {
     alert(`[분할 모달 알림] 현재 ${part} (재고 ${stock} EA)의 분할 대상이 설정되었습니다.`);
   }
+}
 }
