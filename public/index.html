@@ -334,7 +334,7 @@
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">진행 상태 (Status)</label>
-              <select id="selectOrderStatus" class="w-full p-2 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <select id="filterStatus" class="w-full p-2 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
                 <option value="배정요청">배정요청</option>
                 <option value="출하준비">출하준비</option>
                 <option value="출하완료">출하완료</option>
@@ -399,7 +399,7 @@
 
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px]">수금 상태</label>
-              <select id="selectPaymentStatus" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none cursor-pointer">
+              <select id="filterStatus" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none cursor-pointer">
                 <option value="미수">미수 (Unpaid)</option>
                 <option value="완료">수금완료 (Paid)</option>
               </select>

@@ -464,56 +464,78 @@ async function refreshInventory() {
 
 function applyFilters() {
   const searchInput = document.getElementById('searchQuery') || document.getElementById('searchInput');
-  const lineFilter = document.getElementById('filterLine') || document.getElementById('filterMaker');
-  const salesFilter = document.getElementById('filterSales') || document.getElementById('filterOwner');
-  const statusFilter = document.getElementById('filterStatus') || document.getElementById('filterPayment');
+  const lineFilter = document.getElementById('filterLine') || document.getElementById('filterMaker') || document.getElementById('selectLine');
+  const salesFilter = document.getElementById('filterSales') || document.getElementById('filterOwner') || document.getElementById('selectSales');
+  const statusFilter = document.getElementById('filterStatus') || document.getElementById('filterPayment') || document.getElementById('selectStatus');
 
   const q = (searchInput?.value || '').trim().toLowerCase();
-  const selectedLine = lineFilter?.value || 'ALL';
-  const selectedSales = salesFilter?.value || 'ALL';
-  const selectedStatus = statusFilter?.value || 'ALL';
+  const selectedLine = (lineFilter?.value || 'ALL').trim();
+  const selectedSales = (salesFilter?.value || 'ALL').trim();
+  const selectedStatus = (statusFilter?.value || 'ALL').trim();
 
   let filtered = (cachedItems || []).slice();
 
-  // 전방위 다중 필드 검색
+  // 1. 키워드 통합 검색 (Part, Maker, Owner/Sales, Customer, D/C, Tracking, PO, Memo)
   if (q) {
     filtered = filtered.filter(item => {
       const part = String(item.partName || item.part_name || '').toLowerCase();
       const maker = String(item.maker || '').toLowerCase();
+      const owner = String(item.owner || '').toLowerCase();
       const cust = String(item.customer || '').toLowerCase();
       const realCust = String(item.realCustomer || item.real_customer || '').toLowerCase();
       const dc = String(item.dateCode || item.date_code || '').toLowerCase();
       const track = String(item.trackingNo || item.tracking_no || '').toLowerCase();
       const po = String(item.poNo || item.po_no || '').toLowerCase();
       const memo = String(item.memo || '').toLowerCase();
-      const owner = String(item.owner || '').toLowerCase();
 
       return part.includes(q) ||
-        maker.includes(q) ||
+             maker.includes(q) ||
              owner.includes(q) ||
-        cust.includes(q) ||
-        realCust.includes(q) ||
-        dc.includes(q) ||
-        track.includes(q) ||
-        po.includes(q) ||
-        memo.includes(q);
+             cust.includes(q) ||
+             realCust.includes(q) ||
+             dc.includes(q) ||
+             track.includes(q) ||
+             po.includes(q) ||
+             memo.includes(q);
     });
   }
 
-  if (selectedLine !== 'ALL' && selectedLine !== '전체' && selectedLine !== '') {
-    filtered = filtered.filter(item => item.maker === selectedLine);
+  // 2. 라인(제조사) 필터
+  if (selectedLine && !['ALL', '전체', '라인 전체', ''].includes(selectedLine)) {
+    const targetLine = selectedLine.toLowerCase();
+    filtered = filtered.filter(item => {
+      const maker = String(item.maker || '').toLowerCase();
+      return maker === targetLine || maker.includes(targetLine);
+    });
   }
 
-  if (selectedSales !== 'ALL' && selectedSales !== '전체' && selectedSales !== '') {
-    filtered = filtered.filter(item => item.owner === selectedSales);
+  // 3. 담당 Sales 필터 (대소문자 무시, 완전 일치 및 포함 비교)
+  if (selectedSales && !['ALL', '전체', 'Sales 전체', '세일즈 전체', ''].includes(selectedSales)) {
+    const targetSales = selectedSales.toLowerCase();
+    filtered = filtered.filter(item => {
+      const owner = String(item.owner || '').trim().toLowerCase();
+      if (targetSales === 'dustin') return owner === 'dustin' || owner.includes('dustin');
+      if (targetSales === 'william') return owner === 'william' || owner.includes('william');
+      if (targetSales === 'bsk' || targetSales.includes('본사')) return owner === 'bsk' || owner.includes('본사');
+      return owner === targetSales || owner.includes(targetSales);
+    });
   }
 
-  if (selectedStatus !== 'ALL' && selectedStatus !== '전체' && selectedStatus !== '') {
-    if (selectedStatus === '미수' || selectedStatus === '완료') {
-      filtered = filtered.filter(item => (item.paymentStatus || item.payment_status) === selectedStatus);
-    } else {
-      filtered = filtered.filter(item => (item.orderStatus || item.order_status) === selectedStatus);
-    }
+  // 4. 수금/상태 필터
+  if (selectedStatus && !['ALL', '전체', '수금 전체', '상태 전체', ''].includes(selectedStatus)) {
+    const targetStatus = selectedStatus.toLowerCase();
+    filtered = filtered.filter(item => {
+      const payStatus = String(item.paymentStatus || item.payment_status || '').trim().toLowerCase();
+      const ordStatus = String(item.orderStatus || item.order_status || '').trim().toLowerCase();
+
+      if (targetStatus.includes('미수')) {
+        return payStatus.includes('미수') || payStatus === 'unpaid';
+      }
+      if (targetStatus.includes('완료') || targetStatus.includes('수금')) {
+        return payStatus.includes('완료') || payStatus.includes('paid') || payStatus === '수금완료';
+      }
+      return payStatus.includes(targetStatus) || ordStatus.includes(targetStatus);
+    });
   }
 
   const countBadge = document.getElementById('filterCountBadge');
@@ -751,8 +773,14 @@ function bindInputs() {
 
   bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
   bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
-
-  ['searchQuery', 'searchInput', 'filterLine', 'filterMaker', 'filterSales', 'filterOwner', 'filterStatus', 'filterPayment'].forEach(id => {
+  // 검색 및 모든 필터 드롭다운 실시간 연동 리스너
+  const filterElementIds = [
+    'searchQuery', 'searchInput', 
+    'filterLine', 'filterMaker', 'selectLine', 
+    'filterSales', 'filterOwner', 'selectSales', 
+    'filterStatus', 'filterPayment', 'selectStatus'
+  ];
+  filterElementIds.forEach(id => {
     safeAddListener(id, 'input', applyFilters);
     safeAddListener(id, 'change', applyFilters);
   });
