@@ -1,18 +1,5 @@
-import * as SupabaseModule from './supabase.js';
-import { getCurrentSession, loginWithEmail, logout, sbClient, subscribeAuthChange, updatePassword } from './supabase.js';
+import { supabase, fetchInventoryItems } from './supabase.js';
 
-// Supabase 삭제 함수 래퍼 (미존재 시 직접 쿼리)
-async function safeDeleteInventoryItem(id) {
-  if (typeof deleteInventoryItem === 'function') return safeDeleteInventoryItem(id);
-  if (typeof deleteItem === 'function') return deleteItem(id);
-  if (SupabaseModule.deleteInventoryItem) return SupabaseModule.safeDeleteInventoryItem(id);
-  if (SupabaseModule.deleteItem) return SupabaseModule.deleteItem(id);
-  const client = SupabaseModule.supabase || window.supabase;
-  if (client) {
-    const { error } = await client.from('inventory_items').delete().eq('id', id);
-    if (error) throw error;
-  }
-}
 import * as InventoryModule from './inventory.js';
 
 function callRenderInventoryHeaders(tab) {

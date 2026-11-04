@@ -30,3 +30,13 @@ export function subscribeAuthChange(callback) {
     callback(event, session);
   });
 }
+
+export async function fetchInventoryItems() {
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .select('*')
+    .range(0, 9999)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
