@@ -1196,7 +1196,29 @@ async function saveCurrentForm() {
 
   try {
     const actionType = editingItemId ? 'UPDATE' : 'CREATE';
-    const savedItem = await upsertInventoryItem(payload, editingItemId);
+    const savedItem = const actionType = editingItemId ? 'UPDATE' : 'CREATE';
+    let changeDetails = '정보 수정';
+    if (editingItemId) {
+      const orig = getCachedItem(editingItemId);
+      if (orig) {
+        const labels = {maker:'제조사', part_name:'부품명', date_code:'D/C', owner:'담당Sales', customer:'고객사', real_customer:'실납품처', po_no:'PO번호', application:'적용처', biz_type:'거래구분', sold_price_usd:'판매단가($)', order_status:'상태', payment_terms:'결제조건', payment_status:'수금상태', invoice_no:'인보이스', tracking_no:'송장번호', shipped_date:'출하일', unit_usd:'매입단가($)', stock:'수량(EA)'};
+        const diffs = [];
+        for (const k of Object.keys(payload)) {
+          const oVal = String(orig[k] !== undefined ? orig[k] : (orig[k.replace(/_([a-z])/g, (_, g) => g.toUpperCase())] || ''));
+          const nVal = String(payload[k] || '');
+          if (oVal.trim() !== nVal.trim()) {
+            diffs.push(`${labels[k] || k}: [${oVal || '-'}] ➔ [${nVal || '-'}]`);
+          }
+        }
+        if (diffs.length > 0) changeDetails = diffs.join(', ');
+      }
+    } else {
+      changeDetails = `신규 등록 (수량: ${payload.stock}EA)`;
+    }
+
+    const saved = await upsertInventoryItem(payload, editingItemId);
+    const tId = saved?.id || editingItemId;
+    if (tId) await recordAuditLog(tId, payload.part_name, actionType, changeDetails);
     const targetId = savedItem?.id || editingItemId;
     
     if (targetId) {
