@@ -1,3 +1,4 @@
+import { supabase, fetchInventoryItems, saveInventoryItem, deleteInventoryItem } from './supabase.js';
 import * as InventoryModule from './inventory.js';
 
 function callRenderInventoryHeaders(tab) {
