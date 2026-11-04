@@ -169,28 +169,34 @@ export function renderInventoryHeaders(activeTab) {
   const thead = document.getElementById('inventoryTableHeader');
   if (!thead) return;
 
-  const isFulfillment = (activeTab !== 'sales');
-
-  thead.innerHTML = `
-    <tr class="bg-slate-100/95 text-slate-700 text-[10px] font-bold border-b border-slate-200 select-none">
-      <th class="py-2 px-1 text-center whitespace-nowrap">KIND</th>
-      <th class="py-2 px-1 text-left whitespace-nowrap">CNAME</th>
-      <th class="py-2 px-1 text-center whitespace-nowrap">SALES</th>
-      <th class="py-2 px-1 text-left">PART#</th>
-      <th class="py-2 px-1 text-right font-black whitespace-nowrap">재고량</th>
-      <th class="py-2 px-1 text-right whitespace-nowrap">원가</th>
-      <th class="py-2 px-1 text-right text-rose-700 font-bold whitespace-nowrap">AMOUNT</th>
-      <th class="py-2 px-1 text-right text-amber-700 font-bold whitespace-nowrap">배정량</th>
-      <th class="py-2 px-1 text-right text-emerald-700 font-bold whitespace-nowrap">가용재고</th>
-      <th class="py-2 px-1 text-center whitespace-nowrap">입고일</th>
-      <th class="py-2 px-1 text-center whitespace-nowrap">MFG</th>
-      <th class="py-2 px-1 text-left whitespace-nowrap">PONO</th>
-      ${isFulfillment ? `
-        <th class="py-2 px-1 text-center whitespace-nowrap">수금/송장</th>
-        <th class="py-2 px-1 text-center whitespace-nowrap">관리</th>
-      ` : ''}
-    </tr>
-  `;
+  if (activeTab === 'sales') {
+    thead.innerHTML = `
+      <tr class="bg-slate-100/95 text-slate-700 text-[11px] font-bold border-b border-slate-200 select-none">
+        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[6%]">KIND</th>
+        <th class="py-2.5 px-2 text-left w-[14%]">CNAME / 입고일</th>
+        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[8%]">SALES</th>
+        <th class="py-2.5 px-2 text-left w-[22%]">PART# / MFG</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">재고량 / 배정</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">원가 / 가용</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[10%]">AMOUNT</th>
+        <th class="py-2.5 px-2 text-left w-[22%]">PONO</th>
+      </tr>
+    `;
+  } else {
+    thead.innerHTML = `
+      <tr class="bg-slate-100/95 text-slate-700 text-[10px] font-bold border-b border-slate-200 select-none">
+        <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-[7%]">상태 / SALES</th>
+        <th class="py-2.5 px-2 text-left w-[13%]">계약처</th>
+        <th class="py-2.5 px-2 text-left w-[17%]">PART NO / MFG</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[8%]">수량 / 배정</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[8%]">단가 / 가용</th>
+        <th class="py-2.5 px-2 text-left whitespace-nowrap w-[10%]">출하 / 계산서</th>
+        <th class="py-2.5 px-2 text-left w-[17%]">PO / 송장(B/L)</th>
+        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">수금</th>
+        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[13%]">관리</th>
+      </tr>
+    `;
+  }
 }
 
 function generateLegacyMasterRow(item) {
@@ -213,34 +219,34 @@ function generateLegacyMasterRow(item) {
 
   return `
     <tr class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 상단 견적 계산기에 단가·수량 자동 입력" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
-      <td class="py-2.5 px-1.5 text-center align-middle whitespace-nowrap">
-        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${kind.includes('내자') || kind.includes('DOMESTIC') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
+      <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
+        <span class="px-2 py-0.5 rounded text-[9px] font-bold ${kind.includes('내자') || kind.includes('DOMESTIC') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
           ${kind.length > 4 ? kind.slice(0, 4) : kind}
         </span>
       </td>
       <td class="py-2.5 px-2 align-middle">
-        <div class="font-bold text-slate-800 truncate max-w-[140px]" title="${cname}">${cname}</div>
+        <div class="font-bold text-slate-800 truncate max-w-[150px]" title="${cname}">${cname}</div>
         <div class="text-[10px] text-slate-400 font-mono mt-0.5">입고: ${entryDate}</div>
       </td>
-      <td class="py-2.5 px-1.5 text-center align-middle whitespace-nowrap" title="${sales}">
+      <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         <div class="font-bold text-indigo-800">${sales}</div>
       </td>
       <td class="py-2.5 px-2 align-middle">
-        <div class="font-black text-indigo-950 truncate max-w-[210px]" title="${part}">${part}</div>
+        <div class="font-black text-indigo-950 truncate max-w-[220px]" title="${part}">${part}</div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">MFG: <span class="font-bold text-slate-700">${mfg}</span></div>
       </td>
-      <td class="py-2.5 px-1.5 text-right align-middle whitespace-nowrap">
+      <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
         <div class="font-black text-slate-900">${stock.toLocaleString()} EA</div>
         <div class="text-[10px] text-amber-700 font-semibold mt-0.5">배정: ${arrangedQty.toLocaleString()}</div>
       </td>
-      <td class="py-2.5 px-1.5 text-right align-middle whitespace-nowrap">
+      <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
         <div class="text-slate-700 font-semibold">$${unitUsd.toLocaleString(undefined, { minimumFractionDigits: unitUsd >= 10 ? 2 : 3, maximumFractionDigits: 3 })}</div>
         <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">가용: ${notArranQty.toLocaleString()}</div>
       </td>
-      <td class="py-2.5 px-1.5 text-right align-middle whitespace-nowrap">
+      <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
         <div class="font-bold text-rose-600 text-xs">$${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
       </td>
-      <td class="py-2.5 px-2 text-slate-500 font-mono text-[10px] align-middle" colspan="5">
+      <td class="py-2.5 px-2 text-slate-500 font-mono text-[10px] align-middle truncate max-w-[220px]" title="${pono}">
         <div>PO: ${pono}</div>
       </td>
     </tr>
@@ -272,51 +278,47 @@ function generateFulfillmentRow(item, canEdit) {
 
   return `
     <tr class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 하단 수주·출하·정산 관리 폼에 상세 정보 로드" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
-      <td class="py-2.5 px-1 text-center align-middle whitespace-nowrap">
+      <td class="py-2.5 px-1.5 text-center align-middle whitespace-nowrap">
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(orderStatus)}">${orderStatus}</span>
         <div class="text-[9px] text-indigo-800 font-bold mt-1">${sales}</div>
       </td>
-      <td class="py-2.5 px-1.5 align-middle">
-        <div class="font-bold text-slate-800 truncate max-w-[120px]" title="${cname}">${cname}</div>
+      <td class="py-2.5 px-2 align-middle">
+        <div class="font-bold text-slate-800 truncate max-w-[130px]" title="${cname}">${cname}</div>
         ${(realCust && realCust !== '-' && realCust !== cname) ? `<div class="text-[9px] text-indigo-700 font-normal truncate">↳ ${realCust}</div>` : ''}
       </td>
-      <td class="py-2.5 px-1.5 align-middle">
-        <div class="font-black text-indigo-950 truncate max-w-[160px]" title="${part}">${part}</div>
+      <td class="py-2.5 px-2 align-middle">
+        <div class="font-black text-indigo-950 truncate max-w-[170px]" title="${part}">${part}</div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">${mfg} · <span class="text-indigo-600 font-bold">${kind}</span></div>
       </td>
-      <td class="py-2.5 px-1 text-right align-middle whitespace-nowrap">
+      <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
         <div class="font-black text-slate-900">${stock.toLocaleString()} EA</div>
         <div class="text-[10px] text-amber-700 font-semibold mt-0.5">배정:${arrangedQty.toLocaleString()}</div>
       </td>
-      <td class="py-2.5 px-1 text-right align-middle whitespace-nowrap">
+      <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
         <div class="font-black text-indigo-700">${soldPrice > 0 ? '$' + soldPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '$-'}</div>
         <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">가용:${notArranQty.toLocaleString()}</div>
       </td>
-      <td class="py-2.5 px-1 text-[10px] text-slate-600 align-middle whitespace-nowrap">
+      <td class="py-2.5 px-2 text-[10px] text-slate-600 align-middle whitespace-nowrap">
         <div>출하: ${shippedDate}</div>
         <div class="text-indigo-900 font-semibold mt-0.5">계산서: ${taxDate}</div>
       </td>
-      <td class="py-2.5 px-1 text-[10px] text-slate-600 align-middle">
-        <div class="font-mono text-slate-500 truncate max-w-[120px]">PO: ${pono}</div>
-        <div class="mt-0.5 flex items-center justify-between gap-0.5 bg-slate-50 border border-slate-200 rounded px-1 py-0.5">
+      <td class="py-2.5 px-2 text-[10px] text-slate-600 align-middle">
+        <div class="font-mono text-slate-500 truncate max-w-[140px]">PO: ${pono}</div>
+        <div class="mt-0.5 flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
           <span class="font-mono font-bold text-slate-800 text-[9px] truncate" title="${trackingNo}">
             ${trackingNo ? trackingNo : '<span class="text-slate-400 font-normal">B/L 미등록</span>'}
           </span>
-          ${trackingNo ? `<button type="button" onclick="event.stopPropagation(); window.openTrackingModal && window.openTrackingModal('${trackingNo}')" class="shrink-0 text-[9px] bg-indigo-50 text-indigo-700 font-bold px-1 py-0.2 rounded border">🚚</button>` : ''}
+          ${trackingNo ? `<button type="button" onclick="event.stopPropagation(); window.openTrackingModal && window.openTrackingModal('${trackingNo}')" class="shrink-0 text-[9px] bg-indigo-50 text-indigo-700 font-bold px-1 py-0.5 rounded border">🚚</button>` : ''}
         </div>
       </td>
-      <td class="py-2.5 px-1 text-center align-middle whitespace-nowrap">
+      <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${paymentStatus === '완료' || paymentStatus === '수금완료' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">${paymentStatus}</span>
       </td>
-      <td class="py-2.5 px-1 text-center select-none whitespace-nowrap align-middle" onclick="event.stopPropagation()">
-        <div class="inline-flex flex-col items-center justify-center gap-1">
-          <div class="inline-flex gap-0.5">
-            <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[9px] font-bold">수정</button>
-            <button type="button" onclick="event.stopPropagation(); window.handleOpenSplitModal && window.handleOpenSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[9px] font-bold">분할</button>
-          </div>
-          <div>
-            <button type="button" onclick="event.stopPropagation(); window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[9px] font-bold">삭제</button>
-          </div>
+      <td class="py-2.5 px-2 text-center select-none whitespace-nowrap align-middle" onclick="event.stopPropagation()">
+        <div class="inline-flex items-center justify-center gap-1">
+          <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold">수정</button>
+          <button type="button" onclick="event.stopPropagation(); window.handleOpenSplitModal && window.handleOpenSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold">분할</button>
+          <button type="button" onclick="event.stopPropagation(); window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold">삭제</button>
         </div>
       </td>
     </tr>
@@ -371,7 +373,7 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
   renderInventoryHeaders(activeTab);
 
   if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${activeTab === 'sales' ? 12 : 14}" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${activeTab === 'sales' ? 8 : 9}" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
     return;
   }
 
