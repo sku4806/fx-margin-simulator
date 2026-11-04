@@ -1004,3 +1004,52 @@ window.handleDeleteItem = handleDeleteItem;
 bootstrap();
 
 window.handleOpenSplitModal = handleOpenSplitModal;
+
+
+function handleOpenSplitModal(id) {
+  if (!isCsOrAdminUser()) {
+    alert("출하 분할 기능은 CS 및 관리자 권한만 가능합니다.");
+    return;
+  }
+  const item = getCachedItem(id);
+  if (!item) {
+    alert("선택된 부품 정보를 찾을 수 없습니다.");
+    return;
+  }
+  targetSplitId = item.id;
+
+  const part = item.partName || item.part_name || '-';
+  const dc = item.dateCode || item.date_code || '-';
+  const stock = Number(item.stock) || 0;
+  const owner = item.owner || '-';
+  const cust = item.customer !== '-' ? item.customer : '';
+  const price = item.soldPriceUsd || item.unitUsd || 0;
+
+  const titleEl = document.getElementById('splitModalTitle');
+  if (titleEl) titleEl.innerText = `[${part}] 출하 분할 (D/C: ${dc})`;
+
+  const maxStockEl = document.getElementById('splitMaxStockText');
+  if (maxStockEl) maxStockEl.innerText = `현재 보유 재고: ${stock.toLocaleString()} EA (소유: ${owner})`;
+
+  const qtyInput = document.getElementById('splitQtyInput');
+  if (qtyInput) {
+    qtyInput.max = Math.max(1, stock - 1);
+    qtyInput.value = Math.min(1000, Math.max(1, stock - 1));
+  }
+
+  const priceInput = document.getElementById('splitPriceInput');
+  if (priceInput) priceInput.value = price;
+
+  const custInput = document.getElementById('splitCustomerInput');
+  if (custInput) custInput.value = cust;
+
+  const repInput = document.getElementById('splitRepInput');
+  if (repInput) repInput.value = owner;
+
+  const modal = document.getElementById('splitShipmentModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+  } else {
+    alert(`[분할 모달 알림] 현재 ${part} (재고 ${stock} EA)의 분할 대상이 설정되었습니다.`);
+  }
+}
