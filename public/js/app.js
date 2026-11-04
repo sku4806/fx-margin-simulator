@@ -1279,4 +1279,4 @@ function handleOpenSplitModal(id) {
     alert(`[분할 모달 알림] 현재 ${part} (재고 ${stock} EA)의 분할 대상이 설정되었습니다.`);
   }
 }
-}
+
