@@ -171,20 +171,19 @@ export function renderInventoryHeaders(activeTab) {
 
   if (activeTab === 'sales') {
     thead.innerHTML = `
-      <tr class="bg-slate-100/95 text-slate-700 text-[10px] font-bold border-b border-slate-200 select-none">
-        <th class="py-2 px-1 text-center whitespace-nowrap">KIND</th>
-        <th class="py-2 px-1 text-left whitespace-nowrap">CNAME</th>
-        <th class="py-2 px-1 text-center whitespace-nowrap">SALES</th>
-        <th class="py-2 px-1 text-left">PART#</th>
-        <th class="py-2 px-1 text-right font-black whitespace-nowrap">재고량</th>
-        <th class="py-2 px-1 text-right whitespace-nowrap">원가</th>
-        <th class="py-2 px-1 text-right text-rose-700 font-bold whitespace-nowrap">AMOUNT</th>
-        <th class="py-2 px-1 text-right text-amber-700 font-bold whitespace-nowrap">배정량</th>
-        <th class="py-2 px-1 text-right text-emerald-700 font-bold whitespace-nowrap">가용재고</th>
-        <th class="py-2 px-1 text-center whitespace-nowrap">입고일</th>
-        <th class="py-2 px-1 text-center whitespace-nowrap">MFG</th>
-        <th class="py-2 px-1 text-left whitespace-nowrap">PONO</th>
-        <th class="py-2 px-1 text-center whitespace-nowrap">관리</th>
+      <tr class="bg-slate-100/95 text-slate-700 text-[11px] font-bold border-b border-slate-200 select-none">
+        <th class="py-2 px-1.5 text-center whitespace-nowrap">KIND</th>
+        <th class="py-2 px-2 text-left whitespace-nowrap">CNAME</th>
+        <th class="py-2 px-1.5 text-center whitespace-nowrap">SALES</th>
+        <th class="py-2 px-2 text-left">PART#</th>
+        <th class="py-2 px-1.5 text-right font-black whitespace-nowrap">재고량</th>
+        <th class="py-2 px-1.5 text-right whitespace-nowrap">원가</th>
+        <th class="py-2 px-1.5 text-right text-rose-700 font-bold whitespace-nowrap">AMOUNT</th>
+        <th class="py-2 px-1.5 text-right text-amber-700 font-bold whitespace-nowrap">배정량</th>
+        <th class="py-2 px-1.5 text-right text-emerald-700 font-bold whitespace-nowrap">가용재고</th>
+        <th class="py-2 px-1.5 text-center whitespace-nowrap">입고일</th>
+        <th class="py-2 px-1.5 text-center whitespace-nowrap">MFG</th>
+        <th class="py-2 px-2 text-left whitespace-nowrap">PONO</th>
       </tr>
     `;
   } else {
@@ -224,30 +223,23 @@ function generateLegacyMasterRow(item) {
   const pono = item.poNo || item.po_no || '-';
 
   return `
-    <tr class="hover:bg-indigo-50/60 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
-      <td class="py-1.5 px-1 text-center whitespace-nowrap">
-        <span class="px-1 py-0.5 rounded text-[9px] font-bold ${kind.includes('내자') || kind.includes('DOMESTIC') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
+    <tr class="hover:bg-indigo-50/60 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" title="클릭 시 상단 견적 계산기에 단가·수량 자동 입력" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+      <td class="py-2 px-1.5 text-center whitespace-nowrap">
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${kind.includes('내자') || kind.includes('DOMESTIC') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
           ${kind.length > 4 ? kind.slice(0, 4) : kind}
         </span>
       </td>
-      <td class="py-1.5 px-1 font-bold text-slate-800 truncate max-w-[95px]" title="${cname}">${cname}</td>
-      <td class="py-1.5 px-1 text-center font-bold text-indigo-800 whitespace-nowrap" title="${sales}">${sales}</td>
-      <td class="py-1.5 px-1 font-bold text-slate-900 truncate max-w-[140px]" title="${part}">${part}</td>
-      <td class="py-1.5 px-1 text-right font-black text-slate-900 whitespace-nowrap">${stock.toLocaleString()}</td>
-      <td class="py-1.5 px-1 text-right text-slate-700 font-semibold whitespace-nowrap">$${unitUsd.toLocaleString(undefined, { minimumFractionDigits: unitUsd >= 10 ? 2 : 3, maximumFractionDigits: 3 })}</td>
-      <td class="py-1.5 px-1 text-right font-bold text-rose-600 whitespace-nowrap">$${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
-      <td class="py-1.5 px-1 text-right font-bold text-amber-700 whitespace-nowrap">${arrangedQty.toLocaleString()}</td>
-      <td class="py-1.5 px-1 text-right font-bold text-emerald-700 whitespace-nowrap">${notArranQty.toLocaleString()}</td>
-      <td class="py-1.5 px-1 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">${entryDate}</td>
-      <td class="py-1.5 px-1 text-center font-medium text-slate-700 truncate max-w-[60px]" title="${mfg}">${mfg}</td>
-      <td class="py-1.5 px-1 text-slate-500 font-mono text-[10px] truncate max-w-[75px]" title="${pono}">${pono}</td>
-      <td class="py-1 px-1 text-center select-none whitespace-nowrap" onclick="event.stopPropagation()">
-        <div class="inline-flex items-center justify-center gap-0.5">
-          <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold transition-all">수정</button>
-          <button type="button" onclick="event.stopPropagation(); window.handleOpenSplitModal && window.handleOpenSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition-all">분할</button>
-          <button type="button" onclick="event.stopPropagation(); window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold transition-all">삭제</button>
-        </div>
-      </td>
+      <td class="py-2 px-2 font-bold text-slate-800 truncate max-w-[140px]" title="${cname}">${cname}</td>
+      <td class="py-2 px-1.5 text-center font-bold text-indigo-800 whitespace-nowrap" title="${sales}">${sales}</td>
+      <td class="py-2 px-2 font-bold text-slate-900 truncate max-w-[200px]" title="${part}">${part}</td>
+      <td class="py-2 px-1.5 text-right font-black text-slate-900 whitespace-nowrap">${stock.toLocaleString()}</td>
+      <td class="py-2 px-1.5 text-right text-slate-700 font-semibold whitespace-nowrap">$${unitUsd.toLocaleString(undefined, { minimumFractionDigits: unitUsd >= 10 ? 2 : 3, maximumFractionDigits: 3 })}</td>
+      <td class="py-2 px-1.5 text-right font-bold text-rose-600 whitespace-nowrap">$${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+      <td class="py-2 px-1.5 text-right font-bold text-amber-700 whitespace-nowrap">${arrangedQty.toLocaleString()}</td>
+      <td class="py-2 px-1.5 text-right font-bold text-emerald-700 whitespace-nowrap">${notArranQty.toLocaleString()}</td>
+      <td class="py-2 px-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">${entryDate}</td>
+      <td class="py-2 px-1.5 text-center font-medium text-slate-700 truncate max-w-[90px]" title="${mfg}">${mfg}</td>
+      <td class="py-2 px-2 text-slate-500 font-mono text-[10px] truncate max-w-[130px]" title="${pono}">${pono}</td>
     </tr>
   `;
 }
@@ -361,7 +353,7 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
   renderInventoryHeaders(activeTab);
 
   if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${activeTab === 'sales' ? 13 : 10}" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${activeTab === 'sales' ? 12 : 10}" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
     return;
   }
 
