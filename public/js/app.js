@@ -973,14 +973,73 @@ function runEngine() {
     if (el) el.innerText = val;
   };
 
+  // 실적 원가 기준 렌더링
   setText('minSaleUnitActualUsd', `$${result.unitMinPriceActualUsd.toFixed(4)}`);
   setText('minSaleUnitActualKrw', `(₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()} / @${Math.round(shipFx).toLocaleString()})`);
-  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
+  // 대체 원가 기준 렌더링
   setText('minSaleUnitReplaceUsd', `$${result.unitMinPriceReplaceUsd.toFixed(4)}`);
   setText('minSaleUnitReplaceKrw', `(₩${Math.round(result.unitMinPriceReplaceKrw).toLocaleString()} / @${Math.round(appliedFxRate).toLocaleString()})`);
-  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+  // 🎯 역마진 및 판정 뱃지 갱신 (이미지의 고객 희망단가 영역)
+  const revMarginEl = document.getElementById('reverseMarginReplace') || document.getElementById('expectedMarginDisplay');
+  const revBadgeEl = document.getElementById('reverseMarginBadge') || document.getElementById('marginResultBadge');
+
+  if (result.expectedMargin !== null && !isNaN(result.expectedMargin)) {
+    if (revMarginEl) revMarginEl.innerText = `${result.expectedMargin.toFixed(2)}%`;
+    if (revBadgeEl) {
+      if (isSpa && approvedDebit > 0) {
+        revBadgeEl.className = "text-[11px] font-bold text-cyan-800 bg-cyan-100 border border-cyan-300 px-2 py-0.5 rounded-full inline-block mt-0.5";
+        revBadgeEl.innerText = `🔵 SPA 승인가 적용`;
+      } else if (result.expectedMargin >= 20) {
+        revBadgeEl.className = "text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-block mt-0.5";
+        revBadgeEl.innerText = "✅ 수주 가능";
+      } else if (result.expectedMargin > 0) {
+        revBadgeEl.className = "text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full inline-block mt-0.5";
+        revBadgeEl.innerText = "⚠️ 마진 미달";
+      } else {
+        revBadgeEl.className = "text-[11px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full inline-block mt-0.5";
+        revBadgeEl.innerText = "🚨 역마진 불가";
+      }
+    }
+  } else {
+    if (revMarginEl) revMarginEl.innerText = "- %";
+    if (revBadgeEl) {
+      revBadgeEl.className = "text-[11px] font-bold text-slate-400 mt-0.5";
+      revBadgeEl.innerText = "단가 입력";
+    }
+  }
+
+  // 🎯 우측 수량별 티어표 렌더링
+  renderTierTable(result.unitMinPriceReplaceUsd, result.unitMinPriceReplaceKrw, stock);
 }
+
+function renderTierTable(unitUsd, unitKrw, currentQty) {
+  const tiers = [
+    { label: "1,000", qty: 1000 },
+    { label: "5,000", qty: 5000 },
+    { label: "10,000", qty: 10000 }
+  ];
+
+  if (![1000, 5000, 10000].includes(currentQty) && currentQty > 0) {
+    tiers.push({ label: `${currentQty.toLocaleString()}(현재)`, qty: currentQty, isCurrent: true });
+    tiers.sort((a, b) => a.qty - b.qty);
+  }
+
+  const tbody = document.getElementById('tierTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = tiers.map(t => `
+    <tr class="${t.isCurrent ? "bg-indigo-50/70 font-bold text-indigo-900" : ""}">
+      <td class="py-1 px-1">${t.label}</td>
+      <td class="py-1 px-1 text-indigo-950 font-black text-xs">$${unitUsd.toFixed(4)}</td>
+      <td class="py-1 px-1 text-slate-600 font-semibold text-[11px]">₩${Math.round(unitKrw).toLocaleString()}</td>
+      <td class="py-1 px-1 text-slate-800 font-bold">$${(unitUsd * t.qty).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</td>
+    </tr>
+  `).join('');
+}
+
 
 async function saveCurrentForm() {
   if (!isCsOrAdminUser()) return;
