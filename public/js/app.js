@@ -1,3 +1,4 @@
+let cachedItems = [];
 
 // 🗂️ 폼 서브탭 동적 자동 빌더 (1.수주/배정, 2.출하/물류, 3.계산서/정산)
 function initDynamicFormTabs() {
@@ -687,7 +688,11 @@ function applyFilters() {
   const selectedSales = salesFilter?.value || 'ALL';
   const selectedStatus = statusFilter?.value || 'ALL';
 
-  let filtered = cachedItems.slice();
+    // 캐시 데이터 안전 참조
+  const sourceItems = (typeof cachedItems !== 'undefined' && Array.isArray(cachedItems) && cachedItems.length > 0)
+    ? cachedItems
+    : (window.cachedItems || []);
+  let filtered = sourceItems.slice();
 
   // 1. 키워드 검색 (품번, 제조사, 계약처, 실고객사, D/C, 송장, 비고 전방위 검색)
   if (q) {
