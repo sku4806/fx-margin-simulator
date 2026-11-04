@@ -1195,7 +1195,14 @@ async function saveCurrentForm() {
   };
 
   try {
-    await upsertInventoryItem(payload, editingItemId);
+    const actionType = editingItemId ? 'UPDATE' : 'CREATE';
+    const savedItem = await upsertInventoryItem(payload, editingItemId);
+    const targetId = savedItem?.id || editingItemId;
+    
+    if (targetId) {
+      await recordAuditLog(targetId, payload.part_name, actionType, `${actionType === 'CREATE' ? '신규 등록' : '정보 수정'} (수량: ${payload.stock}EA, 단가: $${payload.unit_usd})`);
+    }
+
     alert(`[${payload.part_name}] 데이터가 저장되었습니다.`);
     await refreshInventory();
   } catch (err) {
