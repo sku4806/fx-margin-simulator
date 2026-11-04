@@ -30,3 +30,12 @@ export function subscribeAuthChange(callback) {
     callback(event, session);
   });
 }
+
+export async function deleteInventoryItem(id) {
+  const { error } = await supabase
+    .from('inventory_items')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+  return true;
+}
