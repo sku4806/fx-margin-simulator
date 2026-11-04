@@ -447,3 +447,23 @@ function getStatusBadgeClass(status) {
 }
 
 export const renderInventoryList = renderInventoryUI;
+
+export function renderInventoryHeaders(activeTab) {
+  const thead = document.getElementById('inventoryTableHeader');
+  if (!thead) return;
+  thead.innerHTML = `
+    <tr>
+      <th class="py-2.5 px-2 font-bold">상태</th>
+      <th class="py-2.5 px-2 font-bold">라인/제조사</th>
+      <th class="py-2.5 px-2 font-bold">PART NO</th>
+      <th class="py-2.5 px-2 text-right font-bold">총재고</th>
+      <th class="py-2.5 px-2 text-right font-bold text-amber-700">배정량</th>
+      <th class="py-2.5 px-2 text-right font-bold text-emerald-700">가용재고</th>
+      <th class="py-2.5 px-2 text-right font-bold">원가($)</th>
+      <th class="py-2.5 px-2 font-bold">실고객사</th>
+      <th class="py-2.5 px-2 font-bold">Sales</th>
+      <th class="py-2.5 px-2 font-bold">B/L(운송장)</th>
+      <th class="py-2.5 px-2 text-right font-bold">관리</th>
+    </tr>
+  `;
+}

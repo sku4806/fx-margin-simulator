@@ -1,3 +1,4 @@
+import * as InventoryModule from './inventory.js';
 let cachedItems = [];
 
 // 🗂️ 폼 서브탭 동적 자동 빌더 (1.수주/배정, 2.출하/물류, 3.계산서/정산)
@@ -110,7 +111,7 @@ import { openTrackingModal } from './modules/courier.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
-import { renderInventoryUI as renderInventoryList, renderInventoryHeaders } from './inventory.js';
+
 
 let rawFxRate = 1380.0;
 let appliedFxRate = 1380.0;
@@ -734,9 +735,9 @@ function applyFilters() {
   }
 
     if (typeof renderInventoryList === 'function') {
-    renderInventoryList(filtered);
+    (InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default || function(){})(filtered);
   } else if (window.renderInventoryList) {
-    window.renderInventoryList(filtered);
+    window.(InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default || function(){})(filtered);
   } else {
     import('./inventory.js').then(m => (m.renderInventoryUI || m.renderInventoryList || m.default)(filtered));
   }
