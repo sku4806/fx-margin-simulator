@@ -32,7 +32,8 @@ export function subscribeAuthChange(callback) {
 }
 
 export async function deleteInventoryItem(id) {
-  const { error } = await supabase
+  if (!sbClient) throw new Error("Supabase 클라이언트가 초기화되지 않았습니다.");
+  const { error } = await sbClient
     .from('inventory_items')
     .delete()
     .eq('id', id);
@@ -41,7 +42,8 @@ export async function deleteInventoryItem(id) {
 }
 
 export async function fetchInventoryItems() {
-  const { data, error } = await supabase
+  if (!sbClient) return [];
+  const { data, error } = await sbClient
     .from('inventory_items')
     .select('*')
     .range(0, 9999)

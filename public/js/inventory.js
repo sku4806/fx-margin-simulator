@@ -3,7 +3,7 @@ function generateLegacyMasterRow(item) {
   const stock = Number(item.stock) || 0;
   const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
   const amount = stock * unitUsd;
-  
+
   // 배정량 산출: 출하 완료가 아닌 배정/진행 건
   const isAssigned = (item.orderStatus === '배정완료' || item.orderStatus === '배정요청' || item.customer !== '-');
   const arrangedQty = isAssigned ? (Number(item.arrangedQty) || stock) : 0;
@@ -31,7 +31,7 @@ function generateLegacyMasterRow(item) {
       <td class="py-2 px-2 font-bold text-slate-900">${part}</td>
       <td class="py-2 px-2 text-right font-black text-slate-900">${stock.toLocaleString()}</td>
       <td class="py-2 px-2 text-right text-slate-600 font-semibold">$${unitUsd.toFixed(unitUsd >= 10 ? 2 : 3)}</td>
-      <td class="py-2 px-2 text-right font-bold text-rose-600">$${amount.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 1})}</td>
+      <td class="py-2 px-2 text-right font-bold text-rose-600">$${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })}</td>
       <td class="py-2 px-2 text-right font-bold text-amber-700">${arrangedQty.toLocaleString()}</td>
       <td class="py-2 px-2 text-right font-bold text-emerald-700">${notArranQty.toLocaleString()}</td>
       <td class="py-2 px-2 text-center text-slate-500 font-mono text-[10px]">${entryDate}</td>
@@ -141,14 +141,14 @@ export function filterItems({ query = '', filterMaker = '', filterOwner = '', fi
     const matchQuery = !q ||
       item.partName.toLowerCase().includes(q) ||
       item.maker.toLowerCase().includes(q) ||
-      (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'.toLowerCase().includes(q) ||
+      ((item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-').toLowerCase().includes(q) ||
       item.realCustomer.toLowerCase().includes(q) ||
       item.poNo.toLowerCase().includes(q) ||
       item.application.toLowerCase().includes(q) ||
       item.owner.toLowerCase().includes(q) ||
       item.dateCode.toLowerCase().includes(q) ||
       item.trackingNo.toLowerCase().includes(q) ||
-      item.invoiceNo.toLowerCase().includes(q);
+    item.invoiceNo.toLowerCase().includes(q);
 
     const matchMaker = !filterMaker || item.maker === filterMaker;
     const matchOwner = !filterOwner || item.owner === filterOwner;
@@ -187,7 +187,7 @@ export async function splitInventoryShipment(targetId, splitQty, soldPriceUsd, c
 
   const remainQty = orig.stock - splitQty;
   const remainOwner = (deadStockAction === 'hq') ? '본사 일반재고' : orig.owner;
-  const remainMemo = (deadStockAction === 'hq') 
+  const remainMemo = (deadStockAction === 'hq')
     ? (orig.memo ? `${orig.memo} [본사 이관 잔여재고]` : '[본사 이관 잔여재고]')
     : orig.memo;
 
@@ -249,6 +249,7 @@ export async function deleteInventoryItem(id) {
 export function renderInventoryUI(items, activeTab, onEdit, onDelete, onSplit, canEdit) {
   const countEl = document.getElementById('itemCount');
   if (countEl) countEl.innerText = `총 ${items.length.toLocaleString()}건`;
+  updateGrandSummaries(items);
 
   renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit);
   renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit);
@@ -259,97 +260,25 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
   const tbody = document.getElementById('inventoryTableBody');
   if (!thead || !tbody) return;
 
-  if (activeTab === 'sales') {
-    thead.innerHTML = `
-      <tr>
-        <th class="py-2.5 px-2">상태</th>
-        <th class="py-2.5 px-2">라인 / Part No</th>
-        <th class="py-2.5 px-2">D/C / PO</th>
-        <th class="py-2.5 px-2">수량(SPQ)</th>
-        <th class="py-2.5 px-2">선적원가(USD/KRW)</th>
-        <th class="py-2.5 px-2">협의실판매가</th>
-        <th class="py-2.5 px-2">계약처 / 실납품처</th>
-        <th class="py-2.5 px-2">적용처 / Sales</th>
-        <th class="py-2.5 px-2 text-right">관리</th>
-      </tr>
-    `;
-  } else {
-    thead.innerHTML = `
-      <tr>
-        <th class="py-2.5 px-2">상태</th>
-        <th class="py-2.5 px-2">계약처 / 실고객사</th>
-        <th class="py-2.5 px-2">Part No / 구분</th>
-        <th class="py-2.5 px-2">수량</th>
-        <th class="py-2.5 px-2">실판매단가</th>
-        <th class="py-2.5 px-2">출하일 / 계산서일</th>
-        <th class="py-2.5 px-2">인보이스 / B/L</th>
-        <th class="py-2.5 px-2">수금/환차손익</th>
-        <th class="py-2.5 px-2">만기일정</th>
-        <th class="py-2.5 px-2 text-right">관리</th>
-      </tr>
-    `;
-  }
+  renderInventoryHeaders(activeTab);
 
   if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${activeTab === 'sales' ? 13 : 10}" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = items.map(item => {
-    const costKrw = Math.round(item.unitUsd * item.shipFx);
-
-    if (activeTab === 'sales') {
-      return `
-        <tr class="hover:bg-indigo-50/40 cursor-pointer transition-colors border-b border-slate-100" data-row-id="${item.id}">
-          <td class="py-2.5 px-2">
-            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(item.orderStatus)}">${item.orderStatus}</span>
-          </td>
-          <td class="py-2.5 px-2">
-            <div class="text-[10px] font-bold text-slate-400">${item.maker}</div>
-            <div class="font-bold text-slate-900">${item.partName}</div>
-          </td>
-          <td class="py-2.5 px-2 font-mono text-[11px] font-semibold text-slate-600">
-            <div>D/C: ${item.dateCode}</div>
-            ${item.poNo ? `<div class="text-[9px] text-indigo-700 font-bold">PO: ${item.poNo}</div>` : ''}
-          </td>
-          <td class="py-2.5 px-2">
-            <span class="font-black text-slate-900">${item.stock.toLocaleString()} EA</span>
-            ${item.spq ? `<div class="text-[9px] text-slate-400 font-semibold">SPQ: ${item.spq.toLocaleString()}</div>` : ''}
-          </td>
-          <td class="py-2.5 px-2 text-[11px]">
-            <div class="font-bold text-slate-800">$${(Number(item.unitUsd) || 0).toFixed(3)}</div>
-            <div class="text-[10px] text-slate-500 font-medium">(₩${costKrw.toLocaleString()})</div>
-          </td>
-          <td class="py-2.5 px-2 text-[11px]">
-            ${item.soldPriceUsd > 0 ? `<div class="font-black text-indigo-700">$${(Number(item.soldPriceUsd) || 0).toFixed(3)}</div>` : '<span class="text-slate-400">-</span>'}
-          </td>
-          <td class="py-2.5 px-2 text-xs">
-            <div class="font-bold text-slate-900">${(item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'}</div>
-            ${item.realCustomer !== '-' && item.realCustomer !== (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-' ? `<div class="text-[10px] text-indigo-700 font-semibold">↳ 실고객: ${item.realCustomer}</div>` : ''}
-          </td>
-          <td class="py-2.5 px-2 text-xs">
-            <div class="font-semibold text-slate-700">${item.owner}</div>
-            ${item.application ? `<div class="text-[9px] text-slate-400 font-medium">${item.application}</div>` : ''}
-          </td>
-          <td class="py-2.5 px-2 text-right align-middle" onclick="event.stopPropagation()">
-            ${canEdit ? `
-              <div class="inline-flex items-center gap-1">
-                <button class="split-btn text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded whitespace-nowrap border border-slate-200 transition-colors" data-id="${item.id}">분할</button>
-                <button class="delete-btn text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-1.5 py-1 rounded whitespace-nowrap border border-rose-200 transition-colors" data-id="${item.id}">삭제</button>
-              </div>
-            ` : '-'}
-          </td>
-        </tr>
-      `;
-    } else {
-      return `
+      if (activeTab === 'sales') {
+        tbody.innerHTML = items.map(item => generateLegacyMasterRow(item)).join('');
+      } else {
+        tbody.innerHTML = items.map(item => {
+          return `
         <tr class="hover:bg-indigo-50/40 cursor-pointer transition-colors border-b border-slate-100" data-row-id="${item.id}">
           <td class="py-2.5 px-2">
             <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(item.orderStatus)}">${item.orderStatus}</span>
           </td>
           <td class="py-2.5 px-2 font-bold text-slate-900">
             <div>${(item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'}</div>
-            ${item.realCustomer !== '-' && item.realCustomer !== (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-' ? `<div class="text-[10px] text-indigo-700 font-normal">↳ ${item.realCustomer}</div>` : ''}
+            ${(item.realCustomer && item.realCustomer !== '-' && item.realCustomer !== item.customer) ? `<div class="text-[10px] text-indigo-700 font-normal">↳ ${item.realCustomer}</div>` : ''}
           </td>
           <td class="py-2.5 px-2">
             <div class="font-bold text-indigo-950">${item.partName}</div>
@@ -386,10 +315,10 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
           </td>
         </tr>
       `;
-    }
-  }).join('');
+}).join('');
 
-  bindRowActions(tbody, onEdit, onDelete, onSplit);
+bindRowActions(tbody, onEdit, onDelete, onSplit);
+  }
 }
 
 function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit) {
@@ -419,7 +348,7 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
           <div>
             <span class="text-[10px] text-slate-400 block font-semibold">계약처 / 실납품처</span>
             <div class="font-bold text-slate-800">${(item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'}</div>
-            ${item.realCustomer !== '-' && item.realCustomer !== (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-' ? `<div class="text-[10px] text-indigo-700 font-semibold">↳ ${item.realCustomer}</div>` : ''}
+            ${(item.realCustomer && item.realCustomer !== '-' && item.realCustomer !== item.customer) ? `<div class="text-[10px] text-indigo-700 font-semibold">↳ ${item.realCustomer}</div>` : ''}
           </div>
           <div>
             <span class="text-[10px] text-slate-400 block font-semibold">담당 Sales / 적용처</span>
@@ -461,26 +390,46 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
     `;
   }).join('');
 
+  const editHandler = (typeof onEdit === 'function') ? onEdit : window.loadFormFromItem;
+  const deleteHandler = (typeof onDelete === 'function') ? onDelete : window.handleDeleteItem;
+  const splitHandler = (typeof onSplit === 'function') ? onSplit : window.handleOpenSplitModal;
+
   container.querySelectorAll('[data-card-id]').forEach(card => {
-    card.onclick = () => onEdit(card.dataset.cardId);
+    card.onclick = () => {
+      if (typeof editHandler === 'function') editHandler(card.dataset.cardId);
+    };
   });
   container.querySelectorAll('.delete-btn').forEach(btn => {
-    btn.onclick = () => onDelete(btn.dataset.id);
+    btn.onclick = () => {
+      if (typeof deleteHandler === 'function') deleteHandler(btn.dataset.id);
+    };
   });
   container.querySelectorAll('.split-btn').forEach(btn => {
-    btn.onclick = () => onSplit(btn.dataset.id);
+    btn.onclick = () => {
+      if (typeof splitHandler === 'function') splitHandler(btn.dataset.id);
+    };
   });
 }
 
 function bindRowActions(tbody, onEdit, onDelete, onSplit) {
+  const editHandler = (typeof onEdit === 'function') ? onEdit : window.loadFormFromItem;
+  const deleteHandler = (typeof onDelete === 'function') ? onDelete : window.handleDeleteItem;
+  const splitHandler = (typeof onSplit === 'function') ? onSplit : window.handleOpenSplitModal;
+
   tbody.querySelectorAll('[data-row-id]').forEach(row => {
-    row.onclick = () => onEdit(row.dataset.rowId);
+    row.onclick = () => {
+      if (typeof editHandler === 'function') editHandler(row.dataset.rowId);
+    };
   });
   tbody.querySelectorAll('.delete-btn').forEach(btn => {
-    btn.onclick = () => onDelete(btn.dataset.id);
+    btn.onclick = () => {
+      if (typeof deleteHandler === 'function') deleteHandler(btn.dataset.id);
+    };
   });
   tbody.querySelectorAll('.split-btn').forEach(btn => {
-    btn.onclick = () => onSplit(btn.dataset.id);
+    btn.onclick = () => {
+      if (typeof splitHandler === 'function') splitHandler(btn.dataset.id);
+    };
   });
 }
 
@@ -498,26 +447,43 @@ function getStatusBadgeClass(status) {
 
 export const renderInventoryList = renderInventoryUI;
 
-
 export function renderInventoryHeaders(activeTab) {
   const thead = document.getElementById('inventoryTableHeader');
   if (!thead) return;
-  thead.innerHTML = `
-    <tr class="bg-slate-100/90 text-slate-700 text-[11px] font-bold border-b border-slate-200 uppercase tracking-tight">
-      <th class="py-2.5 px-2 text-center w-16">KIND</th>
-      <th class="py-2.5 px-2 text-left min-w-[120px]">CNAME</th>
-      <th class="py-2.5 px-2 text-center w-16">SALES</th>
-      <th class="py-2.5 px-2 text-left min-w-[160px]">PART#</th>
-      <th class="py-2.5 px-2 text-right font-black w-20">재고량</th>
-      <th class="py-2.5 px-2 text-right w-20">원가</th>
-      <th class="py-2.5 px-2 text-right text-rose-700 font-bold w-24">AMOUNT</th>
-      <th class="py-2.5 px-2 text-right text-amber-700 font-bold w-20">ARRANGED_</th>
-      <th class="py-2.5 px-2 text-right text-emerald-700 font-bold w-20">NOT_ARRAN</th>
-      <th class="py-2.5 px-2 text-center w-24">입고일</th>
-      <th class="py-2.5 px-2 text-center w-20">MFG</th>
-      <th class="py-2.5 px-2 text-left w-24">PONO</th>
-      <th class="py-2.5 px-2 text-center w-28">관리</th>
-    </tr>
-  `;
+
+  if (activeTab === 'sales') {
+    thead.innerHTML = `
+      <tr class="bg-slate-100/90 text-slate-700 text-[11px] font-bold border-b border-slate-200 uppercase tracking-tight">
+        <th class="py-2.5 px-2 text-center w-16">KIND</th>
+        <th class="py-2.5 px-2 text-left min-w-[120px]">CNAME</th>
+        <th class="py-2.5 px-2 text-center w-16">SALES</th>
+        <th class="py-2.5 px-2 text-left min-w-[160px]">PART#</th>
+        <th class="py-2.5 px-2 text-right font-black w-20">재고량</th>
+        <th class="py-2.5 px-2 text-right w-20">원가</th>
+        <th class="py-2.5 px-2 text-right text-rose-700 font-bold w-24">AMOUNT</th>
+        <th class="py-2.5 px-2 text-right text-amber-700 font-bold w-20">ARRANGED_</th>
+        <th class="py-2.5 px-2 text-right text-emerald-700 font-bold w-20">NOT_ARRAN</th>
+        <th class="py-2.5 px-2 text-center w-24">입고일</th>
+        <th class="py-2.5 px-2 text-center w-20">MFG</th>
+        <th class="py-2.5 px-2 text-left w-24">PONO</th>
+        <th class="py-2.5 px-2 text-center w-28">관리</th>
+      </tr>
+    `;
+  } else {
+    thead.innerHTML = `
+      <tr class="bg-slate-100/90 text-slate-700 text-[11px] font-bold border-b border-slate-200 uppercase tracking-tight">
+        <th class="py-2.5 px-2 text-center">상태</th>
+        <th class="py-2.5 px-2 text-left">계약처 / 실고객사</th>
+        <th class="py-2.5 px-2 text-left">Part No / 구분</th>
+        <th class="py-2.5 px-2 text-right">수량</th>
+        <th class="py-2.5 px-2 text-right">실판매단가</th>
+        <th class="py-2.5 px-2 text-left">출하일 / 계산서일</th>
+        <th class="py-2.5 px-2 text-left">인보이스 / B/L</th>
+        <th class="py-2.5 px-2 text-center">수금/환차손익</th>
+        <th class="py-2.5 px-2 text-center">만기일정</th>
+        <th class="py-2.5 px-2 text-right">관리</th>
+      </tr>
+    `;
+  }
 }
 

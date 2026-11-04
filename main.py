@@ -10,9 +10,6 @@ import database as db
 app = FastAPI(title="FX Margin Simulator")
 db.init_db()
 
-# 정적 파일 서빙 (UI)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 # 환율 캐싱 변수
 CACHED_FX = {"rate": 1380.0, "updated_at": 0}
 CACHE_TTL = 300  # 5분 캐시
@@ -42,10 +39,6 @@ class ProductInput(BaseModel):
     shipping_fx_rate: float
     target_margin_rate: float
     msrp_krw: float
-
-@app.get("/")
-def serve_index():
-    return FileResponse("static/index.html")
 
 @app.get("/api/fx-rate")
 def get_fx_rate():
@@ -116,3 +109,7 @@ def simulate_margin(part_number: str, sale_discount_rate: float = 0.0):
         "is_under_margin": actual_margin_rate < target_margin,
         "is_replacement_deficit": sale_price < replacement_cost_krw
     }
+
+# 정적 파일 서빙 (UI 및 SPA 리소스 서빙)
+app.mount("/", StaticFiles(directory="public", html=True), name="public")
+

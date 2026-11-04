@@ -3,12 +3,12 @@ import * as InventoryModule from './inventory.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 import { initManualViewer } from './modules/manual.js';
 import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
-import { 
-  evaluatePackaging, 
-  fetchPackagingStandards, 
-  getStandardSpq, 
-  getAllStandards, 
-  savePackagingStandard 
+import {
+  evaluatePackaging,
+  fetchPackagingStandards,
+  getStandardSpq,
+  getAllStandards,
+  savePackagingStandard
 } from './modules/packaging.js';
 import { openTrackingModal } from './modules/courier.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
@@ -32,7 +32,9 @@ function callRenderInventoryHeaders(tab) {
 
 function callRenderInventoryList(items) {
   const fn = InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default;
-  if (typeof fn === 'function') fn(items);
+  if (typeof fn === 'function') {
+    fn(items, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, isCsOrAdminUser());
+  }
 }
 
 function getCachedItem(id) {
@@ -41,8 +43,8 @@ function getCachedItem(id) {
 
 // Supabase 조회 래퍼 (최대 10,000건 전건 로드)
 async function fetchInventoryItems() {
-  const client = (typeof supabase !== 'undefined' && supabase?.from) 
-    ? supabase 
+  const client = (typeof supabase !== 'undefined' && supabase?.from)
+    ? supabase
     : (window.supabase?.from ? window.supabase : null);
 
   if (!client) {
@@ -152,17 +154,54 @@ async function splitInventoryShipment(targetId, splitQty, splitPrice, customer, 
   if (original.stock <= splitQty) throw new Error("분할 수량은 기존 재고보다 작아야 합니다.");
 
   const remainQty = original.stock - splitQty;
-  await supabase.from('inventory_items').update({ stock: remainQty }).eq('id', targetId);
+  const isTransferToHq = (deadStockAction === 'hq');
+  const remainOwner = isTransferToHq ? '본사 일반재고' : (original.owner || '본사 일반재고');
+  const remainMemo = isTransferToHq
+    ? (original.memo ? `${original.memo} [본사 이관 잔여재고]` : '[본사 이관 잔여재고]')
+    : (original.memo || '');
 
-  const newPayload = { ...original };
-  delete newPayload.id;
-  delete newPayload.created_at;
-  newPayload.stock = splitQty;
-  newPayload.sold_price_usd = splitPrice;
-  newPayload.customer = customer || original.customer;
-  newPayload.real_customer = customer || original.real_customer;
-  newPayload.owner = rep || original.owner;
-  newPayload.order_status = '출하준비';
+  const { error: updErr } = await supabase
+    .from('inventory_items')
+    .update({
+      stock: remainQty,
+      owner: remainOwner,
+      memo: remainMemo
+    })
+    .eq('id', targetId);
+  if (updErr) throw updErr;
+
+  const newPayload = {
+    maker: original.maker || '기타',
+    part_name: original.part_name || original.partName || '-',
+    date_code: original.date_code || original.dateCode || '-',
+    owner: rep || original.owner || '본사 일반재고',
+    customer: customer || original.customer || '-',
+    real_customer: customer || original.real_customer || original.realCustomer || '-',
+    po_no: original.po_no || original.poNo || '',
+    application: original.application || '',
+    biz_type: original.biz_type || original.bizType || 'DOMESTIC',
+    tax_date: null,
+    sold_price_usd: splitPrice || 0,
+    order_status: '출하준비',
+    payment_terms: original.payment_terms || original.paymentTerms || 'Net 30',
+    payment_status: '미수',
+    currency: original.currency || 'USD',
+    invoice_no: '',
+    tracking_no: '',
+    due_date: null,
+    shipped_date: null,
+    settled_date: null,
+    settled_fx: 0,
+    entry_date: original.entry_date || original.entryDate || new Date().toISOString().slice(0, 10),
+    memo: `[부분 출하 분할] 원 건 #${original.id}에서 ${splitQty}EA 분할`,
+    unit_usd: original.unit_usd !== undefined ? original.unit_usd : (original.unitUsd || 0),
+    ship_fx: original.ship_fx !== undefined ? original.ship_fx : (original.shipFx || 1350),
+    stock: splitQty,
+    spq: original.spq || null,
+    margin: 20,
+    is_spa: Boolean(original.is_spa || original.isSpa),
+    approved_debit_usd: original.approved_debit_usd || original.approvedDebitUsd || 0
+  };
 
   const { error } = await supabase.from('inventory_items').insert([newPayload]);
   if (error) throw error;
@@ -341,7 +380,7 @@ function bindTabSwitch() {
     activeTab = 'sales';
     tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
     if (tabFulfillment) tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
-    
+
     salesPanel?.classList.remove('hidden');
     formSection?.classList.add('hidden');
 
@@ -353,7 +392,7 @@ function bindTabSwitch() {
     activeTab = 'fulfillment';
     tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
     if (tabSales) tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
-    
+
     salesPanel?.classList.add('hidden');
     formSection?.classList.remove('hidden');
 
@@ -449,13 +488,13 @@ function applyFilters() {
       const memo = String(item.memo || '').toLowerCase();
 
       return part.includes(q) ||
-             maker.includes(q) ||
-             cust.includes(q) ||
-             realCust.includes(q) ||
-             dc.includes(q) ||
-             track.includes(q) ||
-             po.includes(q) ||
-             memo.includes(q);
+        maker.includes(q) ||
+        cust.includes(q) ||
+        realCust.includes(q) ||
+        dc.includes(q) ||
+        track.includes(q) ||
+        po.includes(q) ||
+        memo.includes(q);
     });
   }
 
@@ -497,7 +536,7 @@ function loadFormFromItem(id) {
     if (unitUsdInp) unitUsdInp.value = item.unitUsd || item.unit_usd || 0;
     if (stockInp) stockInp.value = item.stock || 0;
     if (shipFxInp) shipFxInp.value = item.shipFx || item.ship_fx || 1350;
-    
+
     runEngine();
     document.getElementById('salesQuotationPanel')?.scrollIntoView({ behavior: 'smooth' });
     return;
@@ -508,7 +547,7 @@ function loadFormFromItem(id) {
 
   setSelectValue('selectMaker', 'inputCustomMaker', item.maker, '__CUSTOM_MAKER__');
   setSelectValue('selectOwner', 'inputCustomOwner', item.owner, '__CUSTOM_OWNER__');
-  
+
   const setVal = (inputKey, val) => {
     const el = document.getElementById(inputKey);
     if (el) el.value = (val !== null && val !== undefined) ? val : '';
@@ -852,7 +891,7 @@ function bindModals() {
 
       const overheadInput = document.getElementById('inputOverhead');
       if (overheadInput) overheadInput.value = calculatedOverheadRate.toFixed(2);
-      
+
       document.getElementById('landedCostModal')?.classList.add('hidden');
       runEngine();
       alert(`[배부 완료] 부대비용 가산율 +${calculatedOverheadRate.toFixed(2)}%가 적용되었습니다.`);
@@ -911,11 +950,11 @@ function runEngine() {
 
   setText('minSaleUnitActualUsd', `$${result.unitMinPriceActualUsd.toFixed(4)}`);
   setText('minSaleUnitActualKrw', `(₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()} / @${Math.round(shipFx).toLocaleString()})`);
-  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
   setText('minSaleUnitReplaceUsd', `$${result.unitMinPriceReplaceUsd.toFixed(4)}`);
   setText('minSaleUnitReplaceKrw', `(₩${Math.round(result.unitMinPriceReplaceKrw).toLocaleString()} / @${Math.round(appliedFxRate).toLocaleString()})`);
-  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 }
 
 async function saveCurrentForm() {
