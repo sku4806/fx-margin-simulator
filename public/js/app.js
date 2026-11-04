@@ -1,5 +1,4 @@
-import { supabase, fetchInventoryItems } from './supabase.js';
-
+import { supabase, fetchInventoryItems, saveInventoryItem, deleteInventoryItem } from './supabase.js';
 import * as InventoryModule from './inventory.js';
 
 function callRenderInventoryHeaders(tab) {
@@ -1023,7 +1022,7 @@ async function handleDeleteItem(id) {
   try {
     const delTarget = getCachedItem(id);
     await recordAuditLog(id, delTarget?.partName || '부품', 'DELETE', `항목 영구 삭제 (수량: ${delTarget?.stock || 0} EA, 소유: ${delTarget?.owner || '-'})`);
-    await safeDeleteInventoryItem(id);
+    await deleteInventoryItem(id);
     resetCurrentForm();
     await refreshInventory();
   } catch (err) {
