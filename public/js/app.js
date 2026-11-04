@@ -514,12 +514,12 @@ function applyFilters() {
 
   let filtered = (cachedItems || []).slice();
 
-  // 1. 키워드 통합 검색 (Part, Maker, Owner/Sales, Customer, D/C, Tracking, PO, Memo)
+// 1. 키워드 통합 검색 (Part, Maker, Owner/Sales, Customer, D/C, Tracking, PO, Memo)
   if (q) {
     filtered = filtered.filter(item => {
       const part = String(item.partName || item.part_name || '').toLowerCase();
       const maker = String(item.maker || '').toLowerCase();
-      // const owner removed (undefined item fix)
+      const owner = String(item.owner || '').toLowerCase(); // 👈 이 코드를 추가하거나 복구합니다.
       const cust = String(item.customer || '').toLowerCase();
       const realCust = String(item.realCustomer || item.real_customer || '').toLowerCase();
       const dc = String(item.dateCode || item.date_code || '').toLowerCase();
@@ -529,7 +529,7 @@ function applyFilters() {
 
       return part.includes(q) ||
              maker.includes(q) ||
-             owner.includes(q) ||
+             owner.includes(q) || // 이제 정상적으로 작동합니다.
              cust.includes(q) ||
              realCust.includes(q) ||
              dc.includes(q) ||
@@ -538,6 +538,7 @@ function applyFilters() {
              memo.includes(q);
     });
   }
+
   // 2. 라인(제조사) 필터 (대소문자 무시, ISSI/ICSI 분리, SMI 별칭, 기타 묶음)
   if (selectedLine && !['ALL', '전체', '라인 전체', ''].includes(selectedLine)) {
     const target = selectedLine.trim().toLowerCase();
