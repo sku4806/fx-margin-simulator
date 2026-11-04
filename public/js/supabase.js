@@ -40,3 +40,17 @@ export async function fetchInventoryItems() {
   if (error) throw error;
   return data || [];
 }
+
+// 🚀 ERP 앱 필수 export 보장
+export { supabase as supabase };
+export default supabase;
+
+export async function fetchInventoryItems() {
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .select('*')
+    .range(0, 9999)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
