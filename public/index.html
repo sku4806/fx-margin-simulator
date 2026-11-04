@@ -527,7 +527,21 @@
         </div>
 
         <!-- 모바일 카드 내부 스크롤 뷰 -->
-        <div id="inventoryCardContainer" class="block md:hidden space-y-2 max-h-[65vh] overflow-y-auto pr-1"></div>
+        
+        <!-- 📊 레거시 Grand Summaries 합계 바 -->
+        <div id="grandSummariesBar" class="bg-amber-50/90 border border-amber-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-sm mb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-amber-800 font-sans font-black">Grand Summaries</span>
+            <span id="summaryCount" class="text-slate-500 font-sans font-normal text-[11px]">(0건)</span>
+          </div>
+          <div class="flex items-center gap-4 text-xs">
+            <div>총 재고량: <span id="sumTotalStock" class="text-indigo-900 font-black">0</span> EA</div>
+            <div>총 배정량: <span id="sumArrangedStock" class="text-amber-700 font-black">0</span> EA</div>
+            <div>즉시 가용(NOT_ARRAN): <span id="sumAvailableStock" class="text-emerald-700 font-black">0</span> EA</div>
+            <div>총 매입액: <span id="sumTotalAmount" class="text-rose-700 font-black">$0.00</span></div>
+          </div>
+        </div>
+    <div id="inventoryCardContainer" class="block md:hidden space-y-2 max-h-[65vh] overflow-y-auto pr-1"></div>
 
         <!-- 데스크탑 테이블 내부 스크롤 뷰 (헤더 sticky 고정) -->
         <div class="hidden md:block overflow-x-auto max-h-[65vh] overflow-y-auto border border-slate-200 rounded-xl">

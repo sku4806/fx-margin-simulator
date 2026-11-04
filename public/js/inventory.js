@@ -1,3 +1,35 @@
+
+function updateGrandSummaries(items) {
+  let totalStock = 0;
+  let totalArranged = 0;
+  let totalAvailable = 0;
+  let totalAmount = 0;
+
+  items.forEach(it => {
+    const stock = it.stock || 0;
+    const arranged = it.arrangedQty || (it.orderStatus === '배정요청' || it.orderStatus === '출하준비' ? stock : 0);
+    const available = Math.max(0, stock - (it.orderStatus === '정산마감' || it.orderStatus === '출하완료' ? 0 : arranged));
+    const unitUsd = it.unitUsd || 0;
+
+    totalStock += stock;
+    totalArranged += arranged;
+    totalAvailable += available;
+    totalAmount += (unitUsd * stock);
+  });
+
+  const elCount = document.getElementById('summaryCount');
+  const elStock = document.getElementById('sumTotalStock');
+  const elArranged = document.getElementById('sumArrangedStock');
+  const elAvailable = document.getElementById('sumAvailableStock');
+  const elAmount = document.getElementById('sumTotalAmount');
+
+  if (elCount) elCount.innerText = `(${items.length.toLocaleString()}건)`;
+  if (elStock) elStock.innerText = totalStock.toLocaleString();
+  if (elArranged) elArranged.innerText = totalArranged.toLocaleString();
+  if (elAvailable) elAvailable.innerText = totalAvailable.toLocaleString();
+  if (elAmount) elAmount.innerText = '$' + totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 import { sbClient } from './supabase.js';
 
 let cachedItems = [];

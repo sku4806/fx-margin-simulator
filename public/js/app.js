@@ -320,38 +320,28 @@ function renderPackagingTable() {
 }
 
 
+
 function switchSubFormTab(tabName) {
-  const tabOrder = document.getElementById('subTabOrder');
-  const tabShipping = document.getElementById('subTabShipping');
-  const tabBilling = document.getElementById('subTabBilling');
+  const btnOrder = document.getElementById('subTabOrder');
+  const btnShip = document.getElementById('subTabShipping');
+  const btnBill = document.getElementById('subTabBilling');
 
   const secOrder = document.getElementById('stepOrderSection');
-  const secShipping = document.getElementById('stepShippingSection');
-  const secBilling = document.getElementById('stepBillingSection');
+  const secShip = document.getElementById('stepShippingSection');
+  const secBill = document.getElementById('stepBillingSection');
 
-  // 탭 스타일 초기화
-  [tabOrder, tabShipping, tabBilling].forEach(t => {
-    if (t) {
-      t.className = "flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all text-center";
-    }
-  });
+  const activeStyle = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center font-bold";
+  const inactiveStyle = "flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all text-center font-semibold";
 
-  // 섹션 숨김 초기화
-  secOrder?.classList.add('hidden');
-  secShipping?.classList.add('hidden');
-  secBilling?.classList.add('hidden');
+  if (btnOrder) btnOrder.className = (tabName === 'order') ? activeStyle : inactiveStyle;
+  if (btnShip) btnShip.className = (tabName === 'shipping') ? activeStyle : inactiveStyle;
+  if (btnBill) btnBill.className = (tabName === 'billing') ? activeStyle : inactiveStyle;
 
-  if (tabName === 'order') {
-    if (tabOrder) tabOrder.className = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center";
-    secOrder?.classList.remove('hidden');
-  } else if (tabName === 'shipping') {
-    if (tabShipping) tabShipping.className = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center";
-    secShipping?.classList.remove('hidden');
-  } else if (tabName === 'billing') {
-    if (tabBilling) tabBilling.className = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center";
-    secBilling?.classList.remove('hidden');
-  }
+  secOrder?.classList.toggle('hidden', tabName !== 'order');
+  secShip?.classList.toggle('hidden', tabName !== 'shipping');
+  secBill?.classList.toggle('hidden', tabName !== 'billing');
 }
+
 
 function bindInputs() {
   // 🗂️ 폼 서브탭 전환 리스너
@@ -443,6 +433,7 @@ function bindInputs() {
   });
 
   safeAddListener('saveItemBtn', 'click', saveCurrentForm);
+  safeAddListener('resetFormSelectionBtn', 'click', resetCurrentForm);
   safeAddListener('openLandedCostBtn', 'click', () => {
     document.getElementById('landedCostModal')?.classList.remove('hidden');
   });
@@ -793,6 +784,10 @@ function loadFormFromItem(id) {
 }
 
 export function resetCurrentForm() {
+  const titleEl = document.getElementById('selectedPartTitle');
+  const badgeEl = document.getElementById('selectedPartBadge');
+  if (titleEl) titleEl.innerText = "신규 부품 등록 / 배정 모드";
+  if (badgeEl) badgeEl.classList.add('hidden');
   editingItemId = null;
   const banner = document.getElementById('editingBanner');
   if (banner) banner.classList.add('hidden');
