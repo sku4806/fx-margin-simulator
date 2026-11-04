@@ -46,7 +46,6 @@ async function fetchInventoryItems() {
     : (window.supabase?.from ? window.supabase : null);
 
   if (!client) {
-    console.error("Supabase 클라이언트를 초기화할 수 없습니다.", { supabase, windowSupabase: window.supabase });
     throw new Error("Supabase client is not ready");
   }
 
@@ -56,7 +55,62 @@ async function fetchInventoryItems() {
     .range(0, 9999)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data || [];
+
+  // DB 필드명(snake_case)을 화면 렌더러 규격(camelCase)으로 상호 안전 매핑
+  return (data || []).map(r => ({
+    id: r.id,
+    maker: r.maker || '-',
+    partName: r.part_name || r.partName || '-',
+    part_name: r.part_name || r.partName || '-',
+    dateCode: r.date_code || r.dateCode || '-',
+    date_code: r.date_code || r.dateCode || '-',
+    owner: r.owner || '-',
+    customer: r.customer || '-',
+    realCustomer: r.real_customer || r.realCustomer || '-',
+    real_customer: r.real_customer || r.realCustomer || '-',
+    poNo: r.po_no || r.poNo || '',
+    po_no: r.po_no || r.poNo || '',
+    application: r.application || '',
+    bizType: r.biz_type || r.bizType || 'DOMESTIC',
+    biz_type: r.biz_type || r.bizType || 'DOMESTIC',
+    taxDate: r.tax_date || r.taxDate || null,
+    tax_date: r.tax_date || r.taxDate || null,
+    soldPriceUsd: (r.sold_price_usd !== null && r.sold_price_usd !== undefined) ? Number(r.sold_price_usd) : 0,
+    sold_price_usd: (r.sold_price_usd !== null && r.sold_price_usd !== undefined) ? Number(r.sold_price_usd) : 0,
+    orderStatus: r.order_status || r.orderStatus || '배정요청',
+    order_status: r.order_status || r.orderStatus || '배정요청',
+    paymentTerms: r.payment_terms || r.paymentTerms || 'Net 30',
+    payment_terms: r.payment_terms || r.paymentTerms || 'Net 30',
+    paymentStatus: r.payment_status || r.paymentStatus || '미수',
+    payment_status: r.payment_status || r.paymentStatus || '미수',
+    currency: r.currency || 'USD',
+    invoiceNo: r.invoice_no || r.invoiceNo || '',
+    invoice_no: r.invoice_no || r.invoiceNo || '',
+    trackingNo: r.tracking_no || r.trackingNo || '',
+    tracking_no: r.tracking_no || r.trackingNo || '',
+    dueDate: r.due_date || r.dueDate || null,
+    due_date: r.due_date || r.dueDate || null,
+    shippedDate: r.shipped_date || r.shippedDate || null,
+    shipped_date: r.shipped_date || r.shippedDate || null,
+    settledDate: r.settled_date || r.settledDate || null,
+    settled_date: r.settled_date || r.settledDate || null,
+    settledFx: Number(r.settled_fx || r.settledFx) || 0,
+    settled_fx: Number(r.settled_fx || r.settledFx) || 0,
+    entryDate: r.entry_date || r.entryDate || '',
+    entry_date: r.entry_date || r.entryDate || '',
+    memo: r.memo || '',
+    unitUsd: Number(r.unit_usd !== undefined ? r.unit_usd : r.unitUsd) || 0,
+    unit_usd: Number(r.unit_usd !== undefined ? r.unit_usd : r.unitUsd) || 0,
+    shipFx: Number(r.ship_fx !== undefined ? r.ship_fx : r.shipFx) || 1350,
+    ship_fx: Number(r.ship_fx !== undefined ? r.ship_fx : r.shipFx) || 1350,
+    stock: parseInt(r.stock) || 0,
+    spq: r.spq ? parseInt(r.spq) : null,
+    isSpa: Boolean(r.is_spa || r.isSpa),
+    is_spa: Boolean(r.is_spa || r.isSpa),
+    approvedDebitUsd: Number(r.approved_debit_usd || r.approvedDebitUsd) || 0,
+    approved_debit_usd: Number(r.approved_debit_usd || r.approvedDebitUsd) || 0,
+    created_at: r.created_at
+  }));
 }
 
 // Supabase 단일 저장/수정 래퍼
