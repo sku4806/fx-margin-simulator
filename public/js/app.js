@@ -525,6 +525,28 @@ function applyFilters() {
 // ----------------------------------------------------
 // 5. 폼 선택 및 바인딩
 // ----------------------------------------------------
+function setSelectValue(selectId, customInputId, val, customVal) {
+  const sel = document.getElementById(selectId);
+  const inp = document.getElementById(customInputId);
+  if (!sel) return;
+
+  const targetVal = (val || '').trim();
+  const hasOption = Array.from(sel.options).some(opt => opt.value === targetVal);
+  if (hasOption) {
+    sel.value = targetVal;
+    if (inp) {
+      inp.value = '';
+      inp.classList.add('hidden');
+    }
+  } else {
+    sel.value = customVal;
+    if (inp) {
+      inp.value = targetVal;
+      inp.classList.remove('hidden');
+    }
+  }
+}
+
 function loadFormFromItem(id) {
   const item = getCachedItem(id);
   if (!item) return;
@@ -1039,6 +1061,7 @@ function copyQuotation() {
 window.resetCurrentForm = resetCurrentForm;
 window.loadFormFromItem = loadFormFromItem;
 window.handleDeleteItem = handleDeleteItem;
+window.openTrackingModal = openTrackingModal;
 
 bootstrap();
 
