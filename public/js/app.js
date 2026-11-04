@@ -41,7 +41,16 @@ function getCachedItem(id) {
 
 // Supabase 조회 래퍼 (최대 10,000건 전건 로드)
 async function fetchInventoryItems() {
-  const { data, error } = await supabase
+  const client = (typeof supabase !== 'undefined' && supabase?.from) 
+    ? supabase 
+    : (window.supabase?.from ? window.supabase : null);
+
+  if (!client) {
+    console.error("Supabase 클라이언트를 초기화할 수 없습니다.", { supabase, windowSupabase: window.supabase });
+    throw new Error("Supabase client is not ready");
+  }
+
+  const { data, error } = await client
     .from('inventory_items')
     .select('*')
     .range(0, 9999)

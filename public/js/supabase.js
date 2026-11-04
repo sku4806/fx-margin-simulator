@@ -50,4 +50,4 @@ export async function fetchInventoryItems() {
   return data || [];
 }
 
-export const supabase = window.supabase || (typeof supabase !== 'undefined' ? supabase : null);
+export const supabase = sbClient;
