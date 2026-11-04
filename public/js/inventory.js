@@ -12,33 +12,32 @@ function generateLegacyMasterRow(item) {
   const cname = (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-';
   const sales = item.owner || '본사';
   const part = item.partName || item.part_name || '-';
-  const entryDate = (item.entryDate || item.entry_date || '-').slice(2); // YY-MM-DD 단축
+  const rawDate = item.entryDate || item.entry_date || '-';
+  const entryDate = rawDate.length >= 10 ? rawDate.slice(2, 10) : rawDate; // YY-MM-DD
   const mfg = item.maker || '-';
-  const pono = item.poNo || item.po_no || '-';
 
   return `
     <tr class="hover:bg-indigo-50/60 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
       <td class="py-1.5 px-1 text-center whitespace-nowrap">
-        <span class="px-1 py-0.5 rounded text-[9px] font-bold ${kind.includes('내자') || kind.includes('DOMESTIC') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${kind.includes('내자') || kind.includes('DOMESTIC') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
           ${kind.length > 4 ? kind.slice(0, 4) : kind}
         </span>
       </td>
-      <td class="py-1.5 px-1.5 font-bold text-slate-800 truncate max-w-[110px]" title="${cname}">${cname}</td>
+      <td class="py-1.5 px-1.5 font-bold text-slate-800 truncate max-w-[120px] whitespace-nowrap" title="${cname}">${cname}</td>
       <td class="py-1.5 px-1 text-center font-bold text-indigo-800 whitespace-nowrap">${sales}</td>
-      <td class="py-1.5 px-1.5 font-bold text-slate-900 truncate max-w-[160px]" title="${part}">${part}</td>
+      <td class="py-1.5 px-1.5 font-bold text-slate-900 truncate max-w-[170px] whitespace-nowrap" title="${part}">${part}</td>
       <td class="py-1.5 px-1 text-right font-black text-slate-900 whitespace-nowrap">${stock.toLocaleString()}</td>
       <td class="py-1.5 px-1 text-right text-slate-700 font-semibold whitespace-nowrap">$${unitUsd.toLocaleString(undefined, { minimumFractionDigits: unitUsd >= 10 ? 2 : 3, maximumFractionDigits: 3 })}</td>
       <td class="py-1.5 px-1 text-right font-bold text-rose-600 whitespace-nowrap">$${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
       <td class="py-1.5 px-1 text-right font-bold text-amber-700 whitespace-nowrap">${arrangedQty.toLocaleString()}</td>
       <td class="py-1.5 px-1 text-right font-bold text-emerald-700 whitespace-nowrap">${notArranQty.toLocaleString()}</td>
       <td class="py-1.5 px-1 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">${entryDate}</td>
-      <td class="py-1.5 px-1 text-center font-medium text-slate-700 truncate max-w-[65px]" title="${mfg}">${mfg}</td>
-      <td class="py-1.5 px-1 text-slate-500 font-mono text-[10px] truncate max-w-[80px]" title="${pono}">${pono}</td>
+      <td class="py-1.5 px-1 text-center font-medium text-slate-700 truncate max-w-[70px] whitespace-nowrap" title="${mfg}">${mfg}</td>
       <td class="py-1 px-1 text-center select-none whitespace-nowrap" onclick="event.stopPropagation()">
-        <div class="inline-flex items-center justify-center gap-0.5">
-          <button type="button" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold transition-all">수정</button>
-          <button type="button" onclick="window.handleOpenSplitModal && window.handleOpenSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition-all">분할</button>
-          <button type="button" onclick="window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold transition-all">삭제</button>
+        <div class="inline-flex items-center justify-center gap-1">
+          <button type="button" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold transition-all shadow-xs">수정</button>
+          <button type="button" onclick="window.handleOpenSplitModal && window.handleOpenSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition-all shadow-xs">분할</button>
+          <button type="button" onclick="window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold transition-all shadow-xs">삭제</button>
         </div>
       </td>
     </tr>
@@ -265,55 +264,9 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
   }
 
   if (activeTab === 'sales') {
-    tbody.innerHTML = items.map(item => generateLegacyMasterRow(item)).join('');
+    tbody.innerHTML = items.map(generateLegacyMasterRow).join("");
   } else {
-    tbody.innerHTML = items.map(item => {
-      return `
-        <tr class="hover:bg-indigo-50/40 cursor-pointer transition-colors border-b border-slate-100 text-xs" data-row-id="${item.id}">
-          <td class="py-2.5 px-2 text-center whitespace-nowrap">
-            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusBadgeClass(item.orderStatus)}">${item.orderStatus}</span>
-          </td>
-          <td class="py-2.5 px-2 font-bold text-slate-900 whitespace-nowrap">
-            <div>${(item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'}</div>
-            ${(item.realCustomer && item.realCustomer !== '-' && item.realCustomer !== item.customer) ? `<div class="text-[10px] text-indigo-700 font-normal">↳ ${item.realCustomer}</div>` : ''}
-          </td>
-          <td class="py-2.5 px-2 whitespace-nowrap">
-            <div class="font-bold text-indigo-950">${item.partName}</div>
-            <div class="text-[10px] text-slate-400 font-semibold">${item.maker} · <span class="text-indigo-600 font-bold">${item.bizType}</span></div>
-          </td>
-          <td class="py-2.5 px-2 text-right font-black text-slate-900 whitespace-nowrap">${item.stock.toLocaleString()} EA</td>
-          <td class="py-2.5 px-2 text-right font-black text-indigo-700 whitespace-nowrap">$${item.soldPriceUsd > 0 ? (Number(item.soldPriceUsd) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '-'}</td>
-          <td class="py-2.5 px-2 text-[11px] text-slate-600 whitespace-nowrap">
-            <div>출하: ${item.shippedDate || '미출하'}</div>
-            <div class="text-indigo-900 font-semibold">계산서: ${item.taxDate || '-'}</div>
-          </td>
-          <td class="py-2.5 px-2 text-[11px] text-slate-600 align-middle whitespace-nowrap">
-            <div class="font-mono text-slate-500 truncate max-w-[130px]">INV: ${item.invoiceNo || '-'}</div>
-            <div class="mt-1 flex items-center justify-between gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 max-w-[165px]">
-              <span class="font-mono font-bold text-slate-800 truncate" title="${item.trackingNo || ''}">
-                ${item.trackingNo ? item.trackingNo : '<span class="text-slate-400 font-normal">B/L 미등록</span>'}
-              </span>
-              <button type="button" onclick="event.stopPropagation(); window.openTrackingModal && window.openTrackingModal('${item.trackingNo}')" class="tracking-btn shrink-0 text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded border border-indigo-200 transition-colors flex items-center gap-0.5 shadow-xs" data-tracking="${item.trackingNo || ''}">
-                🚚 조회
-              </button>
-            </div>
-          </td>
-          <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
-            <span class="text-[10px] font-bold px-2 py-0.5 rounded ${item.paymentStatus === '완료' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">${item.paymentStatus}</span>
-          </td>
-          <td class="py-2.5 px-2 text-center text-[11px] text-slate-600 whitespace-nowrap align-middle">${item.dueDate || '-'}</td>
-          <td class="py-2 px-2 text-center select-none whitespace-nowrap align-middle" onclick="event.stopPropagation()">
-            ${canEdit ? `
-              <div class="inline-flex items-center justify-center gap-1">
-                <button type="button" class="edit-btn px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[11px] font-bold whitespace-nowrap transition-all shadow-xs" data-id="${item.id}">수정</button>
-                <button type="button" class="split-btn px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[11px] font-bold whitespace-nowrap transition-all shadow-xs" data-id="${item.id}">분할</button>
-                <button type="button" class="delete-btn px-1.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[11px] font-bold whitespace-nowrap transition-all shadow-xs" data-id="${item.id}">삭제</button>
-              </div>
-            ` : '-'}
-          </td>
-        </tr>
-      `;
-    }).join('');
+    tbody.innerHTML = items.map(generateLegacyMasterRow).join("");
 
     bindRowActions(tbody, onEdit, onDelete, onSplit);
   }
@@ -482,8 +435,8 @@ export function renderInventoryHeaders(activeTab) {
   if (!thead) return;
   thead.innerHTML = `
     <tr class="bg-slate-100/95 text-slate-700 text-[11px] font-bold border-b border-slate-200 select-none">
-      <th class="py-2 px-1 text-center w-[5%] whitespace-nowrap">KIND</th>
-      <th class="py-2 px-1.5 text-left w-[11%]">CNAME</th>
+      <th class="py-2 px-1 text-center w-[6%] whitespace-nowrap">KIND</th>
+      <th class="py-2 px-1.5 text-left w-[12%]">CNAME</th>
       <th class="py-2 px-1 text-center w-[6%] whitespace-nowrap">SALES</th>
       <th class="py-2 px-1.5 text-left w-[18%]">PART#</th>
       <th class="py-2 px-1 text-right font-black w-[6%] whitespace-nowrap">재고량</th>
@@ -492,8 +445,7 @@ export function renderInventoryHeaders(activeTab) {
       <th class="py-2 px-1 text-right text-amber-700 font-bold w-[6%] whitespace-nowrap">배정량</th>
       <th class="py-2 px-1 text-right text-emerald-700 font-bold w-[6%] whitespace-nowrap">가용재고</th>
       <th class="py-2 px-1 text-center w-[7%] whitespace-nowrap">입고일</th>
-      <th class="py-2 px-1 text-center w-[6%] whitespace-nowrap">MFG</th>
-      <th class="py-2 px-1 text-left w-[9%]">PONO</th>
+      <th class="py-2 px-1 text-center w-[7%] whitespace-nowrap">MFG</th>
       <th class="py-2 px-1 text-center w-[11%] whitespace-nowrap">관리</th>
     </tr>
   `;
