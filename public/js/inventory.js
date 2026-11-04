@@ -267,11 +267,11 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
             ${item.spq ? `<div class="text-[9px] text-slate-400 font-semibold">SPQ: ${item.spq.toLocaleString()}</div>` : ''}
           </td>
           <td class="py-2.5 px-2 text-[11px]">
-            <div class="font-bold text-slate-800">$${item.unitUsd.toFixed(3)}</div>
+            <div class="font-bold text-slate-800">$${(Number(item.unitUsd) || 0).toFixed(3)}</div>
             <div class="text-[10px] text-slate-500 font-medium">(₩${costKrw.toLocaleString()})</div>
           </td>
           <td class="py-2.5 px-2 text-[11px]">
-            ${item.soldPriceUsd > 0 ? `<div class="font-black text-indigo-700">$${item.soldPriceUsd.toFixed(3)}</div>` : '<span class="text-slate-400">-</span>'}
+            ${item.soldPriceUsd > 0 ? `<div class="font-black text-indigo-700">$${(Number(item.soldPriceUsd) || 0).toFixed(3)}</div>` : '<span class="text-slate-400">-</span>'}
           </td>
           <td class="py-2.5 px-2 text-xs">
             <div class="font-bold text-slate-900">${(item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-'}</div>
@@ -306,7 +306,7 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
             <div class="text-[9px] text-slate-400 font-semibold">${item.maker} · <span class="text-indigo-600">${item.bizType}</span></div>
           </td>
           <td class="py-2.5 px-2 font-bold text-slate-900">${item.stock.toLocaleString()} EA</td>
-          <td class="py-2.5 px-2 font-black text-indigo-700">$${item.soldPriceUsd > 0 ? item.soldPriceUsd.toFixed(3) : '-'}</td>
+          <td class="py-2.5 px-2 font-black text-indigo-700">$${item.soldPriceUsd > 0 ? (Number(item.soldPriceUsd) || 0).toFixed(3) : '-'}</td>
           <td class="py-2.5 px-2 text-[10px] text-slate-600">
             <div>출하: ${item.shippedDate || '미출하'}</div>
             <div class="text-indigo-900 font-semibold">계산서: ${item.taxDate || '-'}</div>
@@ -378,11 +378,11 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
           </div>
           <div>
             <span class="text-[10px] text-slate-400 block font-semibold">선적 매입가</span>
-            <div class="font-bold text-slate-800">₩${costKrw.toLocaleString()} <span class="text-[10px] text-slate-500 font-normal">($${item.unitUsd.toFixed(3)})</span></div>
+            <div class="font-bold text-slate-800">₩${costKrw.toLocaleString()} <span class="text-[10px] text-slate-500 font-normal">($${(Number(item.unitUsd) || 0).toFixed(3)})</span></div>
           </div>
           <div>
             <span class="text-[10px] text-slate-400 block font-semibold">협의 판매가</span>
-            <div class="font-black text-indigo-700">${item.soldPriceUsd > 0 ? `$${item.soldPriceUsd.toFixed(3)}` : '-'}</div>
+            <div class="font-black text-indigo-700">${item.soldPriceUsd > 0 ? `$${(Number(item.soldPriceUsd) || 0).toFixed(3)}` : '-'}</div>
           </div>
           <div>
             <span class="text-[10px] text-slate-400 block font-semibold">수량</span>
