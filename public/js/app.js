@@ -1,5 +1,29 @@
-import { supabase, fetchInventoryItems, saveInventoryItem, deleteInventoryItem } from './supabase.js';
+import { supabase } from './supabase.js';
 import * as InventoryModule from './inventory.js';
+import { initAuth, isCsOrAdminUser } from './modules/auth.js';
+import { initManualViewer } from './modules/manual.js';
+import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
+import { 
+  evaluatePackaging, 
+  fetchPackagingStandards, 
+  getStandardSpq, 
+  getAllStandards, 
+  savePackagingStandard 
+} from './modules/packaging.js';
+import { openTrackingModal } from './modules/courier.js';
+import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
+import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
+import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
+
+// ----------------------------------------------------
+// 0. 상태 변수 및 안전 렌더러/DB 헬퍼
+// ----------------------------------------------------
+let cachedItems = [];
+let rawFxRate = 1380.0;
+let appliedFxRate = 1380.0;
+let activeTab = 'sales';
+let editingItemId = null;
+let targetSplitId = null;
 
 function callRenderInventoryHeaders(tab) {
   const fn = InventoryModule.renderInventoryHeaders || InventoryModule.default?.renderInventoryHeaders;
@@ -10,9 +34,130 @@ function callRenderInventoryList(items) {
   const fn = InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default;
   if (typeof fn === 'function') fn(items);
 }
-let cachedItems = [];
 
-// 🗂️ 폼 서브탭 동적 자동 빌더 (1.수주/배정, 2.출하/물류, 3.계산서/정산)
+function getCachedItem(id) {
+  return cachedItems.find(item => String(item.id) === String(id)) || null;
+}
+
+// Supabase 조회 래퍼 (최대 10,000건 전건 로드)
+async function fetchInventoryItems() {
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .select('*')
+    .range(0, 9999)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+// Supabase 단일 저장/수정 래퍼
+async function upsertInventoryItem(payload, id) {
+  if (id) {
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .insert([payload])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+}
+
+// Supabase 삭제 래퍼
+async function deleteInventoryItem(id) {
+  const { error } = await supabase
+    .from('inventory_items')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+  return true;
+}
+
+// Supabase 분할 래퍼
+async function splitInventoryShipment(targetId, splitQty, splitPrice, customer, rep, deadStockAction) {
+  const original = getCachedItem(targetId);
+  if (!original) throw new Error("원본 데이터를 찾을 수 없습니다.");
+  if (original.stock <= splitQty) throw new Error("분할 수량은 기존 재고보다 작아야 합니다.");
+
+  const remainQty = original.stock - splitQty;
+  await supabase.from('inventory_items').update({ stock: remainQty }).eq('id', targetId);
+
+  const newPayload = { ...original };
+  delete newPayload.id;
+  delete newPayload.created_at;
+  newPayload.stock = splitQty;
+  newPayload.sold_price_usd = splitPrice;
+  newPayload.customer = customer || original.customer;
+  newPayload.real_customer = customer || original.real_customer;
+  newPayload.owner = rep || original.owner;
+  newPayload.order_status = '출하준비';
+
+  const { error } = await supabase.from('inventory_items').insert([newPayload]);
+  if (error) throw error;
+}
+
+function safeAddListener(id, event, handler) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, handler);
+}
+
+// ----------------------------------------------------
+// 1. 초기 부트스트랩
+// ----------------------------------------------------
+export async function bootstrap() {
+  const entryDateEl = document.getElementById('inputEntryDate');
+  if (entryDateEl) entryDateEl.value = new Date().toISOString().slice(0, 10);
+
+  try {
+    const fxRes = await fetch('/api/fx-rate');
+    const fxData = await fxRes.json();
+    rawFxRate = fxData.current_rate || 1380.0;
+  } catch (err) {
+    console.warn("FX 기본값 유지", err);
+  }
+  updateFxDisplay();
+
+  try {
+    await fetchPackagingStandards();
+    renderPackagingTable();
+  } catch (e) {
+    console.warn("포장기준 로드 예외 무시", e);
+  }
+
+  bindTabSwitch();
+  bindInputs();
+  bindModals();
+  initManualViewer();
+
+  initAuth(async (session, canEdit) => {
+    updateFormVisibility(canEdit);
+    if (session) {
+      await refreshInventory();
+    } else {
+      cachedItems = [];
+      callRenderInventoryList([]);
+    }
+  });
+
+  runEngine();
+  initDynamicFormTabs();
+  if (activeTab === 'sales') {
+    document.getElementById('formSection')?.classList.add('hidden');
+  }
+}
+
+// ----------------------------------------------------
+// 2. 폼 서브탭 동적 제어 (1.수주/배정, 2.출하/물류, 3.계산서/정산)
+// ----------------------------------------------------
 function initDynamicFormTabs() {
   const formSection = document.getElementById('formSection');
   if (!formSection) return;
@@ -20,19 +165,15 @@ function initDynamicFormTabs() {
   const oldNav = document.getElementById('dynamicSubTabNav');
   if (oldNav) oldNav.remove();
 
-  // 다른 섹션의 제목을 포함하지 않는 '순수 단일 카드 박스'만 정확히 추출하는 함수
   const allTitles = ['부품 및 영업 정보', '수주 거래처 및 수량', '매입/판매 단가 및 환율', '출하 및 물류 관리', '세금계산서 및 수금 정산'];
 
   const getIsolatedCard = (targetTitle) => {
     const otherTitles = allTitles.filter(t => t !== targetTitle);
     const elements = formSection.querySelectorAll('div, section');
     for (const el of elements) {
-      // 타겟 타이틀을 포함하고 있으면서
       if (el.textContent.includes(targetTitle)) {
-        // 다른 타이틀은 전혀 포함하지 않는 가장 바깥쪽 독립 박스
         const hasOthers = otherTitles.some(ot => el.textContent.includes(ot));
         if (!hasOthers) {
-          // 부모가 다른 타이틀을 포함하고 있다면, 현재 el이 바로 독립 카드 단위임
           if (!el.parentElement || otherTitles.some(ot => el.parentElement.textContent.includes(ot)) || el.parentElement.id === 'formSection') {
             return el;
           }
@@ -50,12 +191,10 @@ function initDynamicFormTabs() {
 
   if (!cardPart) return;
 
-  // 두 카드를 감싸고 있는 상위 부모 래퍼(fulfillment-only-field 등)의 스타일 제약 해제
   if (cardShip && cardShip.parentElement && cardShip.parentElement !== formSection) {
     cardShip.parentElement.style.display = 'contents';
   }
 
-  // 3단계 서브탭 네비게이션 생성
   const nav = document.createElement('div');
   nav.id = 'dynamicSubTabNav';
   nav.className = 'w-full flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl text-xs font-bold mb-3 select-none shadow-inner';
@@ -89,15 +228,11 @@ function initDynamicFormTabs() {
     const isShip = (active === 'shipping');
     const isBill = (active === 'billing');
 
-    // 1단계 카드 (부품, 거래처, 단가)
     if (cardPart) cardPart.style.display = isOrder ? '' : 'none';
     if (cardOrder) cardOrder.style.display = isOrder ? '' : 'none';
     if (cardPrice) cardPrice.style.display = isOrder ? '' : 'none';
 
-    // 2단계 카드 (출하 및 물류 관리)
     if (cardShip) cardShip.style.display = isShip ? '' : 'none';
-
-    // 3단계 카드 (세금계산서 및 수금 정산)
     if (cardBill) cardBill.style.display = isBill ? '' : 'none';
   }
 
@@ -108,70 +243,30 @@ function initDynamicFormTabs() {
   switchTab('order');
 }
 
-import { initAuth, isCsOrAdminUser } from './modules/auth.js';
-import { initManualViewer } from './modules/manual.js';
-import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
-import { 
-  evaluatePackaging, 
-  fetchPackagingStandards, 
-  getStandardSpq, 
-  getAllStandards, 
-  savePackagingStandard 
-} from './modules/packaging.js';
-import { openTrackingModal } from './modules/courier.js';
-import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
-import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
-import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
+function switchSubFormTab(tabName) {
+  const btnOrder = document.getElementById('subTabOrder');
+  const btnShip = document.getElementById('subTabShipping');
+  const btnBill = document.getElementById('subTabBilling');
 
+  const secOrder = document.getElementById('stepOrderSection');
+  const secShip = document.getElementById('stepShippingSection');
+  const secBill = document.getElementById('stepBillingSection');
 
-let rawFxRate = 1380.0;
-let appliedFxRate = 1380.0;
-let activeTab = 'sales';
-let editingItemId = null;
-let targetSplitId = null;
+  const activeStyle = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center font-bold";
+  const inactiveStyle = "flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all text-center font-semibold";
 
-function safeAddListener(id, event, handler) {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener(event, handler);
+  if (btnOrder) btnOrder.className = (tabName === 'order') ? activeStyle : inactiveStyle;
+  if (btnShip) btnShip.className = (tabName === 'shipping') ? activeStyle : inactiveStyle;
+  if (btnBill) btnBill.className = (tabName === 'billing') ? activeStyle : inactiveStyle;
+
+  secOrder?.classList.toggle('hidden', tabName !== 'order');
+  secShip?.classList.toggle('hidden', tabName !== 'shipping');
+  secBill?.classList.toggle('hidden', tabName !== 'billing');
 }
 
-export async function bootstrap() {
-  const entryDateEl = document.getElementById('inputEntryDate');
-  if (entryDateEl) entryDateEl.value = new Date().toISOString().slice(0, 10);
-
-  try {
-    const fxRes = await fetch('/api/fx-rate');
-    const fxData = await fxRes.json();
-    rawFxRate = fxData.current_rate;
-  } catch (err) {
-    console.warn("FX 기본값 유지", err);
-  }
-  updateFxDisplay();
-
-  await fetchPackagingStandards();
-  renderPackagingTable();
-
-  bindTabSwitch();
-  bindInputs();
-  bindModals();
-  initManualViewer();
-
-  initAuth(async (session, canEdit) => {
-    updateFormVisibility(canEdit);
-    if (session) {
-      await refreshInventory();
-    } else {
-      renderInventoryUI([], activeTab, () => {}, () => {}, () => {}, false);
-    }
-  });
-
-  runEngine();
-  initDynamicFormTabs();
-  if (activeTab === 'sales') {
-    document.getElementById('formSection')?.classList.add('hidden');
-  }
-}
-
+// ----------------------------------------------------
+// 3. 탭 전환 및 가시성 제어
+// ----------------------------------------------------
 function bindTabSwitch() {
   const tabSales = document.getElementById('tabSales');
   const tabFulfillment = document.getElementById('tabFulfillment');
@@ -184,7 +279,6 @@ function bindTabSwitch() {
     tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
     if (tabFulfillment) tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
     
-    // 영업 탭: 계산기 노출, 입력 폼 숨김
     salesPanel?.classList.remove('hidden');
     formSection?.classList.add('hidden');
 
@@ -197,7 +291,6 @@ function bindTabSwitch() {
     tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
     if (tabSales) tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
     
-    // 채권/출하 탭: 계산기 숨김, 통합 관리 폼 노출
     salesPanel?.classList.add('hidden');
     formSection?.classList.remove('hidden');
 
@@ -215,13 +308,11 @@ function updateFormVisibility(canEdit) {
   const fulfillmentFields = document.querySelectorAll('.fulfillment-only-field');
   const saveBtn = document.getElementById('saveItemBtn');
 
-  // 영업 탭일 때는 폼 자체를 숨김
   if (activeTab === 'sales') {
     formSection?.classList.add('hidden');
     return;
   }
 
-  // 출하/채권 관리 탭일 때는 모든 입력 필드(수주/배정 + 출하/정산)를 통합 노출
   formSection?.classList.remove('hidden');
   if (formTitle) formTitle.innerText = "수주 등록 / 재고 배정 및 출하·정산 관리";
   if (formSubtitle) formSubtitle.innerText = "고객사 수주 배정 물량, 단가, 출고(송장) 및 세금계산서/채권 만기를 통합 설정합니다.";
@@ -245,436 +336,24 @@ function updateFormVisibility(canEdit) {
   }
 }
 
-function updateFxDisplay() {
-  const bufferEl = document.getElementById('fxBufferSelect');
-  const buffer = bufferEl ? (parseFloat(bufferEl.value) || 0) : 0;
-  appliedFxRate = rawFxRate + buffer;
-  const bufferText = buffer > 0 ? ` (+${buffer}원)` : "";
-  const liveFxEl = document.getElementById('liveFx');
-  if (liveFxEl) {
-    liveFxEl.innerText = `$1.00 (₩${Math.round(appliedFxRate).toLocaleString()})${bufferText}`;
-  }
-  runEngine();
-  if (activeTab === 'sales') {
-    document.getElementById('formSection')?.classList.add('hidden');
-  }
-}
-
-function updateSpqNotice() {
-  const stockEl = document.getElementById('inputStock');
-  const spqEl = document.getElementById('inputSpq');
-  const container = document.getElementById('spqFeedbackContainer');
-  if (!stockEl || !container) return;
-
-  const qty = parseInt(stockEl.value) || 0;
-  const spq = parseInt(spqEl?.value) || 0;
-  const res = evaluatePackaging(qty, spq);
-
-  if (res.isValid || qty === 0 || spq === 0) {
-    container.classList.add('hidden');
-    container.innerHTML = '';
-  } else {
-    container.classList.remove('hidden');
-    container.innerHTML = `
-      <div class="p-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] space-y-1">
-        <div class="text-amber-800 font-bold flex items-center justify-between">
-          <span>⚠️ Reel 포장단위(${res.spq.toLocaleString()} EA) 불일치</span>
-          <span class="text-rose-600 font-black">-${res.missingForFullReel.toLocaleString()} EA 자투리</span>
-        </div>
-        <div class="flex items-center gap-1 pt-0.5">
-          <button type="button" class="spq-fix-btn flex-1 bg-white hover:bg-amber-100 text-slate-700 font-bold py-0.5 px-1 rounded border border-amber-300 transition-colors" data-target="${res.downQty}">
-            ${res.downQty.toLocaleString()} EA 하향
-          </button>
-          <button type="button" class="spq-fix-btn flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-0.5 px-1 rounded transition-colors" data-target="${res.upQty}">
-            ${res.upQty.toLocaleString()} EA 상향
-          </button>
-        </div>
-      </div>
-    `;
-    container.querySelectorAll('.spq-fix-btn').forEach(btn => {
-      btn.onclick = () => {
-        stockEl.value = btn.dataset.target;
-        updateSpqNotice();
-        runEngine();
-      };
-    });
-  }
-}
-
-function renderPackagingTable() {
-  const tbody = document.getElementById('packagingConfigTbody');
-  if (!tbody) return;
-  const standards = getAllStandards();
-  const keys = Object.keys(standards);
-  if (keys.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">등록된 라인별 CS 포장 기준이 없습니다.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = keys.map(k => {
-    const item = standards[k];
-    return `
-      <tr class="hover:bg-indigo-50/50">
-        <td class="py-2 px-2 font-bold text-slate-900">${k}</td>
-        <td class="py-2 px-2 font-semibold text-indigo-700">${item.csManager || '-'}</td>
-        <td class="py-2 px-2 font-bold text-slate-800">${item.spq ? item.spq.toLocaleString() + ' EA' : '-'}</td>
-        <td class="py-2 px-2 text-slate-600">${item.moq ? item.moq.toLocaleString() + ' EA' : '-'}</td>
-        <td class="py-2 px-2 text-slate-500 text-[11px]">${item.memo || '-'}</td>
-      </tr>
-    `;
-  }).join('');
-}
-
-
-
-function switchSubFormTab(tabName) {
-  const btnOrder = document.getElementById('subTabOrder');
-  const btnShip = document.getElementById('subTabShipping');
-  const btnBill = document.getElementById('subTabBilling');
-
-  const secOrder = document.getElementById('stepOrderSection');
-  const secShip = document.getElementById('stepShippingSection');
-  const secBill = document.getElementById('stepBillingSection');
-
-  const activeStyle = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center font-bold";
-  const inactiveStyle = "flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all text-center font-semibold";
-
-  if (btnOrder) btnOrder.className = (tabName === 'order') ? activeStyle : inactiveStyle;
-  if (btnShip) btnShip.className = (tabName === 'shipping') ? activeStyle : inactiveStyle;
-  if (btnBill) btnBill.className = (tabName === 'billing') ? activeStyle : inactiveStyle;
-
-  secOrder?.classList.toggle('hidden', tabName !== 'order');
-  secShip?.classList.toggle('hidden', tabName !== 'shipping');
-  secBill?.classList.toggle('hidden', tabName !== 'billing');
-}
-
-
-function bindInputs() {
-  // 🗂️ 폼 서브탭 전환 리스너
-  safeAddListener('subTabOrder', 'click', () => switchSubFormTab('order'));
-  safeAddListener('subTabShipping', 'click', () => switchSubFormTab('shipping'));
-  safeAddListener('subTabBilling', 'click', () => switchSubFormTab('billing'));
-
-  ['inputUsd', 'inputStock', 'inputShipFx', 'inputOverhead', 'inputTargetOffer', 'inputApprovedDebit'].forEach(id => {
-    safeAddListener(id, 'input', runEngine);
-  });
-
-  safeAddListener('inputStock', 'input', updateSpqNotice);
-  safeAddListener('inputSpq', 'input', updateSpqNotice);
-
-  safeAddListener('selectMaker', 'change', () => {
-    const maker = document.getElementById('selectMaker')?.value;
-    const spqEl = document.getElementById('inputSpq');
-    if (spqEl) {
-      const csSpq = getStandardSpq(maker);
-      spqEl.value = csSpq !== null ? csSpq : '';
-    }
-    updateSpqNotice();
-  });
-
-  safeAddListener('openPackagingConfigBtn', 'click', () => {
-    if (!isCsOrAdminUser()) {
-      alert("포장단위 기준 마스터 관리는 CS 및 관리자 권한만 가능합니다.");
-      return;
-    }
-    renderPackagingTable();
-    document.getElementById('packagingConfigModal')?.classList.remove('hidden');
-  });
-
-  const pkgConfigForm = document.getElementById('packagingConfigForm');
-  if (pkgConfigForm) {
-    pkgConfigForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const maker = document.getElementById('pkgConfigMaker')?.value;
-      const cs = document.getElementById('pkgConfigCs')?.value.trim();
-      const spq = document.getElementById('pkgConfigSpq')?.value;
-      const moq = document.getElementById('pkgConfigMoq')?.value;
-      const memo = document.getElementById('pkgConfigMemo')?.value.trim();
-
-      try {
-        await savePackagingStandard(maker, cs, spq, moq, memo);
-        alert(`[${maker}] 라인의 CS 포장 단위 기준이 성공적으로 저장되었습니다.`);
-        renderPackagingTable();
-        const curMaker = document.getElementById('selectMaker')?.value;
-        if (curMaker === maker) {
-          const spqInp = document.getElementById('inputSpq');
-          if (spqInp) spqInp.value = spq || '';
-          updateSpqNotice();
-        }
-      } catch (err) {
-        alert("저장 실패: " + err.message);
-      }
-    };
-  }
-
-  safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
-  safeAddListener('copyQuoteBtn', 'click', copyQuotation);
-
-  // 📊 KPI 서머리 바 토글
-  safeAddListener('toggleKpiBtn', 'click', () => {
-    const bar = document.getElementById('kpiSummaryBar');
-    const arrow = document.getElementById('kpiToggleArrow');
-    if (!bar) return;
-    const isHidden = bar.classList.toggle('hidden');
-    if (arrow) {
-      arrow.innerText = isHidden ? '▼' : '▲';
-    }
-  });
-
-  const spaCheck = document.getElementById('checkIsSpa');
-  const spaDebitWrapper = document.getElementById('spaDebitWrapper');
-  spaCheck?.addEventListener('change', () => {
-    spaDebitWrapper?.classList.toggle('hidden', !spaCheck.checked);
-    runEngine();
-  });
-
-  safeAddListener('inputSettledFx', 'input', updateFxVarianceFeedback);
-
-  bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
-  bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
-
-  ['searchInput', 'filterMaker', 'filterOwner', 'filterPayment'].forEach(id => {
-    safeAddListener(id, 'input', applyFilters);
-    safeAddListener(id, 'change', applyFilters);
-  });
-
-  safeAddListener('saveItemBtn', 'click', saveCurrentForm);
-  safeAddListener('resetFormSelectionBtn', 'click', resetCurrentForm);
-  safeAddListener('openLandedCostBtn', 'click', () => {
-    document.getElementById('landedCostModal')?.classList.remove('hidden');
-  });
-
-  safeAddListener('excelExportBtn', 'click', () => {
-    try {
-      const q = document.getElementById('searchInput')?.value || "";
-      const maker = document.getElementById('filterMaker')?.value || "";
-      const owner = document.getElementById('filterOwner')?.value || "";
-      const pay = document.getElementById('filterPayment')?.value || "";
-
-      const filtered = filterItems({
-        query: q,
-        filterMaker: maker,
-        filterOwner: owner,
-        filterPayment: pay
-      });
-
-      exportToExcel(filtered);
-    } catch (err) {
-      console.error("[Excel Export Error]", err);
-      alert("엑셀 다운로드 중 오류가 발생했습니다: " + err.message);
-    }
-  });
-
-  const fileInp = document.getElementById('excelFileInput');
-  fileInp?.addEventListener('change', (e) => {
-    if (!isCsOrAdminUser()) {
-      alert("패킹리스트 일괄 업로드는 CS 및 관리자 권한만 가능합니다.");
-      fileInp.value = "";
-      return;
-    }
-    const file = e.target.files?.[0];
-    if (file) {
-      handleExcelFileSelect(file);
-      fileInp.value = "";
-    }
-  });
-
-  safeAddListener('excelConfirmUploadBtn', 'click', async () => {
-    const btn = document.getElementById('excelConfirmUploadBtn');
-    if (btn) btn.disabled = true;
-    try {
-      const count = await executeBatchUpload();
-      alert(`[업로드 완료] ${count.toLocaleString()}건의 부품 데이터가 클라우드에 성공적으로 등록되었습니다.`);
-      document.getElementById('excelPreviewModal')?.classList.add('hidden');
-      await refreshInventory();
-    } catch (err) {
-      alert("일괄 업로드 실패: " + err.message);
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  });
-}
-
-function updateFxVarianceFeedback() {
-  const orderFx = parseFloat(document.getElementById('inputShipFx')?.value) || 1350;
-  const settledFx = parseFloat(document.getElementById('inputSettledFx')?.value) || 0;
-  const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value) || 0;
-  const stock = parseInt(document.getElementById('inputStock')?.value) || 0;
-  const display = document.getElementById('fxVarianceDisplay');
-
-  if (!display) return;
-
-  if (settledFx > 0 && soldPrice > 0 && stock > 0) {
-    const diffKrw = computeFxVariance(soldPrice, stock, orderFx, settledFx);
-    if (diffKrw > 0) {
-      display.className = "text-[11px] font-bold text-green-600 block mt-1";
-      display.innerText = `📈 환차익: +₩${Math.round(diffKrw).toLocaleString()} 발생 (수금 환율 +${(settledFx - orderFx).toFixed(1)}원)`;
-    } else if (diffKrw < 0) {
-      display.className = "text-[11px] font-bold text-red-600 block mt-1";
-      display.innerText = `📉 환차손: -₩${Math.round(Math.abs(diffKrw)).toLocaleString()} 발생 (수금 환율 ${(settledFx - orderFx).toFixed(1)}원)`;
-    } else {
-      display.className = "text-[11px] font-semibold text-slate-500 block mt-1";
-      display.innerText = `환율 변동 없음 (₩0)`;
-    }
-  } else {
-    display.innerText = "";
-  }
-}
-
-function bindCustomSelect(selectId, inputId, customVal) {
-  const sel = document.getElementById(selectId);
-  const inp = document.getElementById(inputId);
-  if (!sel || !inp) return;
-  sel.addEventListener('change', () => {
-    inp.classList.toggle('hidden', sel.value !== customVal);
-    if (sel.value === customVal) inp.focus();
-  });
-}
-
-function bindModals() {
-  const landedCostForm = document.getElementById('landedCostForm');
-  if (landedCostForm) {
-    landedCostForm.onsubmit = (e) => {
-      e.preventDefault();
-      const totalGoods = parseFloat(document.getElementById('lcTotalGoodsUsd')?.value) || 0;
-      const totalFreight = parseFloat(document.getElementById('lcFreightUsd')?.value) || 0;
-      const totalCustomsKrw = parseFloat(document.getElementById('lcCustomsKrw')?.value) || 0;
-      const shipFxEl = document.getElementById('inputShipFx');
-      const fxRate = shipFxEl ? (parseFloat(shipFxEl.value) || 1350) : 1350;
-
-      const totalCustomsUsd = totalCustomsKrw / fxRate;
-      const totalOverheadUsd = totalFreight + totalCustomsUsd;
-
-      const calculatedOverheadRate = computeAllocatedOverheadRate(totalGoods, totalOverheadUsd);
-      const overheadInput = document.getElementById('inputOverhead');
-      if (overheadInput) overheadInput.value = calculatedOverheadRate.toFixed(2);
-      
-      const overheadDisplay = document.getElementById('overheadDisplay');
-      if (overheadDisplay) overheadDisplay.innerText = `+${calculatedOverheadRate.toFixed(2)}% 배부됨`;
-
-      document.getElementById('landedCostModal')?.classList.add('hidden');
-      runEngine();
-      alert(`[배부 완료] 선적 총액($${totalGoods.toLocaleString()}) 대비 부대비용 가산율 +${calculatedOverheadRate.toFixed(2)}%가 원가에 자동 적용되었습니다.`);
-    };
-  }
-
-  const splitShipmentForm = document.getElementById('splitShipmentForm');
-  if (splitShipmentForm) {
-    splitShipmentForm.onsubmit = async (e) => {
-      e.preventDefault();
-      if (!isCsOrAdminUser()) return;
-      const qty = parseInt(document.getElementById('splitQtyInput')?.value) || 0;
-      const price = parseFloat(document.getElementById('splitPriceInput')?.value) || 0;
-      const cust = document.getElementById('splitCustomerInput')?.value.trim();
-      const rep = document.getElementById('splitRepInput')?.value;
-      const deadStockAction = document.getElementById('splitDeadStockSelect')?.value || 'maintain';
-
-      try {
-        await splitInventoryShipment(targetSplitId, qty, price, cust, rep, deadStockAction);
-        await recordAuditLog(targetSplitId, document.getElementById('splitModalTitle')?.innerText || '부품', 'SPLIT', `출하 분할: ${qty.toLocaleString()} EA -> [${cust}] (판매가 $${price}, 잔여: ${deadStockAction})`);
-        alert(`${qty.toLocaleString()}개가 [${cust}] 건으로 분할 출하 등록되었습니다.`);
-        document.getElementById('splitShipmentModal')?.classList.add('hidden');
-        await refreshInventory();
-      } catch (err) {
-        alert("분할 실패: " + err.message);
-      }
-    };
-  }
-}
-
-function runEngine() {
-  const unitUsd = parseFloat(document.getElementById('inputUsd')?.value) || 0;
-  const stock = parseFloat(document.getElementById('inputStock')?.value) || 0;
-  const shipFx = parseFloat(document.getElementById('inputShipFx')?.value) || 0;
-  const overhead = (parseFloat(document.getElementById('inputOverhead')?.value) || 0) / 100;
-  const targetOffer = parseFloat(document.getElementById('inputTargetOffer')?.value) || 0;
-
-  const isSpa = document.getElementById('checkIsSpa')?.checked || false;
-  const approvedDebit = parseFloat(document.getElementById('inputApprovedDebit')?.value) || 0;
-
-  const result = computeQuotation({
-    unitUsd,
-    qty: stock,
-    shipFx,
-    overheadRate: overhead,
-    targetMarginRate: 0.20,
-    appliedFxRate,
-    targetOfferUsd: targetOffer,
-    isSpa,
-    approvedDebitUsd: approvedDebit
-  });
-
-  const setText = (id, val) => {
-    const el = document.getElementById(id);
-    if (el) el.innerText = val;
-  };
-
-  setText('minSaleUnitActualUsd', `$${result.unitMinPriceActualUsd.toFixed(4)}`);
-  setText('minSaleUnitActualKrw', `(₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()} / @${Math.round(shipFx).toLocaleString()})`);
-  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(result.totalActualCostKrw / (1 - 0.2)).toLocaleString()})`);
-
-  setText('minSaleUnitReplaceUsd', `$${result.unitMinPriceReplaceUsd.toFixed(4)}`);
-  setText('minSaleUnitReplaceKrw', `(₩${Math.round(result.unitMinPriceReplaceKrw).toLocaleString()} / @${Math.round(appliedFxRate).toLocaleString()})`);
-  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(result.totalReplaceCostKrw / (1 - 0.2)).toLocaleString()})`);
-
-  const revMarginEl = document.getElementById('reverseMarginReplace');
-  const revBadgeEl = document.getElementById('reverseMarginBadge');
-  if (result.expectedMargin !== null) {
-    if (revMarginEl) revMarginEl.innerText = `${result.expectedMargin.toFixed(2)}%`;
-    if (revBadgeEl) {
-      if (isSpa && approvedDebit > 0) {
-        revBadgeEl.className = "text-[11px] font-bold text-cyan-800 bg-cyan-100 border border-cyan-300 px-2 py-0.5 rounded-full inline-block mt-0.5";
-        revBadgeEl.innerText = `🔵 SPA 승인가 적용`;
-      } else if (result.expectedMargin >= 20) {
-        revBadgeEl.className = "text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full inline-block mt-0.5";
-        revBadgeEl.innerText = "✅ 수주 가능";
-      } else if (result.expectedMargin > 0) {
-        revBadgeEl.className = "text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full inline-block mt-0.5";
-        revBadgeEl.innerText = "⚠️ 마진 미달";
-      } else {
-        revBadgeEl.className = "text-[11px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full inline-block mt-0.5";
-        revBadgeEl.innerText = "🚨 역마진 불가";
-      }
-    }
-  } else {
-    if (revMarginEl) revMarginEl.innerText = "- %";
-    if (revBadgeEl) {
-      revBadgeEl.className = "text-[11px] font-bold text-slate-400 mt-0.5";
-      revBadgeEl.innerText = "단가를 입력하세요";
-    }
-  }
-
-  renderTierTable(result.unitMinPriceReplaceUsd, result.unitMinPriceReplaceKrw, stock);
-}
-
-function renderTierTable(unitUsd, unitKrw, currentQty) {
-  const tiers = [
-    { label: "1,000", qty: 1000 },
-    { label: "5,000", qty: 5000 },
-    { label: "10,000", qty: 10000 }
-  ];
-
-  if (![1000, 5000, 10000].includes(currentQty) && currentQty > 0) {
-    tiers.push({ label: `${currentQty.toLocaleString()}(현재)`, qty: currentQty, isCurrent: true });
-    tiers.sort((a, b) => a.qty - b.qty);
-  }
-
-  const tbody = document.getElementById('tierTableBody');
-  if (!tbody) return;
-  tbody.innerHTML = tiers.map(t => `
-    <tr class="${t.isCurrent ? "bg-indigo-50/70 font-bold text-indigo-900" : ""}">
-      <td class="py-1 px-1">${t.label}</td>
-      <td class="py-1 px-1 text-indigo-950 font-black text-xs">$${unitUsd.toFixed(4)}</td>
-      <td class="py-1 px-1 text-slate-600 font-semibold text-[11px]">₩${Math.round(unitKrw).toLocaleString()}</td>
-      <td class="py-1 px-1 text-slate-800 font-bold">$${(unitUsd * t.qty).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</td>
-    </tr>
-  `).join('');
-}
-
+// ----------------------------------------------------
+// 4. 인벤토리 새로고침 및 검색 필터링 (WIZnet 등 전건)
+// ----------------------------------------------------
 async function refreshInventory() {
   try {
     const items = await fetchInventoryItems();
-    const kpiMetrics = computeKpiMetrics(items, rawFxRate);
-    renderKpiBar(kpiMetrics);
+    cachedItems = items || [];
+    window.cachedItems = cachedItems;
+
+    callRenderInventoryHeaders(activeTab);
+
+    try {
+      const kpiMetrics = computeKpiMetrics(cachedItems, rawFxRate);
+      renderKpiBar(kpiMetrics);
+    } catch (e) {
+      console.warn("KPI 계산 예외", e);
+    }
+
     applyFilters();
   } catch (err) {
     console.error("데이터 로드 실패", err);
@@ -682,32 +361,28 @@ async function refreshInventory() {
 }
 
 function applyFilters() {
-  const searchInput = document.getElementById('searchQuery');
-  const lineFilter = document.getElementById('filterLine');
-  const salesFilter = document.getElementById('filterSales');
-  const statusFilter = document.getElementById('filterStatus');
+  const searchInput = document.getElementById('searchQuery') || document.getElementById('searchInput');
+  const lineFilter = document.getElementById('filterLine') || document.getElementById('filterMaker');
+  const salesFilter = document.getElementById('filterSales') || document.getElementById('filterOwner');
+  const statusFilter = document.getElementById('filterStatus') || document.getElementById('filterPayment');
 
   const q = (searchInput?.value || '').trim().toLowerCase();
   const selectedLine = lineFilter?.value || 'ALL';
   const selectedSales = salesFilter?.value || 'ALL';
   const selectedStatus = statusFilter?.value || 'ALL';
 
-    // 캐시 데이터 안전 참조
-  const sourceItems = (typeof cachedItems !== 'undefined' && Array.isArray(cachedItems) && cachedItems.length > 0)
-    ? cachedItems
-    : (window.cachedItems || []);
-  let filtered = sourceItems.slice();
+  let filtered = (cachedItems || []).slice();
 
-  // 1. 키워드 검색 (품번, 제조사, 계약처, 실고객사, D/C, 송장, 비고 전방위 검색)
+  // 전방위 다중 필드 검색
   if (q) {
     filtered = filtered.filter(item => {
-      const part = String(item.partName || '').toLowerCase();
+      const part = String(item.partName || item.part_name || '').toLowerCase();
       const maker = String(item.maker || '').toLowerCase();
       const cust = String(item.customer || '').toLowerCase();
-      const realCust = String(item.realCustomer || '').toLowerCase();
-      const dc = String(item.dateCode || '').toLowerCase();
-      const track = String(item.trackingNo || '').toLowerCase();
-      const po = String(item.poNo || '').toLowerCase();
+      const realCust = String(item.realCustomer || item.real_customer || '').toLowerCase();
+      const dc = String(item.dateCode || item.date_code || '').toLowerCase();
+      const track = String(item.trackingNo || item.tracking_no || '').toLowerCase();
+      const po = String(item.poNo || item.po_no || '').toLowerCase();
       const memo = String(item.memo || '').toLowerCase();
 
       return part.includes(q) ||
@@ -721,26 +396,23 @@ function applyFilters() {
     });
   }
 
-  // 2. 라인/제조사 필터
   if (selectedLine !== 'ALL' && selectedLine !== '전체' && selectedLine !== '') {
     filtered = filtered.filter(item => item.maker === selectedLine);
   }
 
-  // 3. 담당 Sales 필터
   if (selectedSales !== 'ALL' && selectedSales !== '전체' && selectedSales !== '') {
     filtered = filtered.filter(item => item.owner === selectedSales);
   }
 
-  // 4. 수금/상태 필터
   if (selectedStatus !== 'ALL' && selectedStatus !== '전체' && selectedStatus !== '') {
     if (selectedStatus === '미수' || selectedStatus === '완료') {
-      filtered = filtered.filter(item => item.paymentStatus === selectedStatus);
+      filtered = filtered.filter(item => (item.paymentStatus || item.payment_status) === selectedStatus);
     } else {
-      filtered = filtered.filter(item => item.orderStatus === selectedStatus);
+      filtered = filtered.filter(item => (item.orderStatus || item.order_status) === selectedStatus);
     }
   }
 
-    const countBadge = document.getElementById('filterCountBadge');
+  const countBadge = document.getElementById('filterCountBadge');
   if (countBadge) {
     countBadge.innerText = `총 ${filtered.length.toLocaleString()}건`;
   }
@@ -748,28 +420,27 @@ function applyFilters() {
   callRenderInventoryList(filtered);
 }
 
+// ----------------------------------------------------
+// 5. 폼 선택 및 바인딩
+// ----------------------------------------------------
 function loadFormFromItem(id) {
   const item = getCachedItem(id);
   if (!item) return;
 
-  // 영업 탭인 경우: 계산기 입력창에 바로 해당 부품 스펙을 채워 빠른 견적 산출 지원
   if (activeTab === 'sales') {
     const unitUsdInp = document.getElementById('inputUsd');
     const stockInp = document.getElementById('inputStock');
     const shipFxInp = document.getElementById('inputShipFx');
-    if (unitUsdInp) unitUsdInp.value = item.unitUsd;
-    if (stockInp) stockInp.value = item.stock;
-    if (shipFxInp) shipFxInp.value = item.shipFx;
+    if (unitUsdInp) unitUsdInp.value = item.unitUsd || item.unit_usd || 0;
+    if (stockInp) stockInp.value = item.stock || 0;
+    if (shipFxInp) shipFxInp.value = item.shipFx || item.ship_fx || 1350;
     
-    // 계산기 즉시 재연산
     runEngine();
     document.getElementById('salesQuotationPanel')?.scrollIntoView({ behavior: 'smooth' });
     return;
   }
 
   if (!isCsOrAdminUser()) return;
-  if (!item) return;
-
   editingItemId = item.id;
 
   setSelectValue('selectMaker', 'inputCustomMaker', item.maker, '__CUSTOM_MAKER__');
@@ -777,48 +448,50 @@ function loadFormFromItem(id) {
   
   const setVal = (inputKey, val) => {
     const el = document.getElementById(inputKey);
-    if (el) el.value = val;
+    if (el) el.value = (val !== null && val !== undefined) ? val : '';
   };
 
-  setVal('inputPartName', item.partName);
-  setVal('inputDateCode', item.dateCode !== '-' ? item.dateCode : '');
-  setVal('inputCustomer', item.customer !== '-' ? item.customer : '');
-  setVal('inputRealCustomer', item.realCustomer !== '-' ? item.realCustomer : '');
-  setVal('inputPoNo', item.poNo || '');
+  setVal('inputPartName', item.partName || item.part_name || '');
+  setVal('inputDateCode', item.dateCode || item.date_code || '');
+  setVal('inputCustomer', item.customer || '');
+  setVal('inputRealCustomer', item.realCustomer || item.real_customer || '');
+  setVal('inputPoNo', item.poNo || item.po_no || '');
   setVal('inputApplication', item.application || '');
-  setVal('inputTaxDate', item.taxDate || '');
-  setVal('selectBizType', item.bizType || 'DOMESTIC');
-  setVal('inputSoldPrice', item.soldPriceUsd || '');
-  setVal('selectOrderStatus', item.orderStatus);
-  setVal('selectPaymentTerms', item.paymentTerms);
-  setVal('selectPaymentStatus', item.paymentStatus);
-  setVal('selectCurrency', item.currency);
-  setVal('inputInvoiceNo', item.invoiceNo || '');
-  setVal('inputTrackingNo', item.trackingNo || '');
-  setVal('inputDueDate', item.dueDate || '');
-  setVal('inputShippedDate', item.shippedDate || '');
-  setVal('inputSettledDate', item.settledDate || '');
-  setVal('inputSettledFx', item.settledFx || '');
-  setVal('inputEntryDate', item.entryDate);
-  setVal('inputMemo', item.memo);
-  setVal('inputUsd', item.unitUsd);
-  setVal('inputShipFx', item.shipFx);
+  setVal('inputTaxDate', item.taxDate || item.tax_date || '');
+  setVal('selectBizType', item.bizType || item.biz_type || 'DOMESTIC');
+  setVal('inputSoldPrice', item.soldPriceUsd || item.sold_price_usd || '');
+  setVal('selectOrderStatus', item.orderStatus || item.order_status || '배정요청');
+  setVal('selectPaymentTerms', item.paymentTerms || item.payment_terms || 'Net 30');
+  setVal('selectPaymentStatus', item.paymentStatus || item.payment_status || '미수');
+  setVal('selectCurrency', item.currency || 'USD');
+  setVal('inputInvoiceNo', item.invoiceNo || item.invoice_no || '');
+  setVal('inputTrackingNo', item.trackingNo || item.tracking_no || '');
+  setVal('inputDueDate', item.dueDate || item.due_date || '');
+  setVal('inputShippedDate', item.shippedDate || item.shipped_date || '');
+  setVal('inputSettledDate', item.settledDate || item.settled_date || '');
+  setVal('inputSettledFx', item.settledFx || item.settled_fx || '');
+  setVal('inputEntryDate', item.entryDate || item.entry_date || '');
+  setVal('inputMemo', item.memo || '');
+  setVal('inputUsd', item.unitUsd || item.unit_usd || 0);
+  setVal('inputShipFx', item.shipFx || item.ship_fx || 1350);
   setVal('inputStock', item.stock || '');
   setVal('inputSpq', item.spq || getStandardSpq(item.maker) || '');
 
   const spaCheck = document.getElementById('checkIsSpa');
   const spaDebitWrapper = document.getElementById('spaDebitWrapper');
+  const isSpa = item.isSpa || item.is_spa || false;
   if (spaCheck) {
-    spaCheck.checked = item.isSpa;
-    spaDebitWrapper?.classList.toggle('hidden', !item.isSpa);
-    if (item.isSpa) setVal('inputApprovedDebit', item.approvedDebitUsd || '');
+    spaCheck.checked = isSpa;
+    spaDebitWrapper?.classList.toggle('hidden', !isSpa);
+    if (isSpa) setVal('inputApprovedDebit', item.approvedDebitUsd || item.approved_debit_usd || '');
   }
 
-  const editingBanner = document.getElementById('editingBanner');
-  editingBanner?.classList.remove('hidden');
-  const bannerText = document.getElementById('editingBannerText');
-  if (bannerText) {
-    bannerText.innerText = `선택된 항목: [${item.maker}] ${item.partName} (D/C: ${item.dateCode} / ${item.customer})`;
+  const titleEl = document.getElementById('selectedPartTitle');
+  const badgeEl = document.getElementById('selectedPartBadge');
+  if (titleEl) titleEl.innerText = `선택된 부품: [${item.maker}] ${item.partName || item.part_name} (D/C: ${item.dateCode || item.date_code || '-'})`;
+  if (badgeEl) {
+    badgeEl.innerText = `총보유: ${(item.stock || 0).toLocaleString()} EA`;
+    badgeEl.classList.remove('hidden');
   }
 
   updateFxVarianceFeedback();
@@ -826,7 +499,7 @@ function loadFormFromItem(id) {
   runEngine();
 
   if (item && item.id) {
-    renderAuditHistory('auditHistoryContainer', item.id, item.partName);
+    renderAuditHistory('auditHistoryContainer', item.id, item.partName || item.part_name);
   }
   document.getElementById('formSection')?.scrollIntoView({ behavior: 'smooth' });
 }
@@ -834,17 +507,9 @@ function loadFormFromItem(id) {
 export function resetCurrentForm() {
   const titleEl = document.getElementById('selectedPartTitle');
   const badgeEl = document.getElementById('selectedPartBadge');
-  if (titleEl) titleEl.innerText = "신규 부품 등록 / 배정 모드";
+  if (titleEl) titleEl.innerText = "선택된 부품: 목록에서 행을 클릭하세요";
   if (badgeEl) badgeEl.classList.add('hidden');
   editingItemId = null;
-  const banner = document.getElementById('editingBanner');
-  if (banner) banner.classList.add('hidden');
-
-  const auditContainer = document.getElementById('auditHistoryContainer');
-  if (auditContainer) {
-    auditContainer.classList.add('hidden');
-    auditContainer.innerHTML = '';
-  }
 
   const setVal = (id, val) => {
     const el = document.getElementById(id);
@@ -883,46 +548,311 @@ export function resetCurrentForm() {
   }
 }
 
-function handleOpenSplitModal(id) {
-  if (!isCsOrAdminUser()) return;
-  const item = getCachedItem(id);
-  if (!item) return;
-  targetSplitId = item.id;
+// ----------------------------------------------------
+// 6. 이벤트 리스너 바인딩 및 저장/삭제
+// ----------------------------------------------------
+function bindInputs() {
+  safeAddListener('subTabOrder', 'click', () => switchSubFormTab('order'));
+  safeAddListener('subTabShipping', 'click', () => switchSubFormTab('shipping'));
+  safeAddListener('subTabBilling', 'click', () => switchSubFormTab('billing'));
 
-  const titleEl = document.getElementById('splitModalTitle');
-  if (titleEl) titleEl.innerText = `[${item.partName}] 출하 분할 (D/C: ${item.dateCode})`;
-  const maxStockEl = document.getElementById('splitMaxStockText');
-  if (maxStockEl) maxStockEl.innerText = `현재 보유 재고: ${item.stock.toLocaleString()} EA (소유: ${item.owner})`;
-  
-  const qtyInput = document.getElementById('splitQtyInput');
-  if (qtyInput) {
-    qtyInput.max = item.stock - 1;
-    qtyInput.value = Math.min(1000, item.stock - 1);
+  ['inputUsd', 'inputStock', 'inputShipFx', 'inputOverhead', 'inputTargetOffer', 'inputApprovedDebit'].forEach(id => {
+    safeAddListener(id, 'input', runEngine);
+  });
+
+  safeAddListener('inputStock', 'input', updateSpqNotice);
+  safeAddListener('inputSpq', 'input', updateSpqNotice);
+
+  safeAddListener('selectMaker', 'change', () => {
+    const maker = document.getElementById('selectMaker')?.value;
+    const spqEl = document.getElementById('inputSpq');
+    if (spqEl) {
+      const csSpq = getStandardSpq(maker);
+      spqEl.value = csSpq !== null ? csSpq : '';
+    }
+    updateSpqNotice();
+  });
+
+  safeAddListener('openPackagingConfigBtn', 'click', () => {
+    if (!isCsOrAdminUser()) {
+      alert("포장단위 기준 관리는 CS 및 관리자 권한만 가능합니다.");
+      return;
+    }
+    renderPackagingTable();
+    document.getElementById('packagingConfigModal')?.classList.remove('hidden');
+  });
+
+  const pkgConfigForm = document.getElementById('packagingConfigForm');
+  if (pkgConfigForm) {
+    pkgConfigForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const maker = document.getElementById('pkgConfigMaker')?.value;
+      const cs = document.getElementById('pkgConfigCs')?.value.trim();
+      const spq = document.getElementById('pkgConfigSpq')?.value;
+      const moq = document.getElementById('pkgConfigMoq')?.value;
+      const memo = document.getElementById('pkgConfigMemo')?.value.trim();
+
+      try {
+        await savePackagingStandard(maker, cs, spq, moq, memo);
+        alert(`[${maker}] 라인의 CS 포장 단위 기준이 성공적으로 저장되었습니다.`);
+        renderPackagingTable();
+      } catch (err) {
+        alert("저장 실패: " + err.message);
+      }
+    };
   }
-  const priceInput = document.getElementById('splitPriceInput');
-  if (priceInput) priceInput.value = item.soldPriceUsd || item.unitUsd;
-  const custInput = document.getElementById('splitCustomerInput');
-  if (custInput) custInput.value = item.customer !== '-' ? item.customer : '';
-  const repInput = document.getElementById('splitRepInput');
-  if (repInput) repInput.value = item.owner;
 
-  document.getElementById('splitShipmentModal')?.classList.remove('hidden');
+  safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
+  safeAddListener('copyQuoteBtn', 'click', copyQuotation);
+
+  safeAddListener('toggleKpiBtn', 'click', () => {
+    const bar = document.getElementById('kpiSummaryBar');
+    const arrow = document.getElementById('kpiToggleArrow');
+    if (!bar) return;
+    const isHidden = bar.classList.toggle('hidden');
+    if (arrow) arrow.innerText = isHidden ? '▼' : '▲';
+  });
+
+  const spaCheck = document.getElementById('checkIsSpa');
+  const spaDebitWrapper = document.getElementById('spaDebitWrapper');
+  spaCheck?.addEventListener('change', () => {
+    spaDebitWrapper?.classList.toggle('hidden', !spaCheck.checked);
+    runEngine();
+  });
+
+  safeAddListener('inputSettledFx', 'input', updateFxVarianceFeedback);
+
+  bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
+  bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
+
+  ['searchQuery', 'searchInput', 'filterLine', 'filterMaker', 'filterSales', 'filterOwner', 'filterStatus', 'filterPayment'].forEach(id => {
+    safeAddListener(id, 'input', applyFilters);
+    safeAddListener(id, 'change', applyFilters);
+  });
+
+  safeAddListener('saveItemBtn', 'click', saveCurrentForm);
+  safeAddListener('resetFormSelectionBtn', 'click', resetCurrentForm);
+
+  safeAddListener('openLandedCostBtn', 'click', () => {
+    document.getElementById('landedCostModal')?.classList.remove('hidden');
+  });
+
+  safeAddListener('excelExportBtn', 'click', () => {
+    try {
+      exportToExcel(cachedItems);
+    } catch (err) {
+      alert("엑셀 다운로드 오류: " + err.message);
+    }
+  });
+
+  const fileInp = document.getElementById('excelFileInput');
+  fileInp?.addEventListener('change', (e) => {
+    if (!isCsOrAdminUser()) {
+      alert("패킹리스트 일괄 업로드는 CS 및 관리자 권한만 가능합니다.");
+      fileInp.value = "";
+      return;
+    }
+    const file = e.target.files?.[0];
+    if (file) {
+      handleExcelFileSelect(file);
+      fileInp.value = "";
+    }
+  });
+
+  safeAddListener('excelConfirmUploadBtn', 'click', async () => {
+    const btn = document.getElementById('excelConfirmUploadBtn');
+    if (btn) btn.disabled = true;
+    try {
+      const count = await executeBatchUpload();
+      alert(`[업로드 완료] ${count.toLocaleString()}건의 부품 데이터가 등록되었습니다.`);
+      document.getElementById('excelPreviewModal')?.classList.add('hidden');
+      await refreshInventory();
+    } catch (err) {
+      alert("일괄 업로드 실패: " + err.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
 }
 
-function setSelectValue(selectId, inputId, val, customKey) {
+function updateFxDisplay() {
+  const bufferEl = document.getElementById('fxBufferSelect');
+  const buffer = bufferEl ? (parseFloat(bufferEl.value) || 0) : 0;
+  appliedFxRate = rawFxRate + buffer;
+  const bufferText = buffer > 0 ? ` (+${buffer}원)` : "";
+  const liveFxEl = document.getElementById('liveFx');
+  if (liveFxEl) {
+    liveFxEl.innerText = `$1.00 (₩${Math.round(appliedFxRate).toLocaleString()})${bufferText}`;
+  }
+  runEngine();
+  if (activeTab === 'sales') {
+    document.getElementById('formSection')?.classList.add('hidden');
+  }
+}
+
+function updateSpqNotice() {
+  const stockEl = document.getElementById('inputStock');
+  const spqEl = document.getElementById('inputSpq');
+  const container = document.getElementById('spqFeedbackContainer');
+  if (!stockEl || !container) return;
+
+  const qty = parseInt(stockEl.value) || 0;
+  const spq = parseInt(spqEl?.value) || 0;
+  const res = evaluatePackaging(qty, spq);
+
+  if (res.isValid || qty === 0 || spq === 0) {
+    container.classList.add('hidden');
+    container.innerHTML = '';
+  } else {
+    container.classList.remove('hidden');
+    container.innerHTML = `
+      <div class="p-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] space-y-1">
+        <div class="text-amber-800 font-bold flex items-center justify-between">
+          <span>⚠️ Reel 포장단위(${res.spq.toLocaleString()} EA) 불일치</span>
+          <span class="text-rose-600 font-black">-${res.missingForFullReel.toLocaleString()} EA 자투리</span>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function renderPackagingTable() {
+  const tbody = document.getElementById('packagingConfigTbody');
+  if (!tbody) return;
+  const standards = getAllStandards();
+  const keys = Object.keys(standards);
+  if (keys.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">등록된 라인별 CS 포장 기준이 없습니다.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = keys.map(k => {
+    const item = standards[k];
+    return `
+      <tr class="hover:bg-indigo-50/50">
+        <td class="py-2 px-2 font-bold text-slate-900">${k}</td>
+        <td class="py-2 px-2 font-semibold text-indigo-700">${item.csManager || '-'}</td>
+        <td class="py-2 px-2 font-bold text-slate-800">${item.spq ? item.spq.toLocaleString() + ' EA' : '-'}</td>
+        <td class="py-2 px-2 text-slate-600">${item.moq ? item.moq.toLocaleString() + ' EA' : '-'}</td>
+        <td class="py-2 px-2 text-slate-500 text-[11px]">${item.memo || '-'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateFxVarianceFeedback() {
+  const orderFx = parseFloat(document.getElementById('inputShipFx')?.value) || 1350;
+  const settledFx = parseFloat(document.getElementById('inputSettledFx')?.value) || 0;
+  const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value) || 0;
+  const stock = parseInt(document.getElementById('inputStock')?.value) || 0;
+  const display = document.getElementById('fxVarianceDisplay');
+
+  if (!display) return;
+
+  if (settledFx > 0 && soldPrice > 0 && stock > 0) {
+    const diffKrw = computeFxVariance(soldPrice, stock, orderFx, settledFx);
+    if (diffKrw > 0) {
+      display.className = "text-[11px] font-bold text-green-600 block mt-1";
+      display.innerText = `📈 환차익: +₩${Math.round(diffKrw).toLocaleString()} 발생`;
+    } else if (diffKrw < 0) {
+      display.className = "text-[11px] font-bold text-red-600 block mt-1";
+      display.innerText = `📉 환차손: -₩${Math.round(Math.abs(diffKrw)).toLocaleString()} 발생`;
+    }
+  } else {
+    display.innerText = "";
+  }
+}
+
+function bindCustomSelect(selectId, inputId, customVal) {
   const sel = document.getElementById(selectId);
   const inp = document.getElementById(inputId);
-  if (!sel) return;
-  const exists = Array.from(sel.options).some(o => o.value === val);
-  if (exists && val !== customKey) {
-    sel.value = val;
-    inp?.classList.add('hidden');
-    if (inp) inp.value = '';
-  } else {
-    sel.value = customKey;
-    inp?.classList.remove('hidden');
-    if (inp) inp.value = val || '';
+  if (!sel || !inp) return;
+  sel.addEventListener('change', () => {
+    inp.classList.toggle('hidden', sel.value !== customVal);
+    if (sel.value === customVal) inp.focus();
+  });
+}
+
+function bindModals() {
+  const landedCostForm = document.getElementById('landedCostForm');
+  if (landedCostForm) {
+    landedCostForm.onsubmit = (e) => {
+      e.preventDefault();
+      const totalGoods = parseFloat(document.getElementById('lcTotalGoodsUsd')?.value) || 0;
+      const totalFreight = parseFloat(document.getElementById('lcFreightUsd')?.value) || 0;
+      const totalCustomsKrw = parseFloat(document.getElementById('lcCustomsKrw')?.value) || 0;
+      const shipFxEl = document.getElementById('inputShipFx');
+      const fxRate = shipFxEl ? (parseFloat(shipFxEl.value) || 1350) : 1350;
+
+      const totalCustomsUsd = totalCustomsKrw / fxRate;
+      const totalOverheadUsd = totalFreight + totalCustomsUsd;
+      const calculatedOverheadRate = computeAllocatedOverheadRate(totalGoods, totalOverheadUsd);
+
+      const overheadInput = document.getElementById('inputOverhead');
+      if (overheadInput) overheadInput.value = calculatedOverheadRate.toFixed(2);
+      
+      document.getElementById('landedCostModal')?.classList.add('hidden');
+      runEngine();
+      alert(`[배부 완료] 부대비용 가산율 +${calculatedOverheadRate.toFixed(2)}%가 적용되었습니다.`);
+    };
   }
+
+  const splitShipmentForm = document.getElementById('splitShipmentForm');
+  if (splitShipmentForm) {
+    splitShipmentForm.onsubmit = async (e) => {
+      e.preventDefault();
+      if (!isCsOrAdminUser()) return;
+      const qty = parseInt(document.getElementById('splitQtyInput')?.value) || 0;
+      const price = parseFloat(document.getElementById('splitPriceInput')?.value) || 0;
+      const cust = document.getElementById('splitCustomerInput')?.value.trim();
+      const rep = document.getElementById('splitRepInput')?.value;
+      const deadStockAction = document.getElementById('splitDeadStockSelect')?.value || 'maintain';
+
+      try {
+        await splitInventoryShipment(targetSplitId, qty, price, cust, rep, deadStockAction);
+        alert(`${qty.toLocaleString()}개가 분할 출하 등록되었습니다.`);
+        document.getElementById('splitShipmentModal')?.classList.add('hidden');
+        await refreshInventory();
+      } catch (err) {
+        alert("분할 실패: " + err.message);
+      }
+    };
+  }
+}
+
+function runEngine() {
+  const unitUsd = parseFloat(document.getElementById('inputUsd')?.value) || 0;
+  const stock = parseFloat(document.getElementById('inputStock')?.value) || 0;
+  const shipFx = parseFloat(document.getElementById('inputShipFx')?.value) || 0;
+  const overhead = (parseFloat(document.getElementById('inputOverhead')?.value) || 0) / 100;
+  const targetOffer = parseFloat(document.getElementById('inputTargetOffer')?.value) || 0;
+
+  const isSpa = document.getElementById('checkIsSpa')?.checked || false;
+  const approvedDebit = parseFloat(document.getElementById('inputApprovedDebit')?.value) || 0;
+
+  const result = computeQuotation({
+    unitUsd,
+    qty: stock,
+    shipFx,
+    overheadRate: overhead,
+    targetMarginRate: 0.20,
+    appliedFxRate,
+    targetOfferUsd: targetOffer,
+    isSpa,
+    approvedDebitUsd: approvedDebit
+  });
+
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = val;
+  };
+
+  setText('minSaleUnitActualUsd', `$${result.unitMinPriceActualUsd.toFixed(4)}`);
+  setText('minSaleUnitActualKrw', `(₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()} / @${Math.round(shipFx).toLocaleString()})`);
+  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+  setText('minSaleUnitReplaceUsd', `$${result.unitMinPriceReplaceUsd.toFixed(4)}`);
+  setText('minSaleUnitReplaceKrw', `(₩${Math.round(result.unitMinPriceReplaceKrw).toLocaleString()} / @${Math.round(appliedFxRate).toLocaleString()})`);
+  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 }
 
 async function saveCurrentForm() {
@@ -976,40 +906,8 @@ async function saveCurrentForm() {
   };
 
   try {
-    const isNew = !editingItemId;
-    const oldItem = editingItemId ? getCachedItem(editingItemId) : null;
-    const savedItem = await upsertInventoryItem(payload, editingItemId);
-    const targetId = editingItemId || savedItem?.id;
-
-    let auditDetail = "";
-    if (isNew) {
-      auditDetail = `신규 등록: ${payload.maker} / ${payload.stock.toLocaleString()} EA / 매입원가 $${payload.unit_usd}`;
-    } else {
-      const changes = [];
-      if (oldItem && oldItem.stock !== payload.stock) {
-        changes.push(`수량: ${oldItem.stock.toLocaleString()} -> ${payload.stock.toLocaleString()} EA`);
-      }
-      if (oldItem && oldItem.soldPriceUsd !== payload.sold_price_usd) {
-        changes.push(`판매가: $${oldItem.soldPriceUsd} -> $${payload.sold_price_usd}`);
-      }
-      if (oldItem && oldItem.orderStatus !== payload.order_status) {
-        changes.push(`상태: ${oldItem.orderStatus} -> ${payload.order_status}`);
-      }
-      if (oldItem && oldItem.trackingNo !== payload.tracking_no) {
-        changes.push(`송장번호: ${oldItem.trackingNo || '없음'} -> ${payload.tracking_no || '없음'}`);
-      }
-      if (changes.length === 0) {
-        changes.push(`기타 정보 수정 (수량 ${payload.stock.toLocaleString()} EA)`);
-      }
-      auditDetail = changes.join(', ');
-    }
-
-    if (targetId) {
-      await recordAuditLog(targetId, payload.part_name, isNew ? 'CREATE' : 'UPDATE', auditDetail);
-      await renderAuditHistory('auditHistoryContainer', targetId, payload.part_name);
-    }
-
-    alert(`[${payload.part_name}] 데이터가 안전하게 저장되었습니다.`);
+    await upsertInventoryItem(payload, editingItemId);
+    alert(`[${payload.part_name}] 데이터가 저장되었습니다.`);
     await refreshInventory();
   } catch (err) {
     alert("저장 실패: " + err.message);
@@ -1020,8 +918,6 @@ async function handleDeleteItem(id) {
   if (!isCsOrAdminUser()) return;
   if (!confirm("해당 건을 영구 삭제하시겠습니까?")) return;
   try {
-    const delTarget = getCachedItem(id);
-    await recordAuditLog(id, delTarget?.partName || '부품', 'DELETE', `항목 영구 삭제 (수량: ${delTarget?.stock || 0} EA, 소유: ${delTarget?.owner || '-'})`);
     await deleteInventoryItem(id);
     resetCurrentForm();
     await refreshInventory();
@@ -1032,17 +928,14 @@ async function handleDeleteItem(id) {
 
 function copyQuotation() {
   const partName = document.getElementById('inputPartName')?.value.trim() || "-";
-  const dateCode = document.getElementById('inputDateCode')?.value.trim() || "-";
   const qty = parseFloat(document.getElementById('inputStock')?.value) || 0;
   const unitUsd = document.getElementById('minSaleUnitReplaceUsd')?.innerText || "-";
-  const unitKrw = document.getElementById('minSaleUnitReplaceKrw')?.innerText || "-";
-  const totalReplace = document.getElementById('minSaleTotalReplace')?.innerText || "-";
-  const fxRateText = document.getElementById('liveFx')?.innerText || "-";
-
-  const quote = `[견적 안내] ${partName} (D/C: ${dateCode})\n- 수량: ${qty.toLocaleString()} EA\n- 공급단가: ${unitUsd} ${unitKrw}\n- 총견적액: ${totalReplace}\n* 기준환율: ${fxRateText}`;
-  navigator.clipboard.writeText(quote).then(() => alert("견적서 텍스트가 복사되었습니다!"));
+  const quote = `[견적 안내] ${partName}\n- 수량: ${qty.toLocaleString()} EA\n- 공급단가: ${unitUsd}`;
+  navigator.clipboard.writeText(quote).then(() => alert("견적서가 복사되었습니다!"));
 }
 
 window.resetCurrentForm = resetCurrentForm;
+window.loadFormFromItem = loadFormFromItem;
+window.handleDeleteItem = handleDeleteItem;
 
 bootstrap();
