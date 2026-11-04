@@ -741,7 +741,13 @@ function applyFilters() {
     countBadge.innerText = `총 ${filtered.length.toLocaleString()}건`;
   }
 
-  renderInventoryList(filtered);
+    if (typeof renderInventoryList === 'function') {
+    renderInventoryList(filtered);
+  } else if (window.renderInventoryList) {
+    window.renderInventoryList(filtered);
+  } else {
+    import('./inventory.js').then(m => m.renderInventoryList(filtered));
+  }
 }
 
 function loadFormFromItem(id) {
