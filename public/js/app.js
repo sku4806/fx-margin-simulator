@@ -739,18 +739,12 @@ function applyFilters() {
     }
   }
 
-  const countBadge = document.getElementById('filterCountBadge');
+    const countBadge = document.getElementById('filterCountBadge');
   if (countBadge) {
     countBadge.innerText = `총 ${filtered.length.toLocaleString()}건`;
   }
 
-    if (typeof renderInventoryList === 'function') {
-    (InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default || function(){})(filtered);
-  } else if (window.renderInventoryList) {
-    window.(InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default || function(){})(filtered);
-  } else {
-    import('./inventory.js').then(m => (m.renderInventoryUI || m.renderInventoryList || m.default)(filtered));
-  }
+  callRenderInventoryList(filtered);
 }
 
 function loadFormFromItem(id) {
