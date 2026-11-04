@@ -1,4 +1,54 @@
 
+function generateLegacyMasterRow(item) {
+  const stock = Number(item.stock) || 0;
+  const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
+  const amount = stock * unitUsd;
+  
+  // 배정량 산출: 출하 완료가 아닌 배정/진행 건
+  const isAssigned = (item.orderStatus === '배정완료' || item.orderStatus === '배정요청' || item.customer !== '-');
+  const arrangedQty = isAssigned ? (Number(item.arrangedQty) || stock) : 0;
+  const notArranQty = Math.max(0, stock - arrangedQty);
+
+  const kind = item.bizType || item.biz_type || '외자입고';
+  const cname = item.customer || '-';
+  const sales = item.owner || 'BSK';
+  const part = item.partName || item.part_name || '-';
+  const entryDate = item.entryDate || item.entry_date || '-';
+  const mfg = item.maker || '-';
+  const pono = item.poNo || item.po_no || '-';
+
+  return `
+    <tr class="hover:bg-indigo-50/60 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+      <td class="py-2 px-2 text-center">
+        <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold ${kind.includes('내자') ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}">
+          ${kind}
+        </span>
+      </td>
+      <td class="py-2 px-2 font-bold text-slate-800 truncate max-w-[130px]" title="${cname}">
+        ${cname}
+      </td>
+      <td class="py-2 px-2 text-center font-bold text-indigo-700">${sales}</td>
+      <td class="py-2 px-2 font-bold text-slate-900">${part}</td>
+      <td class="py-2 px-2 text-right font-black text-slate-900">${stock.toLocaleString()}</td>
+      <td class="py-2 px-2 text-right text-slate-600 font-semibold">$${unitUsd.toFixed(unitUsd >= 10 ? 2 : 3)}</td>
+      <td class="py-2 px-2 text-right font-bold text-rose-600">$${amount.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 1})}</td>
+      <td class="py-2 px-2 text-right font-bold text-amber-700">${arrangedQty.toLocaleString()}</td>
+      <td class="py-2 px-2 text-right font-bold text-emerald-700">${notArranQty.toLocaleString()}</td>
+      <td class="py-2 px-2 text-center text-slate-500 font-mono text-[10px]">${entryDate}</td>
+      <td class="py-2 px-2 text-center font-semibold text-slate-600">${mfg}</td>
+      <td class="py-2 px-2 text-slate-500 font-mono text-[10px] truncate max-w-[90px]" title="${pono}">${pono}</td>
+      <td class="py-1 px-2 text-center select-none" onclick="event.stopPropagation()">
+        <div class="inline-flex items-center gap-1">
+          <button type="button" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-900 rounded border border-slate-300 text-[10px] font-bold transition-all">수정</button>
+          <button type="button" onclick="window.handleOpenSplitModal && window.handleOpenSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-white hover:bg-amber-50 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition-all">분할</button>
+          <button type="button" onclick="window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold transition-all">삭제</button>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+
 function updateGrandSummaries(items) {
   let totalStock = 0;
   let totalArranged = 0;
@@ -448,22 +498,26 @@ function getStatusBadgeClass(status) {
 
 export const renderInventoryList = renderInventoryUI;
 
+
 export function renderInventoryHeaders(activeTab) {
   const thead = document.getElementById('inventoryTableHeader');
   if (!thead) return;
   thead.innerHTML = `
-    <tr>
-      <th class="py-2.5 px-2 font-bold">상태</th>
-      <th class="py-2.5 px-2 font-bold">라인/제조사</th>
-      <th class="py-2.5 px-2 font-bold">PART NO</th>
-      <th class="py-2.5 px-2 text-right font-bold">총재고</th>
-      <th class="py-2.5 px-2 text-right font-bold text-amber-700">배정량</th>
-      <th class="py-2.5 px-2 text-right font-bold text-emerald-700">가용재고</th>
-      <th class="py-2.5 px-2 text-right font-bold">원가($)</th>
-      <th class="py-2.5 px-2 font-bold">실고객사</th>
-      <th class="py-2.5 px-2 font-bold">Sales</th>
-      <th class="py-2.5 px-2 font-bold">B/L(운송장)</th>
-      <th class="py-2.5 px-2 text-right font-bold">관리</th>
+    <tr class="bg-slate-100/90 text-slate-700 text-[11px] font-bold border-b border-slate-200 uppercase tracking-tight">
+      <th class="py-2.5 px-2 text-center w-16">KIND</th>
+      <th class="py-2.5 px-2 text-left min-w-[120px]">CNAME</th>
+      <th class="py-2.5 px-2 text-center w-16">SALES</th>
+      <th class="py-2.5 px-2 text-left min-w-[160px]">PART#</th>
+      <th class="py-2.5 px-2 text-right font-black w-20">재고량</th>
+      <th class="py-2.5 px-2 text-right w-20">원가</th>
+      <th class="py-2.5 px-2 text-right text-rose-700 font-bold w-24">AMOUNT</th>
+      <th class="py-2.5 px-2 text-right text-amber-700 font-bold w-20">ARRANGED_</th>
+      <th class="py-2.5 px-2 text-right text-emerald-700 font-bold w-20">NOT_ARRAN</th>
+      <th class="py-2.5 px-2 text-center w-24">입고일</th>
+      <th class="py-2.5 px-2 text-center w-20">MFG</th>
+      <th class="py-2.5 px-2 text-left w-24">PONO</th>
+      <th class="py-2.5 px-2 text-center w-28">관리</th>
     </tr>
   `;
 }
+

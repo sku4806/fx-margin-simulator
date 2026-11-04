@@ -1002,3 +1002,5 @@ window.loadFormFromItem = loadFormFromItem;
 window.handleDeleteItem = handleDeleteItem;
 
 bootstrap();
+
+window.handleOpenSplitModal = handleOpenSplitModal;
