@@ -677,27 +677,66 @@ async function refreshInventory() {
 }
 
 function applyFilters() {
-  const canEdit = isCsOrAdminUser();
-  const filtered = filterItems({
-    query: document.getElementById('searchInput')?.value || "",
-    filterMaker: document.getElementById('filterMaker')?.value || "",
-    filterOwner: document.getElementById('filterOwner')?.value || "",
-    filterPayment: document.getElementById('filterPayment')?.value || ""
-  });
+  const searchInput = document.getElementById('searchQuery');
+  const lineFilter = document.getElementById('filterLine');
+  const salesFilter = document.getElementById('filterSales');
+  const statusFilter = document.getElementById('filterStatus');
 
-  renderInventoryUI(filtered, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, canEdit);
+  const q = (searchInput?.value || '').trim().toLowerCase();
+  const selectedLine = lineFilter?.value || 'ALL';
+  const selectedSales = salesFilter?.value || 'ALL';
+  const selectedStatus = statusFilter?.value || 'ALL';
 
-  document.querySelectorAll('.tracking-btn').forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const trk = btn.dataset.tracking;
-      if (!trk || trk.trim() === '' || trk === '-') {
-        alert("운송장(B/L) 번호가 등록되지 않은 건입니다. 먼저 행을 클릭하여 송장 번호를 입력해주세요.");
-        return;
-      }
-      openTrackingModal(trk);
-    };
-  });
+  let filtered = cachedItems.slice();
+
+  // 1. 키워드 검색 (품번, 제조사, 계약처, 실고객사, D/C, 송장, 비고 전방위 검색)
+  if (q) {
+    filtered = filtered.filter(item => {
+      const part = String(item.partName || '').toLowerCase();
+      const maker = String(item.maker || '').toLowerCase();
+      const cust = String(item.customer || '').toLowerCase();
+      const realCust = String(item.realCustomer || '').toLowerCase();
+      const dc = String(item.dateCode || '').toLowerCase();
+      const track = String(item.trackingNo || '').toLowerCase();
+      const po = String(item.poNo || '').toLowerCase();
+      const memo = String(item.memo || '').toLowerCase();
+
+      return part.includes(q) ||
+             maker.includes(q) ||
+             cust.includes(q) ||
+             realCust.includes(q) ||
+             dc.includes(q) ||
+             track.includes(q) ||
+             po.includes(q) ||
+             memo.includes(q);
+    });
+  }
+
+  // 2. 라인/제조사 필터
+  if (selectedLine !== 'ALL' && selectedLine !== '전체' && selectedLine !== '') {
+    filtered = filtered.filter(item => item.maker === selectedLine);
+  }
+
+  // 3. 담당 Sales 필터
+  if (selectedSales !== 'ALL' && selectedSales !== '전체' && selectedSales !== '') {
+    filtered = filtered.filter(item => item.owner === selectedSales);
+  }
+
+  // 4. 수금/상태 필터
+  if (selectedStatus !== 'ALL' && selectedStatus !== '전체' && selectedStatus !== '') {
+    if (selectedStatus === '미수' || selectedStatus === '완료') {
+      filtered = filtered.filter(item => item.paymentStatus === selectedStatus);
+    } else {
+      filtered = filtered.filter(item => item.orderStatus === selectedStatus);
+    }
+  }
+
+  const countBadge = document.getElementById('filterCountBadge');
+  if (countBadge) {
+    countBadge.innerText = `총 ${filtered.length.toLocaleString()}건`;
+  }
+
+  renderInventoryList(filtered);
 }
 
 function loadFormFromItem(id) {
