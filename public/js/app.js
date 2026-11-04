@@ -486,9 +486,11 @@ function applyFilters() {
       const track = String(item.trackingNo || item.tracking_no || '').toLowerCase();
       const po = String(item.poNo || item.po_no || '').toLowerCase();
       const memo = String(item.memo || '').toLowerCase();
+      const owner = String(item.owner || '').toLowerCase();
 
       return part.includes(q) ||
         maker.includes(q) ||
+             owner.includes(q) ||
         cust.includes(q) ||
         realCust.includes(q) ||
         dc.includes(q) ||
@@ -715,6 +717,7 @@ function bindInputs() {
       const spq = document.getElementById('pkgConfigSpq')?.value;
       const moq = document.getElementById('pkgConfigMoq')?.value;
       const memo = document.getElementById('pkgConfigMemo')?.value.trim();
+      const owner = String(item.owner || '').toLowerCase();
 
       try {
         await savePackagingStandard(maker, cs, spq, moq, memo);
