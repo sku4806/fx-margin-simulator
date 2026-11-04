@@ -49,3 +49,5 @@ export async function fetchInventoryItems() {
   if (error) throw error;
   return data || [];
 }
+
+export const supabase = window.supabase || (typeof supabase !== 'undefined' ? supabase : null);
