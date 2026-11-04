@@ -5,7 +5,7 @@ function generateLegacyMasterRow(item) {
   const amount = stock * unitUsd;
 
   const isAssigned = (item.orderStatus === '배정완료' || item.orderStatus === '배정요청' || (item.customer && item.customer !== '-'));
-  const arrangedQty = isAssigned ? (Number(item.arrangedQty) || stock) : 0;
+  const arrangedQty = isAssigned ? (Number(item.arrangedQty ?? item.arranged_qty) || stock) : 0;
   const notArranQty = Math.max(0, stock - arrangedQty);
 
   const kind = item.bizType || item.biz_type || 'DOMESTIC';
@@ -15,29 +15,92 @@ function generateLegacyMasterRow(item) {
   const rawDate = item.entryDate || item.entry_date || '-';
   const entryDate = rawDate.length >= 10 ? rawDate.slice(2, 10) : rawDate; // YY-MM-DD
   const mfg = item.maker || '-';
+  const pono = item.poNo || item.po_no || '-';
 
   return `
     <tr class="hover:bg-indigo-50/60 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
-      <td class="py-1.5 px-1 text-center whitespace-nowrap">
+      <td class="py-2 px-1 text-center whitespace-nowrap">
         <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${kind.includes('내자') || kind.includes('DOMESTIC') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
           ${kind.length > 4 ? kind.slice(0, 4) : kind}
         </span>
       </td>
-      <td class="py-1.5 px-1.5 font-bold text-slate-800 truncate max-w-[120px] whitespace-nowrap" title="${cname}">${cname}</td>
-      <td class="py-1.5 px-1 text-center font-bold text-indigo-800 whitespace-nowrap">${sales}</td>
-      <td class="py-1.5 px-1.5 font-bold text-slate-900 truncate max-w-[170px] whitespace-nowrap" title="${part}">${part}</td>
-      <td class="py-1.5 px-1 text-right font-black text-slate-900 whitespace-nowrap">${stock.toLocaleString()}</td>
-      <td class="py-1.5 px-1 text-right text-slate-700 font-semibold whitespace-nowrap">$${unitUsd.toLocaleString(undefined, { minimumFractionDigits: unitUsd >= 10 ? 2 : 3, maximumFractionDigits: 3 })}</td>
-      <td class="py-1.5 px-1 text-right font-bold text-rose-600 whitespace-nowrap">$${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
-      <td class="py-1.5 px-1 text-right font-bold text-amber-700 whitespace-nowrap">${arrangedQty.toLocaleString()}</td>
-      <td class="py-1.5 px-1 text-right font-bold text-emerald-700 whitespace-nowrap">${notArranQty.toLocaleString()}</td>
-      <td class="py-1.5 px-1 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">${entryDate}</td>
-      <td class="py-1.5 px-1 text-center font-medium text-slate-700 truncate max-w-[70px] whitespace-nowrap" title="${mfg}">${mfg}</td>
-      <td class="py-1 px-1 text-center select-none whitespace-nowrap" onclick="event.stopPropagation()">
+      <td class="py-2 px-1.5 font-bold text-slate-800 truncate max-w-[120px] whitespace-nowrap" title="${cname}">${cname}</td>
+      <td class="py-2 px-1 text-center font-bold text-indigo-800 whitespace-nowrap">${sales}</td>
+      <td class="py-2 px-1.5 font-bold text-slate-900 truncate max-w-[170px] whitespace-nowrap" title="${part}">${part}</td>
+      <td class="py-2 px-1 text-right font-black text-slate-900 whitespace-nowrap">${stock.toLocaleString()}</td>
+      <td class="py-2 px-1 text-right text-slate-700 font-semibold whitespace-nowrap">$${unitUsd.toLocaleString(undefined, { minimumFractionDigits: unitUsd >= 10 ? 2 : 3, maximumFractionDigits: 3 })}</td>
+      <td class="py-2 px-1 text-right font-bold text-rose-600 whitespace-nowrap">$${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+      <td class="py-2 px-1 text-right font-bold text-amber-700 whitespace-nowrap">${arrangedQty.toLocaleString()}</td>
+      <td class="py-2 px-1 text-right font-bold text-emerald-700 whitespace-nowrap">${notArranQty.toLocaleString()}</td>
+      <td class="py-2 px-1 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">${entryDate}</td>
+      <td class="py-2 px-1 text-center font-medium text-slate-700 truncate max-w-[70px] whitespace-nowrap" title="${mfg}">${mfg}</td>
+      <td class="py-2 px-1 text-slate-500 font-mono text-[10px] truncate max-w-[85px] whitespace-nowrap" title="${pono}">${pono}</td>
+      <td class="py-2 px-1 text-center select-none whitespace-nowrap" onclick="event.stopPropagation()">
         <div class="inline-flex items-center justify-center gap-1">
-          <button type="button" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold transition-all shadow-xs">수정</button>
-          <button type="button" onclick="window.handleOpenSplitModal && window.handleOpenSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition-all shadow-xs">분할</button>
-          <button type="button" onclick="window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold transition-all shadow-xs">삭제</button>
+          <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold transition-all shadow-xs">수정</button>
+          <button type="button" onclick="event.stopPropagation(); window.handleOpenSplitModal && window.handleOpenSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition-all shadow-xs">분할</button>
+          <button type="button" onclick="event.stopPropagation(); window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold transition-all shadow-xs">삭제</button>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function generateFulfillmentRow(item, canEdit) {
+  const stock = Number(item.stock) || 0;
+  const soldPrice = Number(item.soldPriceUsd ?? item.sold_price_usd) || 0;
+  const cname = (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-';
+  const realCust = item.realCustomer || item.real_customer || '-';
+  const part = item.partName || item.part_name || '-';
+  const mfg = item.maker || '-';
+  const bizType = item.bizType || item.biz_type || 'DOMESTIC';
+  const orderStatus = item.orderStatus || item.order_status || '배정요청';
+  const paymentStatus = item.paymentStatus || item.payment_status || '미수';
+  const shippedDate = item.shippedDate || item.shipped_date || '미출하';
+  const taxDate = item.taxDate || item.tax_date || '-';
+  const invoiceNo = item.invoiceNo || item.invoice_no || '-';
+  const trackingNo = (item.trackingNo || item.tracking_no || '').trim();
+  const dueDate = item.dueDate || item.due_date || '-';
+
+  return `
+    <tr class="hover:bg-indigo-50/60 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+      <td class="py-2 px-1.5 text-center whitespace-nowrap">
+        <span class="text-[9px] font-bold px-2 py-0.5 rounded-full ${getStatusBadgeClass(orderStatus)}">${orderStatus}</span>
+      </td>
+      <td class="py-2 px-1.5 font-bold text-slate-800 truncate max-w-[130px] whitespace-nowrap" title="${cname}">
+        <div>${cname}</div>
+        ${(realCust && realCust !== '-' && realCust !== cname) ? `<div class="text-[9px] text-indigo-700 font-normal truncate">↳ ${realCust}</div>` : ''}
+      </td>
+      <td class="py-2 px-1.5 whitespace-nowrap truncate max-w-[170px]" title="${part}">
+        <div class="font-bold text-indigo-950 truncate">${part}</div>
+        <div class="text-[10px] text-slate-400 font-semibold">${mfg} · <span class="text-indigo-600 font-bold">${bizType}</span></div>
+      </td>
+      <td class="py-2 px-1.5 text-right font-black text-slate-900 whitespace-nowrap">${stock.toLocaleString()} EA</td>
+      <td class="py-2 px-1.5 text-right font-black text-indigo-700 whitespace-nowrap">${soldPrice > 0 ? '$' + soldPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '$-'}</td>
+      <td class="py-2 px-1.5 text-[10px] text-slate-600 whitespace-nowrap">
+        <div>출하: ${shippedDate}</div>
+        <div class="text-indigo-900 font-semibold">계산서: ${taxDate}</div>
+      </td>
+      <td class="py-2 px-1.5 text-[10px] text-slate-600 align-middle whitespace-nowrap">
+        <div class="font-mono text-slate-500 truncate max-w-[130px]">INV: ${invoiceNo}</div>
+        <div class="mt-0.5 flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 max-w-[160px]">
+          <span class="font-mono font-bold text-slate-800 text-[10px] truncate" title="${trackingNo}">
+            ${trackingNo ? trackingNo : '<span class="text-slate-400 font-normal">B/L 미등록</span>'}
+          </span>
+          <button type="button" onclick="event.stopPropagation(); window.openTrackingModal && window.openTrackingModal('${trackingNo}')" class="tracking-btn shrink-0 text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded border border-indigo-200 transition-colors flex items-center gap-0.5 shadow-xs" data-tracking="${trackingNo}">
+            🚚 조회
+          </button>
+        </div>
+      </td>
+      <td class="py-2 px-1.5 text-center align-middle whitespace-nowrap">
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded ${paymentStatus === '완료' || paymentStatus === '수금완료' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">${paymentStatus}</span>
+      </td>
+      <td class="py-2 px-1.5 text-center text-[10px] text-slate-600 whitespace-nowrap align-middle font-mono">${dueDate}</td>
+      <td class="py-2 px-1.5 text-center select-none whitespace-nowrap align-middle" onclick="event.stopPropagation()">
+        <div class="inline-flex items-center justify-center gap-1">
+          <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold transition-all shadow-xs">수정</button>
+          <button type="button" onclick="event.stopPropagation(); window.handleOpenSplitModal && window.handleOpenSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition-all shadow-xs">분할</button>
+          <button type="button" onclick="event.stopPropagation(); window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold transition-all shadow-xs">삭제</button>
         </div>
       </td>
     </tr>
@@ -264,9 +327,9 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
   }
 
   if (activeTab === 'sales') {
-    tbody.innerHTML = items.map(generateLegacyMasterRow).join("");
+    tbody.innerHTML = items.map(item => generateLegacyMasterRow(item, canEdit)).join("");
   } else {
-    tbody.innerHTML = items.map(generateLegacyMasterRow).join("");
+    tbody.innerHTML = items.map(item => generateFulfillmentRow(item, canEdit)).join("");
 
     bindRowActions(tbody, onEdit, onDelete, onSplit);
   }
@@ -433,21 +496,40 @@ export const renderInventoryList = renderInventoryUI;
 export function renderInventoryHeaders(activeTab) {
   const thead = document.getElementById('inventoryTableHeader');
   if (!thead) return;
-  thead.innerHTML = `
-    <tr class="bg-slate-100/95 text-slate-700 text-[11px] font-bold border-b border-slate-200 select-none">
-      <th class="py-2 px-1 text-center w-[6%] whitespace-nowrap">KIND</th>
-      <th class="py-2 px-1.5 text-left w-[12%]">CNAME</th>
-      <th class="py-2 px-1 text-center w-[6%] whitespace-nowrap">SALES</th>
-      <th class="py-2 px-1.5 text-left w-[18%]">PART#</th>
-      <th class="py-2 px-1 text-right font-black w-[6%] whitespace-nowrap">재고량</th>
-      <th class="py-2 px-1 text-right w-[7%] whitespace-nowrap">원가</th>
-      <th class="py-2 px-1 text-right text-rose-700 font-bold w-[8%] whitespace-nowrap">AMOUNT</th>
-      <th class="py-2 px-1 text-right text-amber-700 font-bold w-[6%] whitespace-nowrap">배정량</th>
-      <th class="py-2 px-1 text-right text-emerald-700 font-bold w-[6%] whitespace-nowrap">가용재고</th>
-      <th class="py-2 px-1 text-center w-[7%] whitespace-nowrap">입고일</th>
-      <th class="py-2 px-1 text-center w-[7%] whitespace-nowrap">MFG</th>
-      <th class="py-2 px-1 text-center w-[11%] whitespace-nowrap">관리</th>
-    </tr>
-  `;
+
+  if (activeTab === 'sales') {
+    thead.innerHTML = `
+      <tr class="bg-slate-100/95 text-slate-700 text-[11px] font-bold border-b border-slate-200 select-none">
+        <th class="py-2 px-1 text-center w-[5%] whitespace-nowrap">KIND</th>
+        <th class="py-2 px-1.5 text-left w-[11%]">CNAME</th>
+        <th class="py-2 px-1 text-center w-[6%] whitespace-nowrap">SALES</th>
+        <th class="py-2 px-1.5 text-left w-[17%]">PART#</th>
+        <th class="py-2 px-1 text-right font-black w-[6%] whitespace-nowrap">재고량</th>
+        <th class="py-2 px-1 text-right w-[7%] whitespace-nowrap">원가</th>
+        <th class="py-2 px-1 text-right text-rose-700 font-bold w-[7%] whitespace-nowrap">AMOUNT</th>
+        <th class="py-2 px-1 text-right text-amber-700 font-bold w-[6%] whitespace-nowrap">배정량</th>
+        <th class="py-2 px-1 text-right text-emerald-700 font-bold w-[6%] whitespace-nowrap">가용재고</th>
+        <th class="py-2 px-1 text-center w-[7%] whitespace-nowrap">입고일</th>
+        <th class="py-2 px-1 text-center w-[6%] whitespace-nowrap">MFG</th>
+        <th class="py-2 px-1 text-left w-[8%]">PONO</th>
+        <th class="py-2 px-1 text-center w-[8%] whitespace-nowrap">관리</th>
+      </tr>
+    `;
+  } else {
+    thead.innerHTML = `
+      <tr class="bg-slate-100/95 text-slate-700 text-[11px] font-bold border-b border-slate-200 select-none">
+        <th class="py-2 px-1.5 text-center w-[7%] whitespace-nowrap">상태</th>
+        <th class="py-2 px-1.5 text-left w-[13%]">계약처 / 실고객사</th>
+        <th class="py-2 px-1.5 text-left w-[16%]">PART NO / 구분</th>
+        <th class="py-2 px-1.5 text-right w-[7%] whitespace-nowrap">수량</th>
+        <th class="py-2 px-1.5 text-right w-[7%] whitespace-nowrap">실판매단가</th>
+        <th class="py-2 px-1.5 text-left w-[10%] whitespace-nowrap">출하일 / 계산서일</th>
+        <th class="py-2 px-1.5 text-left w-[16%] whitespace-nowrap">인보이스 / B/L</th>
+        <th class="py-2 px-1.5 text-center w-[7%] whitespace-nowrap">수금/환차손익</th>
+        <th class="py-2 px-1.5 text-center w-[7%] whitespace-nowrap">만기일정</th>
+        <th class="py-2 px-1.5 text-center w-[10%] whitespace-nowrap">관리</th>
+      </tr>
+    `;
+  }
 }
 

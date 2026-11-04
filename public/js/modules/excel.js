@@ -125,13 +125,13 @@ export function handleExcelFileSelect(file) {
           maker: String(r['MFG'] || r['제조사'] || r['MAKER'] || '기타').trim(),
           part_name: String(r['PART#'] || r['PARTNO'] || r['품목번호'] || r['품명'] || '').trim(),
           date_code: String(r['D/C'] || r['DC'] || r['제조주기'] || '-').trim(),
-          stock: parseInt(r['재고량'] || r['SHIPQTY'] || r['SHIP_QTY'] || r['수량'] || 0) || 0,
-          arranged_qty: parseInt(r['ARRANGED_QTY'] || 0) || 0,
-          unit_usd: parseFloat(r['US_NETUP'] || r['원가'] || r['NET_UP'] || r['단가'] || 0) || 0,
+          stock: parseInt(String(r['재고량'] || r['SHIPQTY'] || r['SHIP_QTY'] || r['수량'] || 0).replace(/,/g, '')) || 0,
+          arranged_qty: parseInt(String(r['ARRANGED_QTY'] || 0).replace(/,/g, '')) || 0,
+          unit_usd: parseFloat(String(r['US_NETUP'] || r['원가'] || r['NET_UP'] || r['단가'] || 0).replace(/,/g, '')) || 0,
           // DB NOT NULL 필수 제약 조건 기본값 보장
-          ship_fx: 1350,
+          ship_fx: parseFloat(String(r['FX'] || r['환율'] || 1350).replace(/,/g, '')) || 1350,
           margin: 20,
-          sold_price_usd: parseFloat(r['US_SLUP'] || r['SLUP'] || 0) || 0,
+          sold_price_usd: parseFloat(String(r['US_SLUP'] || r['SLUP'] || 0).replace(/,/g, '')) || 0,
           customer: (() => {
             const rawCust = String(r['CNAME'] || r['CUSTOMER'] || r['고객사'] || '').trim();
             if (!rawCust || /bigshine/i.test(rawCust) || rawCust === 'BSK') {

@@ -46,30 +46,171 @@
         <div class="bg-slate-900/60 border border-slate-700 px-2.5 py-1 sm:py-1.5 rounded-xl">
           <span class="text-[8px] sm:text-[9px] font-semibold text-slate-400 block leading-tight">안전 환율 버퍼 (FX)</span>
           <select id="fxBufferSelect" class="bg-transparent text-[11px] sm:text-xs font-bold text-amber-400 outline-none cursor-pointer">
-    <option value="ALL">라인 전체</option>
-    <option value="SST">SST (642건)</option>
-    <option value="S.BELLING">S.BELLING (99건)</option>
-    <option value="ESMT">ESMT (86건)</option>
-    <option value="ISSI">ISSI (83건)</option>
-    <option value="ICSI">ICSI (44건)</option>
-    <option value="AMS">AMS (78건)</option>
-    <option value="Eon">Eon (77건)</option>
-    <option value="Giantec">Giantec (71건)</option>
-    <option value="SMI">SMI (Silicon Motion, 62건)</option>
-    <option value="WIZnet">WIZnet (58건)</option>
-    <option value="AiT">AiT (52건)</option>
-    <option value="GigaDevice">GigaDevice (38건)</option>
-    <option value="PLX">PLX (35건)</option>
-    <option value="BelFuse">BelFuse (32건)</option>
-    <option value="LUMISSIL">LUMISSIL (32건)</option>
-    <option value="IM">IM (31건)</option>
-    <option value="ETA">ETA (14건)</option>
-    <option value="XMOS">XMOS (11건)</option>
-    <option value="LINKPP">LINKPP (7건)</option>
-    <option value="Vineyard">Vineyard (7건)</option>
-    <option value="FMSH">FMSH (6건)</option>
-    <option value="OTHERS">기타 (OTHERS / 프로젝트)</option>
-  </select>
+            <option value="0" class="text-slate-800">버퍼 없음 (+0원)</option>
+            <option value="10" class="text-slate-800">보수적 (+10원)</option>
+            <option value="20" class="text-slate-800">안전 (+20원)</option>
+            <option value="30" class="text-slate-800">초안전 (+30원)</option>
+          </select>
+        </div>
+
+        <div class="text-right">
+          <span class="text-[9px] sm:text-[10px] font-semibold text-indigo-300 bg-indigo-900/50 border border-indigo-500/30 px-1.5 py-0.5 rounded-full">실시간 FX Rate</span>
+          <div id="liveFx" class="text-base sm:text-xl font-black text-white leading-tight mt-0.5">$1.00 = -</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2. 비즈니스 탭 스위처 바 -->
+    <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-1.5">
+      <div class="grid grid-cols-2 gap-1.5 w-full md:w-auto">
+        <button id="tabSales" class="py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors">
+          💼 영업 견적·수주
+        </button>
+        <button id="tabFulfillment" class="py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors">
+          📋 출하·채권 관리
+        </button>
+      </div>
+      <span id="csHeaderDesc" class="text-xs text-slate-400 font-medium hidden md:block px-2">영업 협의 수주 현황 및 실판매가를 확인합니다.</span>
+    </div>
+
+    <!-- 3. 환율 마진 시뮬레이터 -->
+    <div id="salesQuotationPanel" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
+      <div class="border-b pb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h2 class="font-bold text-sm sm:text-base text-slate-900">고객사 제시 권고 견적가 (FX Protection)</h2>
+          <span class="text-[10px] sm:text-[11px] text-slate-400">달러(USD) 기준 우선 표기 및 원화(@환율) 병기</span>
+        </div>
+        <div class="flex items-center gap-1.5 w-full sm:w-auto justify-end">
+          <button id="openLandedCostBtn" class="flex-1 sm:flex-none text-[11px] sm:text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg border border-slate-300 flex items-center justify-center gap-1">
+            <span>🚢</span> 부대비용 자동배부
+          </button>
+          <button id="copyQuoteBtn" class="flex-1 sm:flex-none text-[11px] sm:text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm">
+            <span>📋</span> 견적 복사
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] font-bold text-slate-500">① 재고 소진용 최저선</span>
+            <span class="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold">선적원가 기준</span>
+          </div>
+          <div class="flex items-baseline justify-between sm:block">
+            <div id="minSaleUnitActualUsd" class="text-xl sm:text-2xl font-black text-slate-900">$0.0000</div>
+            <div id="minSaleUnitActualKrw" class="text-[11px] font-bold text-slate-500">(₩0 / @1,350)</div>
+          </div>
+          <div class="pt-1 border-t text-[10px] sm:text-[11px] flex justify-between text-slate-500">
+            <span>총 견적:</span>
+            <span id="minSaleTotalActual" class="font-bold text-slate-800">$0.00 (₩0)</span>
+          </div>
+        </div>
+
+        <div class="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-1">
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] font-bold text-indigo-800">② 라인 재발주 권장선</span>
+            <span class="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">현재환율 안전</span>
+          </div>
+          <div class="flex items-baseline justify-between sm:block">
+            <div id="minSaleUnitReplaceUsd" class="text-xl sm:text-2xl font-black text-indigo-950">$0.0000</div>
+            <div id="minSaleUnitReplaceKrw" class="text-[11px] font-bold text-indigo-700">(₩0 / @1,380)</div>
+          </div>
+          <div class="pt-1 border-t border-indigo-100 text-[10px] sm:text-[11px] flex justify-between text-indigo-950">
+            <span>총 권장:</span>
+            <span id="minSaleTotalReplace" class="font-bold text-indigo-900">$0.00 (₩0)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-center">
+        <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-1.5 items-center">
+          <div>
+            <label class="text-[9px] text-slate-500 block mb-0.5">고객 희망단가($)</label>
+            <input type="number" id="inputTargetOffer" placeholder="예: 3.10" step="0.001" class="w-full p-1.5 border rounded-lg bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+          <div class="text-center sm:text-left">
+            <span class="text-[9px] text-slate-500 block">예상 마진율</span>
+            <div id="reverseMarginReplace" class="text-xs sm:text-sm font-black text-slate-700 mt-0.5">- %</div>
+          </div>
+          <div class="text-right sm:text-left">
+            <span class="text-[9px] text-slate-500 block">판정 결과</span>
+            <div id="reverseMarginBadge" class="text-[10px] sm:text-xs font-bold text-slate-400 mt-0.5">단가 입력</div>
+          </div>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden text-xs">
+          <table class="w-full text-center">
+            <thead class="bg-slate-50 text-slate-500 border-b text-[10px]">
+              <tr>
+                <th class="py-1 px-1">수량</th>
+                <th class="py-1 px-1">단가(USD)</th>
+                <th class="py-1 px-1">원화환산(KRW)</th>
+                <th class="py-1 px-1">총액(USD)</th>
+              </tr>
+            </thead>
+            <tbody id="tierTableBody" class="divide-y divide-slate-100 font-medium text-[10px]"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. 전문화 입력 폼팩터 -->
+    <div id="formSection" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+      <div class="border-b pb-2.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h2 id="formTitle" class="font-bold text-xs sm:text-base text-slate-900">수주 및 재고 배정 등록 (Sales Order Entry)</h2>
+          <p id="formSubtitle" class="text-[10px] sm:text-[11px] text-slate-400">공식 배정 물량, 협의 단가 및 Date Code를 설정합니다.</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button type="button" id="openPackagingConfigBtn" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1 transition-colors whitespace-nowrap shadow-sm">
+            <span>📦</span> 라인별 포장기준 설정
+          </button>
+          <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-sm whitespace-nowrap">
+            저장
+          </button>
+        </div>
+      </div>
+
+      <div id="editingBanner" class="hidden p-2 bg-indigo-50 border border-indigo-200 rounded-lg flex justify-between items-center text-xs">
+        <span id="editingBannerText" class="font-bold text-indigo-900 text-[11px]"></span>
+        <button onclick="resetCurrentForm()" class="text-indigo-600 hover:text-indigo-800 font-bold text-[10px]">✕ 리셋</button>
+      </div>
+
+      <!-- 그룹 1: 기본 부품 및 담당 정보 -->
+      <div class="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2">
+        <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+          <span>🏷️</span> 부품 및 영업 정보
+        </div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
+          <div>
+            <label class="text-slate-600 block mb-0.5 text-[11px]">제조사 (Maker)</label>
+            <select id="selectMaker" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <option value="SST">SST</option>
+              <option value="S.BELLING">S.BELLING</option>
+              <option value="ESMT">ESMT</option>
+              <option value="ISSI">ISSI</option>
+              <option value="ICSI">ICSI</option>
+              <option value="AMS">AMS</option>
+              <option value="Eon">Eon</option>
+              <option value="Giantec">Giantec</option>
+              <option value="Silicon Motion">Silicon Motion (SMI)</option>
+              <option value="WIZnet">WIZnet</option>
+              <option value="AiT">AiT</option>
+              <option value="GigaDevice">GigaDevice</option>
+              <option value="PLX">PLX</option>
+              <option value="Bel Fuse">Bel Fuse</option>
+              <option value="LUMISSIL">LUMISSIL</option>
+              <option value="Intelligent Memory">Intelligent Memory (I'M)</option>
+              <option value="Eta-Semi">Eta-Semi</option>
+              <option value="XMOS">XMOS</option>
+              <option value="Link-PP">Link-PP</option>
+              <option value="Vineyard">Vineyard</option>
+              <option value="FMSH">FMSH</option>
+              <option value="Innodisk">Innodisk</option>
+              <option value="SSSTC">SSSTC (Kioxia Group)</option>
+              <option value="Chiplus">Chiplus</option>
+              <option value="__CUSTOM_MAKER__">기타 (직접 입력)</option>
+            </select>
             <input type="text" id="inputCustomMaker" placeholder="제조사 직접 입력..." class="hidden w-full mt-1 p-1.5 border rounded-lg bg-amber-50/50 text-xs outline-none">
           </div>
 
@@ -200,7 +341,7 @@
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">진행 상태 (Status)</label>
-              <select id="filterStatus" class="w-full p-2 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <select id="selectOrderStatus" class="w-full p-2 border rounded-lg bg-indigo-50/40 text-xs font-bold text-indigo-950 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
                 <option value="배정요청">배정요청</option>
                 <option value="출하준비">출하준비</option>
                 <option value="출하완료">출하완료</option>
@@ -265,7 +406,7 @@
 
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px]">수금 상태</label>
-              <select id="filterStatus" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none cursor-pointer">
+              <select id="selectPaymentStatus" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none cursor-pointer">
                 <option value="미수">미수 (Unpaid)</option>
                 <option value="완료">수금완료 (Paid)</option>
               </select>
@@ -349,16 +490,30 @@
           </div>
 
           <div>
-            <select id="filterMaker" class="w-full p-1.5 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none">
-              <option value="">라인 전체</option>
-              <option value="GigaDevice">GigaDevice</option>
-              <option value="ISSI">ISSI</option>
-              <option value="Lumissil">Lumissil</option>
-              <option value="XMOS">XMOS</option>
-              <option value="Silicon Motion">Silicon Motion</option>
-              <option value="ESMT">ESMT</option>
-              <option value="Innodisk">Innodisk</option>
-              <option value="SSSTC">SSSTC</option>
+            <select id="filterMaker" class="w-full p-1.5 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none cursor-pointer">
+              <option value="ALL">라인 전체</option>
+              <option value="SST">SST (642건)</option>
+              <option value="S.BELLING">S.BELLING (99건)</option>
+              <option value="ESMT">ESMT (86건)</option>
+              <option value="ISSI">ISSI (83건)</option>
+              <option value="ICSI">ICSI (44건)</option>
+              <option value="AMS">AMS (78건)</option>
+              <option value="Eon">Eon (77건)</option>
+              <option value="Giantec">Giantec (71건)</option>
+              <option value="SMI">SMI (Silicon Motion, 62건)</option>
+              <option value="WIZnet">WIZnet (58건)</option>
+              <option value="AiT">AiT (52건)</option>
+              <option value="GigaDevice">GigaDevice (38건)</option>
+              <option value="PLX">PLX (35건)</option>
+              <option value="BelFuse">BelFuse (32건)</option>
+              <option value="LUMISSIL">LUMISSIL (32건)</option>
+              <option value="IM">IM (31건)</option>
+              <option value="ETA">ETA (14건)</option>
+              <option value="XMOS">XMOS (11건)</option>
+              <option value="LINKPP">LINKPP (7건)</option>
+              <option value="Vineyard">Vineyard (7건)</option>
+              <option value="FMSH">FMSH (6건)</option>
+              <option value="OTHERS">기타 (OTHERS / 프로젝트)</option>
             </select>
           </div>
 
@@ -411,7 +566,7 @@
 
         <!-- 데스크탑 테이블 내부 스크롤 뷰 (헤더 sticky 고정) -->
         <div class="hidden md:block overflow-x-auto max-h-[65vh] overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
-          <table class="w-full table-fixed text-left text-xs relative ">
+          <table class="w-full text-left text-xs relative min-w-[1240px]">
             <thead id="inventoryTableHeader" class="bg-slate-100/95 backdrop-blur-sm text-slate-600 border-b uppercase font-semibold sticky top-0 z-10 shadow-sm"></thead>
             <tbody id="inventoryTableBody" class="divide-y divide-slate-100 font-medium bg-white"></tbody>
           </table>

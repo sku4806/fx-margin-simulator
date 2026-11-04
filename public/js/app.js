@@ -106,6 +106,8 @@ async function fetchInventoryItems() {
     shipFx: Number(r.ship_fx !== undefined ? r.ship_fx : r.shipFx) || 1350,
     ship_fx: Number(r.ship_fx !== undefined ? r.ship_fx : r.shipFx) || 1350,
     stock: parseInt(r.stock) || 0,
+    arrangedQty: parseInt(r.arranged_qty !== undefined ? r.arranged_qty : r.arrangedQty) || 0,
+    arranged_qty: parseInt(r.arranged_qty !== undefined ? r.arranged_qty : r.arrangedQty) || 0,
     spq: r.spq ? parseInt(r.spq) : null,
     isSpa: Boolean(r.is_spa || r.isSpa),
     is_spa: Boolean(r.is_spa || r.isSpa),
@@ -159,11 +161,13 @@ async function splitInventoryShipment(targetId, splitQty, splitPrice, customer, 
   const remainMemo = isTransferToHq
     ? (original.memo ? `${original.memo} [본사 이관 잔여재고]` : '[본사 이관 잔여재고]')
     : (original.memo || '');
+  const remainArranged = Math.max(0, (Number(original.arranged_qty || original.arrangedQty) || 0) - splitQty);
 
   const { error: updErr } = await supabase
     .from('inventory_items')
     .update({
       stock: remainQty,
+      arranged_qty: remainArranged,
       owner: remainOwner,
       memo: remainMemo
     })
@@ -197,6 +201,7 @@ async function splitInventoryShipment(targetId, splitQty, splitPrice, customer, 
     unit_usd: original.unit_usd !== undefined ? original.unit_usd : (original.unitUsd || 0),
     ship_fx: original.ship_fx !== undefined ? original.ship_fx : (original.shipFx || 1350),
     stock: splitQty,
+    arranged_qty: splitQty,
     spq: original.spq || null,
     margin: 20,
     is_spa: Boolean(original.is_spa || original.isSpa),
@@ -343,27 +348,6 @@ function initDynamicFormTabs() {
   btnBill.onclick = () => switchTab('billing');
 
   switchTab('order');
-}
-
-function switchSubFormTab(tabName) {
-  const btnOrder = document.getElementById('subTabOrder');
-  const btnShip = document.getElementById('subTabShipping');
-  const btnBill = document.getElementById('subTabBilling');
-
-  const secOrder = document.getElementById('stepOrderSection');
-  const secShip = document.getElementById('stepShippingSection');
-  const secBill = document.getElementById('stepBillingSection');
-
-  const activeStyle = "flex-1 py-1.5 rounded-lg bg-white text-indigo-900 shadow-sm transition-all text-center font-bold";
-  const inactiveStyle = "flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all text-center font-semibold";
-
-  if (btnOrder) btnOrder.className = (tabName === 'order') ? activeStyle : inactiveStyle;
-  if (btnShip) btnShip.className = (tabName === 'shipping') ? activeStyle : inactiveStyle;
-  if (btnBill) btnBill.className = (tabName === 'billing') ? activeStyle : inactiveStyle;
-
-  secOrder?.classList.toggle('hidden', tabName !== 'order');
-  secShip?.classList.toggle('hidden', tabName !== 'shipping');
-  secBill?.classList.toggle('hidden', tabName !== 'billing');
 }
 
 // ----------------------------------------------------
@@ -586,9 +570,15 @@ function setSelectValue(selectId, customInputId, val, customVal) {
   if (!sel) return;
 
   const targetVal = (val || '').trim();
-  const hasOption = Array.from(sel.options).some(opt => opt.value === targetVal);
-  if (hasOption) {
-    sel.value = targetVal;
+  const targetLower = targetVal.toLowerCase();
+
+  const matchedOpt = Array.from(sel.options).find(opt => {
+    const optVal = opt.value.trim().toLowerCase();
+    return optVal === targetLower || (targetLower && optVal.includes(targetLower)) || (targetLower && targetLower.includes(optVal));
+  });
+
+  if (matchedOpt && matchedOpt.value !== customVal) {
+    sel.value = matchedOpt.value;
     if (inp) {
       inp.value = '';
       inp.classList.add('hidden');
@@ -621,6 +611,13 @@ function loadFormFromItem(id) {
 
   if (!isCsOrAdminUser()) return;
   editingItemId = item.id;
+
+  const banner = document.getElementById('editingBanner');
+  const bannerText = document.getElementById('editingBannerText');
+  if (banner && bannerText) {
+    banner.classList.remove('hidden');
+    bannerText.innerText = `✏️ 수정 중: [${item.maker}] ${item.partName || item.part_name || '-'} (D/C: ${item.dateCode || item.date_code || '-'}, 재고: ${(item.stock || 0).toLocaleString()} EA)`;
+  }
 
   setSelectValue('selectMaker', 'inputCustomMaker', item.maker, '__CUSTOM_MAKER__');
   setSelectValue('selectOwner', 'inputCustomOwner', item.owner, '__CUSTOM_OWNER__');
@@ -690,6 +687,16 @@ export function resetCurrentForm() {
   if (badgeEl) badgeEl.classList.add('hidden');
   editingItemId = null;
 
+  const banner = document.getElementById('editingBanner');
+  if (banner) banner.classList.add('hidden');
+  const bannerText = document.getElementById('editingBannerText');
+  if (bannerText) bannerText.innerText = '';
+
+  const makerInp = document.getElementById('inputCustomMaker');
+  if (makerInp) { makerInp.value = ''; makerInp.classList.add('hidden'); }
+  const ownerInp = document.getElementById('inputCustomOwner');
+  if (ownerInp) { ownerInp.value = ''; ownerInp.classList.add('hidden'); }
+
   const setVal = (id, val) => {
     const el = document.getElementById(id);
     if (el) el.value = val;
@@ -731,10 +738,6 @@ export function resetCurrentForm() {
 // 6. 이벤트 리스너 바인딩 및 저장/삭제
 // ----------------------------------------------------
 function bindInputs() {
-  safeAddListener('subTabOrder', 'click', () => switchSubFormTab('order'));
-  safeAddListener('subTabShipping', 'click', () => switchSubFormTab('shipping'));
-  safeAddListener('subTabBilling', 'click', () => switchSubFormTab('billing'));
-
   ['inputUsd', 'inputStock', 'inputShipFx', 'inputOverhead', 'inputTargetOffer', 'inputApprovedDebit'].forEach(id => {
     safeAddListener(id, 'input', runEngine);
   });

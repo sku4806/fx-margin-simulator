@@ -9,29 +9,36 @@ export function computeKpiMetrics(items, currentFx) {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
 
-  items.forEach(item => {
-    const fx = item.shipFx || currentFx || 1350;
-    const itemCostKrw = item.unitUsd * item.stock * fx;
+  (items || []).forEach(item => {
+    const fx = Number(item.shipFx || item.ship_fx || currentFx) || 1350;
+    const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
+    const stock = Number(item.stock) || 0;
+    const soldPrice = Number(item.soldPriceUsd ?? item.sold_price_usd) || 0;
+    const itemCostKrw = unitUsd * stock * fx;
     
     // 1. 총 재고 평가액
     totalInventoryKrw += itemCostKrw;
 
     // 2. 미수금 총액
-    if (item.paymentStatus === '미수' && item.soldPriceUsd > 0) {
-      const soldKrw = item.soldPriceUsd * item.stock * fx;
+    const payStatus = String(item.paymentStatus || item.payment_status || '');
+    if ((payStatus.includes('미수') || payStatus.toLowerCase() === 'unpaid') && soldPrice > 0) {
+      const soldKrw = soldPrice * stock * fx;
       totalUnpaidKrw += soldKrw;
 
       // 3. 당월 만기 도래 채권
-      if (item.dueDate) {
-        const d = new Date(item.dueDate);
-        if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+      const dueDate = item.dueDate || item.due_date;
+      if (dueDate) {
+        const d = new Date(dueDate);
+        if (!isNaN(d.getTime()) && d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
           dueThisMonthKrw += soldKrw;
         }
       }
     }
 
     // 4. Dead Stock (본사 일반재고 또는 잉여재고 표시건)
-    if (item.owner === '본사 일반재고' || (item.memo && item.memo.includes('Dead Stock'))) {
+    const owner = String(item.owner || '');
+    const memo = String(item.memo || '');
+    if (owner.includes('본사') || memo.includes('Dead Stock') || memo.includes('이관')) {
       deadStockCount += 1;
       deadStockKrw += itemCostKrw;
     }
