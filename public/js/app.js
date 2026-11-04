@@ -15,9 +15,6 @@ import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modu
 import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 
-// ----------------------------------------------------
-// 0. 상태 변수 및 안전 렌더러/DB 헬퍼
-// ----------------------------------------------------
 let cachedItems = [];
 let rawFxRate = 1380.0;
 let appliedFxRate = 1380.0;
@@ -41,7 +38,6 @@ function getCachedItem(id) {
   return cachedItems.find(item => String(item.id) === String(id)) || null;
 }
 
-// Supabase 조회 래퍼 (최대 10,000건 전건 로드)
 async function fetchInventoryItems() {
   const client = (typeof supabase !== 'undefined' && supabase?.from)
     ? supabase
@@ -58,7 +54,6 @@ async function fetchInventoryItems() {
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  // DB 필드명(snake_case)을 화면 렌더러 규격(camelCase)으로 상호 안전 매핑
   return (data || []).map(r => ({
     id: r.id,
     maker: r.maker || '-',
@@ -117,7 +112,6 @@ async function fetchInventoryItems() {
   }));
 }
 
-// Supabase 단일 저장/수정 래퍼
 async function upsertInventoryItem(payload, id) {
   if (id) {
     const { data, error } = await supabase
@@ -139,7 +133,6 @@ async function upsertInventoryItem(payload, id) {
   }
 }
 
-// Supabase 삭제 래퍼
 async function deleteInventoryItem(id) {
   const { error } = await supabase
     .from('inventory_items')
@@ -149,77 +142,11 @@ async function deleteInventoryItem(id) {
   return true;
 }
 
-// Supabase 분할 래퍼
-async function splitInventoryShipment(targetId, splitQty, splitPrice, customer, rep, deadStockAction) {
-  const original = getCachedItem(targetId);
-  if (!original) throw new Error("원본 데이터를 찾을 수 없습니다.");
-  if (original.stock <= splitQty) throw new Error("분할 수량은 기존 재고보다 작아야 합니다.");
-
-  const remainQty = original.stock - splitQty;
-  const isTransferToHq = (deadStockAction === 'hq');
-  const remainOwner = isTransferToHq ? '본사 일반재고' : (original.owner || '본사 일반재고');
-  const remainMemo = isTransferToHq
-    ? (original.memo ? `${original.memo} [본사 이관 잔여재고]` : '[본사 이관 잔여재고]')
-    : (original.memo || '');
-  const remainArranged = Math.max(0, (Number(original.arranged_qty || original.arrangedQty) || 0) - splitQty);
-
-  const { error: updErr } = await supabase
-    .from('inventory_items')
-    .update({
-      stock: remainQty,
-      arranged_qty: remainArranged,
-      owner: remainOwner,
-      memo: remainMemo
-    })
-    .eq('id', targetId);
-  if (updErr) throw updErr;
-
-  const newPayload = {
-    maker: original.maker || '기타',
-    part_name: original.part_name || original.partName || '-',
-    date_code: original.date_code || original.dateCode || '-',
-    owner: rep || original.owner || '본사 일반재고',
-    customer: customer || original.customer || '-',
-    real_customer: customer || original.real_customer || original.realCustomer || '-',
-    po_no: original.po_no || original.poNo || '',
-    application: original.application || '',
-    biz_type: original.biz_type || original.bizType || 'DOMESTIC',
-    tax_date: null,
-    sold_price_usd: splitPrice || 0,
-    order_status: '출하준비',
-    payment_terms: original.payment_terms || original.paymentTerms || 'Net 30',
-    payment_status: '미수',
-    currency: original.currency || 'USD',
-    invoice_no: '',
-    tracking_no: '',
-    due_date: null,
-    shipped_date: null,
-    settled_date: null,
-    settled_fx: 0,
-    entry_date: original.entry_date || original.entryDate || new Date().toISOString().slice(0, 10),
-    memo: `[부분 출하 분할] 원 건 #${original.id}에서 ${splitQty}EA 분할`,
-    unit_usd: original.unit_usd !== undefined ? original.unit_usd : (original.unitUsd || 0),
-    ship_fx: original.ship_fx !== undefined ? original.ship_fx : (original.shipFx || 1350),
-    stock: splitQty,
-    arranged_qty: splitQty,
-    spq: original.spq || null,
-    margin: 20,
-    is_spa: Boolean(original.is_spa || original.isSpa),
-    approved_debit_usd: original.approved_debit_usd || original.approvedDebitUsd || 0
-  };
-
-  const { error } = await supabase.from('inventory_items').insert([newPayload]);
-  if (error) throw error;
-}
-
 function safeAddListener(id, event, handler) {
   const el = document.getElementById(id);
   if (el) el.addEventListener(event, handler);
 }
 
-// ----------------------------------------------------
-// 1. 초기 부트스트랩
-// ----------------------------------------------------
 export async function bootstrap() {
   const entryDateEl = document.getElementById('inputEntryDate');
   if (entryDateEl) entryDateEl.value = new Date().toISOString().slice(0, 10);
@@ -262,9 +189,6 @@ export async function bootstrap() {
   }
 }
 
-// ----------------------------------------------------
-// 2. 폼 서브탭 동적 제어 (1.수주/배정, 2.출하/물류, 3.계산서/정산)
-// ----------------------------------------------------
 function initDynamicFormTabs() {
   const formSection = document.getElementById('formSection');
   if (!formSection) return;
@@ -350,9 +274,6 @@ function initDynamicFormTabs() {
   switchTab('order');
 }
 
-// ----------------------------------------------------
-// 3. 탭 전환 및 가시성 제어
-// ----------------------------------------------------
 function bindTabSwitch() {
   const tabSales = document.getElementById('tabSales');
   const tabFulfillment = document.getElementById('tabFulfillment');
@@ -422,9 +343,6 @@ function updateFormVisibility(canEdit) {
   }
 }
 
-// ----------------------------------------------------
-// 4. 인벤토리 새로고침 및 검색 필터링 (WIZnet 등 전건)
-// ----------------------------------------------------
 function updateLineFilterCounts(items) {
   const lineFilter = document.getElementById('filterMaker') || document.getElementById('filterLine');
   if (!lineFilter) return;
@@ -514,12 +432,11 @@ function applyFilters() {
 
   let filtered = (cachedItems || []).slice();
 
-// 1. 키워드 통합 검색 (Part, Maker, Owner/Sales, Customer, D/C, Tracking, PO, Memo)
   if (q) {
     filtered = filtered.filter(item => {
       const part = String(item.partName || item.part_name || '').toLowerCase();
       const maker = String(item.maker || '').toLowerCase();
-      const owner = String(item.owner || '').toLowerCase(); // 👈 이 코드를 추가하거나 복구합니다.
+      const owner = String(item.owner || '').toLowerCase();
       const cust = String(item.customer || '').toLowerCase();
       const realCust = String(item.realCustomer || item.real_customer || '').toLowerCase();
       const dc = String(item.dateCode || item.date_code || '').toLowerCase();
@@ -529,7 +446,7 @@ function applyFilters() {
 
       return part.includes(q) ||
              maker.includes(q) ||
-             owner.includes(q) || // 이제 정상적으로 작동합니다.
+             owner.includes(q) ||
              cust.includes(q) ||
              realCust.includes(q) ||
              dc.includes(q) ||
@@ -539,7 +456,6 @@ function applyFilters() {
     });
   }
 
-  // 2. 라인(제조사) 필터 (대소문자 무시, ISSI/ICSI 분리, SMI 별칭, 기타 묶음)
   if (selectedLine && !['ALL', '전체', '라인 전체', ''].includes(selectedLine)) {
     const target = selectedLine.trim().toLowerCase();
     
@@ -555,7 +471,6 @@ function applyFilters() {
         return !definedMajorLines.includes(maker) && maker !== 'smi';
       });
     } else if (target === 'smi' || target.includes('silicon')) {
-      // SMI 및 Silicon Motion 상호 호환 매칭
       filtered = filtered.filter(item => {
         const maker = String(item.maker || '').trim().toLowerCase();
         return maker === 'smi' || maker.includes('silicon');
@@ -578,9 +493,6 @@ function applyFilters() {
     }
   }
 
-
-
-  // 3. 담당 Sales 필터 (대소문자 무시, 완전 일치 및 포함 비교)
   if (selectedSales && !['ALL', '전체', 'Sales 전체', '세일즈 전체', ''].includes(selectedSales)) {
     const targetSales = selectedSales.toLowerCase();
     filtered = filtered.filter(item => {
@@ -592,7 +504,6 @@ function applyFilters() {
     });
   }
 
-  // 4. 수금/상태 필터
   if (selectedStatus && !['ALL', '전체', '수금 전체', '상태 전체', ''].includes(selectedStatus)) {
     const targetStatus = selectedStatus.toLowerCase();
     filtered = filtered.filter(item => {
@@ -617,9 +528,6 @@ function applyFilters() {
   callRenderInventoryList(filtered);
 }
 
-// ----------------------------------------------------
-// 5. 폼 선택 및 바인딩
-// ----------------------------------------------------
 function setSelectValue(selectId, customInputId, val, customVal) {
   const sel = document.getElementById(selectId);
   const inp = document.getElementById(customInputId);
@@ -790,9 +698,6 @@ export function resetCurrentForm() {
   }
 }
 
-// ----------------------------------------------------
-// 6. 이벤트 리스너 바인딩 및 저장/삭제
-// ----------------------------------------------------
 function bindInputs() {
   ['inputUsd', 'inputStock', 'inputShipFx', 'inputOverhead', 'inputTargetOffer', 'inputApprovedDebit'].forEach(id => {
     safeAddListener(id, 'input', runEngine);
@@ -829,7 +734,6 @@ function bindInputs() {
       const spq = document.getElementById('pkgConfigSpq')?.value;
       const moq = document.getElementById('pkgConfigMoq')?.value;
       const memo = document.getElementById('pkgConfigMemo')?.value.trim();
-      // const owner removed (undefined item fix)
 
       try {
         await savePackagingStandard(maker, cs, spq, moq, memo);
@@ -863,7 +767,7 @@ function bindInputs() {
 
   bindCustomSelect('selectMaker', 'inputCustomMaker', '__CUSTOM_MAKER__');
   bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
-  // 검색 및 모든 필터 드롭다운 실시간 연동 리스너
+
   const filterElementIds = [
     'searchQuery', 'searchInput', 
     'filterLine', 'filterMaker', 'selectLine', 
@@ -1018,7 +922,7 @@ function bindCustomSelect(selectId, inputId, customVal) {
 }
 
 function bindModals() {
-    const landedCostForm = document.getElementById('landedCostForm');
+  const landedCostForm = document.getElementById('landedCostForm');
   if (landedCostForm) {
     landedCostForm.onsubmit = (e) => {
       e.preventDefault();
@@ -1076,17 +980,14 @@ function runEngine() {
     if (el) el.innerText = val;
   };
 
-  // 실적 원가 기준 렌더링
   setText('minSaleUnitActualUsd', `$${result.unitMinPriceActualUsd.toFixed(4)}`);
   setText('minSaleUnitActualKrw', `(₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()} / @${Math.round(shipFx).toLocaleString()})`);
   setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
-  // 대체 원가 기준 렌더링
   setText('minSaleUnitReplaceUsd', `$${result.unitMinPriceReplaceUsd.toFixed(4)}`);
   setText('minSaleUnitReplaceKrw', `(₩${Math.round(result.unitMinPriceReplaceKrw).toLocaleString()} / @${Math.round(appliedFxRate).toLocaleString()})`);
   setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
-  // 🎯 역마진 및 판정 뱃지 갱신 (이미지의 고객 희망단가 영역)
   const revMarginEl = document.getElementById('reverseMarginReplace') || document.getElementById('expectedMarginDisplay');
   const revBadgeEl = document.getElementById('reverseMarginBadge') || document.getElementById('marginResultBadge');
 
@@ -1115,7 +1016,6 @@ function runEngine() {
     }
   }
 
-  // 🎯 우측 수량별 티어표 렌더링
   renderTierTable(result.unitMinPriceReplaceUsd, result.unitMinPriceReplaceKrw, stock);
 }
 
@@ -1142,7 +1042,6 @@ function renderTierTable(unitUsd, unitKrw, currentQty) {
     </tr>
   `).join('');
 }
-
 
 async function saveCurrentForm() {
   if (!isCsOrAdminUser()) return;
@@ -1196,39 +1095,77 @@ async function saveCurrentForm() {
 
   try {
     const actionType = editingItemId ? 'UPDATE' : 'CREATE';
-    const savedItem = const actionType = editingItemId ? 'UPDATE' : 'CREATE';
     let changeDetails = '정보 수정';
+    
     if (editingItemId) {
       const orig = getCachedItem(editingItemId);
       if (orig) {
-        const labels = {maker:'제조사', part_name:'부품명', date_code:'D/C', owner:'담당Sales', customer:'고객사', real_customer:'실납품처', po_no:'PO번호', application:'적용처', biz_type:'거래구분', sold_price_usd:'판매단가($)', order_status:'상태', payment_terms:'결제조건', payment_status:'수금상태', invoice_no:'인보이스', tracking_no:'송장번호', shipped_date:'출하일', unit_usd:'매입단가($)', stock:'수량(EA)'};
+        const labels = {
+          maker: '제조사',
+          part_name: '부품명',
+          date_code: 'D/C',
+          owner: '담당Sales',
+          customer: '계약고객사',
+          real_customer: '실납품처',
+          po_no: 'PO번호',
+          application: '적용처',
+          biz_type: '거래구분',
+          tax_date: '계산서일',
+          sold_price_usd: '판매단가($)',
+          order_status: '진행상태',
+          payment_terms: '결제조건',
+          payment_status: '수금상태',
+          currency: '통화',
+          invoice_no: '인보이스',
+          tracking_no: '송장번호',
+          due_date: '수금만기일',
+          shipped_date: '출하일',
+          settled_date: '수금완료일',
+          settled_fx: '수금환율',
+          entry_date: '입고일',
+          memo: '비고',
+          unit_usd: '매입단가($)',
+          ship_fx: '선적환율',
+          stock: '수량(EA)',
+          spq: 'SPQ',
+          is_spa: 'SPA적용',
+          approved_debit_usd: 'SPA승인가($)'
+        };
+
         const diffs = [];
         for (const k of Object.keys(payload)) {
-          const oVal = String(orig[k] !== undefined ? orig[k] : (orig[k.replace(/_([a-z])/g, (_, g) => g.toUpperCase())] || ''));
-          const nVal = String(payload[k] || '');
-          if (oVal.trim() !== nVal.trim()) {
-            diffs.push(`${labels[k] || k}: [${oVal || '-'}] ➔ [${nVal || '-'}]`);
+          const camelKey = k.replace(/_([a-z])/g, (_, g) => g.toUpperCase());
+          const oVal = orig[k] !== undefined ? orig[k] : (orig[camelKey] !== undefined ? orig[camelKey] : '');
+          const nVal = payload[k];
+
+          const strO = (oVal === null || oVal === undefined) ? '' : String(oVal).trim();
+          const strN = (nVal === null || nVal === undefined) ? '' : String(nVal).trim();
+
+          if (strO !== strN) {
+            diffs.push(`${labels[k] || k}: [${strO || '-'}] ➔ [${strN || '-'}]`);
           }
         }
-        if (diffs.length > 0) changeDetails = diffs.join(', ');
+
+        if (diffs.length > 0) {
+          changeDetails = diffs.join(', ');
+        } else {
+          changeDetails = '변경된 필드 없음 (정보 갱신)';
+        }
       }
     } else {
-      changeDetails = `신규 등록 (수량: ${payload.stock}EA)`;
+      changeDetails = `신규 등록 (수량: ${payload.stock}EA, 단가: $${payload.unit_usd})`;
     }
 
     const saved = await upsertInventoryItem(payload, editingItemId);
     const tId = saved?.id || editingItemId;
-    if (tId) await recordAuditLog(tId, payload.part_name, actionType, changeDetails);
-    const targetId = savedItem?.id || editingItemId;
-    
-    if (targetId) {
-      await recordAuditLog(targetId, payload.part_name, actionType, `${actionType === 'CREATE' ? '신규 등록' : '정보 수정'} (수량: ${payload.stock}EA, 단가: $${payload.unit_usd})`);
+    if (tId) {
+      await recordAuditLog(tId, payload.part_name, actionType, changeDetails);
     }
 
     alert(`[${payload.part_name}] 데이터가 저장되었습니다.`);
     await refreshInventory();
   } catch (err) {
-    alert("저장 실패: " + err.message);
+    alert(" 저장 실패: " + err.message);
   }
 }
 
@@ -1260,7 +1197,6 @@ window.openTrackingModal = openTrackingModal;
 bootstrap();
 
 window.handleOpenSplitModal = handleOpenSplitModal;
-
 
 function handleOpenSplitModal(id) {
   if (!isCsOrAdminUser()) {
@@ -1309,4 +1245,3 @@ function handleOpenSplitModal(id) {
     alert(`[분할 모달 알림] 현재 ${part} (재고 ${stock} EA)의 분할 대상이 설정되었습니다.`);
   }
 }
-
