@@ -425,12 +425,67 @@ function updateFormVisibility(canEdit) {
 // ----------------------------------------------------
 // 4. 인벤토리 새로고침 및 검색 필터링 (WIZnet 등 전건)
 // ----------------------------------------------------
+function updateLineFilterCounts(items) {
+  const lineFilter = document.getElementById('filterMaker') || document.getElementById('filterLine');
+  if (!lineFilter) return;
+
+  const definedMajorLines = [
+    { key: 'SST', match: ['sst'], label: 'SST' },
+    { key: 'S.BELLING', match: ['s.belling', 'sbelling', 'belling'], label: 'S.BELLING' },
+    { key: 'ESMT', match: ['esmt'], label: 'ESMT' },
+    { key: 'ISSI', match: ['issi'], label: 'ISSI' },
+    { key: 'ICSI', match: ['icsi'], label: 'ICSI' },
+    { key: 'AMS', match: ['ams'], label: 'AMS' },
+    { key: 'Eon', match: ['eon'], label: 'Eon' },
+    { key: 'Giantec', match: ['giantec'], label: 'Giantec' },
+    { key: 'SMI', match: ['smi', 'silicon motion', 'silicon'], label: 'SMI (Silicon Motion)' },
+    { key: 'WIZnet', match: ['wiznet'], label: 'WIZnet' },
+    { key: 'AiT', match: ['ait'], label: 'AiT' },
+    { key: 'GigaDevice', match: ['gigadevice'], label: 'GigaDevice' },
+    { key: 'PLX', match: ['plx'], label: 'PLX' },
+    { key: 'BelFuse', match: ['belfuse', 'bel fuse'], label: 'BelFuse' },
+    { key: 'LUMISSIL', match: ['lumissil'], label: 'LUMISSIL' },
+    { key: 'IM', match: ['im', 'intelligent memory'], label: 'IM' },
+    { key: 'ETA', match: ['eta', 'eta-semi'], label: 'ETA' },
+    { key: 'XMOS', match: ['xmos'], label: 'XMOS' },
+    { key: 'LINKPP', match: ['linkpp', 'link-pp'], label: 'LINKPP' },
+    { key: 'Vineyard', match: ['vineyard'], label: 'Vineyard' },
+    { key: 'FMSH', match: ['fmsh'], label: 'FMSH' }
+  ];
+
+  const counts = {};
+  definedMajorLines.forEach(l => { counts[l.key] = 0; });
+  let othersCount = 0;
+
+  (items || []).forEach(it => {
+    const maker = String(it.maker || '').trim().toLowerCase();
+    let matched = false;
+    for (const l of definedMajorLines) {
+      if (l.match.some(m => maker === m || (m.length > 2 && maker.includes(m)))) {
+        counts[l.key] += 1;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) othersCount += 1;
+  });
+
+  const currentVal = lineFilter.value || 'ALL';
+  lineFilter.innerHTML = `
+    <option value="ALL">라인 전체 (${(items || []).length.toLocaleString()}건)</option>
+    ${definedMajorLines.map(l => `<option value="${l.key}">${l.label} (${(counts[l.key] || 0).toLocaleString()}건)</option>`).join('')}
+    <option value="OTHERS">기타 (OTHERS / 프로젝트, ${othersCount.toLocaleString()}건)</option>
+  `;
+  lineFilter.value = Array.from(lineFilter.options).some(o => o.value === currentVal) ? currentVal : 'ALL';
+}
+
 async function refreshInventory() {
   try {
     const items = await fetchInventoryItems();
     cachedItems = items || [];
     window.cachedItems = cachedItems;
 
+    updateLineFilterCounts(cachedItems);
     callRenderInventoryHeaders(activeTab);
 
     try {
@@ -962,18 +1017,23 @@ function bindCustomSelect(selectId, inputId, customVal) {
 }
 
 function bindModals() {
-  const landedCostForm = document.getElementById('landedCostForm');
+    const landedCostForm = document.getElementById('landedCostForm');
   if (landedCostForm) {
     landedCostForm.onsubmit = (e) => {
       e.preventDefault();
       const totalGoods = parseFloat(document.getElementById('lcTotalGoodsUsd')?.value) || 0;
-      const totalFreight = parseFloat(document.getElementById('lcFreightUsd')?.value) || 0;
+      const baseFreight = parseFloat(document.getElementById('lcFreightUsd')?.value) || 0;
       const totalCustomsKrw = parseFloat(document.getElementById('lcCustomsKrw')?.value) || 0;
+      
+      const courierType = document.getElementById('lcCourierType')?.value || 'dhl';
+      const fuelSurchargeRate = courierType === 'dhl' ? (parseFloat(document.getElementById('lcFuelSurcharge')?.value) || 0) / 100 : 0;
+      const effectiveFreight = baseFreight * (1 + fuelSurchargeRate);
+
       const shipFxEl = document.getElementById('inputShipFx');
       const fxRate = shipFxEl ? (parseFloat(shipFxEl.value) || 1350) : 1350;
 
       const totalCustomsUsd = totalCustomsKrw / fxRate;
-      const totalOverheadUsd = totalFreight + totalCustomsUsd;
+      const totalOverheadUsd = effectiveFreight + totalCustomsUsd;
       const calculatedOverheadRate = computeAllocatedOverheadRate(totalGoods, totalOverheadUsd);
 
       const overheadInput = document.getElementById('inputOverhead');
@@ -981,32 +1041,11 @@ function bindModals() {
 
       document.getElementById('landedCostModal')?.classList.add('hidden');
       runEngine();
-      alert(`[배부 완료] 부대비용 가산율 +${calculatedOverheadRate.toFixed(2)}%가 적용되었습니다.`);
+      
+      const surchargeInfo = courierType === 'dhl' ? ` (DHL 유류할증료 ${(fuelSurchargeRate*100).toFixed(1)}% 포함)` : '';
+      alert(`[배부 완료${surchargeInfo}] 부대비용 가산율 +${calculatedOverheadRate.toFixed(2)}%가 적용되었습니다.`);
     };
   }
-
-  const splitShipmentForm = document.getElementById('splitShipmentForm');
-  if (splitShipmentForm) {
-    splitShipmentForm.onsubmit = async (e) => {
-      e.preventDefault();
-      if (!isCsOrAdminUser()) return;
-      const qty = parseInt(document.getElementById('splitQtyInput')?.value) || 0;
-      const price = parseFloat(document.getElementById('splitPriceInput')?.value) || 0;
-      const cust = document.getElementById('splitCustomerInput')?.value.trim();
-      const rep = document.getElementById('splitRepInput')?.value;
-      const deadStockAction = document.getElementById('splitDeadStockSelect')?.value || 'maintain';
-
-      try {
-        await splitInventoryShipment(targetSplitId, qty, price, cust, rep, deadStockAction);
-        alert(`${qty.toLocaleString()}개가 분할 출하 등록되었습니다.`);
-        document.getElementById('splitShipmentModal')?.classList.add('hidden');
-        await refreshInventory();
-      } catch (err) {
-        alert("분할 실패: " + err.message);
-      }
-    };
-  }
-}
 
 function runEngine() {
   const unitUsd = parseFloat(document.getElementById('inputUsd')?.value) || 0;
