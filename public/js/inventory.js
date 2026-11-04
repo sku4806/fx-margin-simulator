@@ -445,3 +445,5 @@ function getStatusBadgeClass(status) {
     default: return 'bg-slate-100 text-slate-700';
   }
 }
+
+export const renderInventoryList = renderInventoryUI;

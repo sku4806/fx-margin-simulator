@@ -110,15 +110,7 @@ import { openTrackingModal } from './modules/courier.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
-import { 
-  fetchInventoryItems, 
-  upsertInventoryItem, 
-  splitInventoryShipment, 
-  deleteInventoryItem, 
-  filterItems, 
-  getCachedItem, 
-  renderInventoryUI 
-} from './inventory.js';
+import { renderInventoryUI as renderInventoryList, renderInventoryHeaders } from './inventory.js';
 
 let rawFxRate = 1380.0;
 let appliedFxRate = 1380.0;
@@ -746,7 +738,7 @@ function applyFilters() {
   } else if (window.renderInventoryList) {
     window.renderInventoryList(filtered);
   } else {
-    import('./inventory.js').then(m => m.renderInventoryList(filtered));
+    import('./inventory.js').then(m => (m.renderInventoryUI || m.renderInventoryList || m.default)(filtered));
   }
 }
 
