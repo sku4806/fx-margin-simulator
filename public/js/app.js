@@ -1,4 +1,14 @@
 import * as InventoryModule from './inventory.js';
+
+function callRenderInventoryHeaders(tab) {
+  const fn = InventoryModule.renderInventoryHeaders || InventoryModule.default?.renderInventoryHeaders;
+  if (typeof fn === 'function') fn(tab);
+}
+
+function callRenderInventoryList(items) {
+  const fn = InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default;
+  if (typeof fn === 'function') fn(items);
+}
 let cachedItems = [];
 
 // 🗂️ 폼 서브탭 동적 자동 빌더 (1.수주/배정, 2.출하/물류, 3.계산서/정산)
