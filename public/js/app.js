@@ -499,15 +499,44 @@ function applyFilters() {
              memo.includes(q);
     });
   }
-
-  // 2. 라인(제조사) 필터
+  // 2. 라인(제조사) 필터 (대소문자 무시, ISSI/ICSI 분리, 기타 묶음)
   if (selectedLine && !['ALL', '전체', '라인 전체', ''].includes(selectedLine)) {
-    const targetLine = selectedLine.toLowerCase();
-    filtered = filtered.filter(item => {
-      const maker = String(item.maker || '').toLowerCase();
-      return maker === targetLine || maker.includes(targetLine);
-    });
+    const target = selectedLine.trim().toLowerCase();
+    
+    // 주요 21개 개별 라인 목록 (소문자 기준)
+    const definedMajorLines = [
+      'sst', 's.belling', 'esmt', 'issi', 'icsi', 'ams', 'eon', 'giantec',
+      'smi', 'wiznet', 'ait', 'gigadevice', 'plx', 'belfuse', 'lumissil',
+      'im', 'eta', 'xmos', 'linkpp', 'vineyard', 'fmsh'
+    ];
+
+    if (target === 'others' || target.includes('기타')) {
+      // 기타(OTHERS) 선택 시: 주요 21개 라인에 속하지 않는 모든 잡자재/단건 라인 일괄 포함
+      filtered = filtered.filter(item => {
+        const maker = String(item.maker || '').trim().toLowerCase();
+        return !definedMajorLines.includes(maker);
+      });
+    } else if (target === 'issi') {
+      // ISSI는 ICSI와 엄격히 분리 (순수 ISSI만)
+      filtered = filtered.filter(item => {
+        const maker = String(item.maker || '').trim().toLowerCase();
+        return maker === 'issi';
+      });
+    } else if (target === 'icsi') {
+      // ICSI는 순수 ICSI만
+      filtered = filtered.filter(item => {
+        const maker = String(item.maker || '').trim().toLowerCase();
+        return maker === 'icsi';
+      });
+    } else {
+      // 그 외 라인: 대소문자 구분 없이 100% 매칭
+      filtered = filtered.filter(item => {
+        const maker = String(item.maker || '').trim().toLowerCase();
+        return maker === target;
+      });
+    }
   }
+
 
   // 3. 담당 Sales 필터 (대소문자 무시, 완전 일치 및 포함 비교)
   if (selectedSales && !['ALL', '전체', 'Sales 전체', '세일즈 전체', ''].includes(selectedSales)) {
