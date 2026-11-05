@@ -10,17 +10,46 @@ export function normalizeKindValue(val) {
   return 'DOMESTIC';
 }
 
+// 엑셀 일련번호(Serial Number: 예 37644) 및 문자열 날짜를 YYYY-MM-DD 규격으로 정밀 변환
+function parseExcelDate(val) {
+  if (!val) return new Date().toISOString().slice(0, 10);
+
+  // 1. 순수 엑셀 일련번호(정수 숫자 형태)인 경우
+  const num = Number(val);
+  if (!isNaN(num) && num > 10000 && num < 100000) {
+    // 엑셀 기준일(1899-12-30) -> Unix Epoch(1970-01-01) 차이 보정 (25,569일)
+    const utcDays = Math.round(num - 25569);
+    const date = new Date(utcDays * 86400 * 1000);
+    return date.toISOString().slice(0, 10);
+  }
+
+  // 2. 이미 Date 객체이거나 날짜 포맷 문자열인 경우
+  const str = String(val).trim();
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  // 3. 앞 10자리(YYYY-MM-DD) 잘라내기
+  if (str.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function handleExcelFileSelect(file) {
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
       const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
+      // cellDates: true 옵션으로 기본 날짜 파싱 활성화
+      const workbook = XLSX.read(data, { type: 'array', cellDates: true });
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
       const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-      // 유효한 부품 행만 필터링 (Grand Summaries, 빈 품번, NaN 행 완벽 제외)
+      // 유효한 부품 행만 필터링 (Grand Summaries 및 빈 품번 행 완벽 제외)
       const validRows = json.filter(r => {
         const part = String(r['PART#'] || r['Part Number'] || r['부품명'] || r['제품명'] || '').trim();
         const kind = String(r['KIND'] || r['구분'] || '').trim();
@@ -37,9 +66,8 @@ export function handleExcelFileSelect(file) {
         const rawPrice = r['원가'] !== undefined && r['원가'] !== '' ? r['원가'] : (r['매입단가'] || r['Unit Price'] || 0);
         const unitUsd = parseFloat(String(rawPrice).replace(/[$,]/g, '')) || 0;
 
-        const rawDate = r['입고일'] || r['선적일'] || r['Date'] || new Date().toISOString().slice(0, 10);
-        let entryDate = String(rawDate).trim();
-        if (entryDate.length > 10) entryDate = entryDate.slice(0, 10);
+        const rawDate = r['입고일'] || r['선적일'] || r['Date'];
+        const entryDate = parseExcelDate(rawDate);
 
         const sales = String(r['SALES'] || r['담당자'] || r['Owner'] || r['소유권'] || '본사 일반재고').trim();
         const customer = String(r['CNAME'] || r['고객사'] || r['Customer'] || '-').trim();
