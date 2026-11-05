@@ -911,5 +911,91 @@
   </div>
 
   <script type="module" src="/js/app.js"></script>
+
+  <!-- 우측 플로팅 상세/수정 드로어 (기존 테이블 레이아웃 방해 없음) -->
+  <div id="itemDetailDrawer" class="fixed inset-y-0 right-0 z-50 w-[450px] bg-white shadow-2xl border-l border-slate-200 transform translate-x-full transition-transform duration-200 ease-in-out flex flex-col">
+    <div class="p-4 bg-slate-900 text-white flex items-center justify-between shadow-md">
+      <div>
+        <h3 class="text-sm font-bold tracking-tight flex items-center gap-2">
+          <span>📦 부품 상세 및 수정</span>
+          <span id="drawerBadge" class="text-[10px] bg-indigo-600 px-2 py-0.5 rounded-full font-mono">EDIT</span>
+        </h3>
+        <p id="drawerSubTitle" class="text-[11px] text-slate-400 mt-0.5 font-mono truncate max-w-[320px]">PART NO</p>
+      </div>
+      <button type="button" onclick="window.closeItemDrawer && window.closeItemDrawer()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    
+    <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+      <input type="hidden" id="drawerItemId">
+
+      <div class="bg-indigo-50/60 p-3 rounded-lg border border-indigo-100 flex items-center justify-between">
+        <div>
+          <span class="text-[10px] text-indigo-500 font-bold block">PART NUMBER</span>
+          <span id="drawerPartDisplay" class="font-bold text-slate-800 text-sm font-mono">-</span>
+        </div>
+        <div class="text-right">
+          <span class="text-[10px] text-indigo-500 font-bold block">제조사 (MFG)</span>
+          <span id="drawerMfgDisplay" class="font-bold text-slate-700 text-xs">-</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-slate-600 font-bold mb-1">재고 수량 (EA)</label>
+          <input type="number" id="drawerStock" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold bg-slate-50 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-slate-600 font-bold mb-1">배정 수량 (EA)</label>
+          <input type="number" id="drawerArranged" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold bg-slate-50 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-slate-600 font-bold mb-1">매입단가 ($)</label>
+          <input type="number" step="0.0001" id="drawerUnitUsd" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold text-rose-600 bg-slate-50 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-slate-600 font-bold mb-1">선적환율 (₩)</label>
+          <input type="number" id="drawerShipFx" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-slate-600 font-bold mb-1">판매단가 ($)</label>
+          <input type="number" step="0.0001" id="drawerSoldPrice" class="w-full p-2 border border-slate-300 rounded-lg font-mono text-indigo-600 bg-slate-50 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-slate-600 font-bold mb-1">담당 영업 (Sales)</label>
+          <input type="text" id="drawerSales" class="w-full p-2 border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-slate-600 font-bold mb-1">PONO</label>
+          <input type="text" id="drawerPono" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-slate-600 font-bold mb-1">계약처 / 고객사</label>
+          <input type="text" id="drawerCustomer" class="w-full p-2 border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-slate-600 font-bold mb-1">비고 / 메모</label>
+        <textarea id="drawerMemo" rows="3" class="w-full p-2 border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-none resize-none"></textarea>
+      </div>
+    </div>
+
+    <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
+      <button type="button" onclick="window.closeItemDrawer && window.closeItemDrawer()" class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 font-bold hover:bg-slate-100 transition-colors">닫기</button>
+      <button type="button" id="drawerSaveBtn" onclick="window.saveDrawerItem && window.saveDrawerItem()" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow transition-colors">변경사항 저장</button>
+    </div>
+  </div>
+
 </body>
 </html>
