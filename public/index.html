@@ -572,8 +572,8 @@
               <option value="완료">수금완료</option>
             </select>
 
-        <!-- 출하일자 기간 검색 필터 (수금 전체 드롭다운 우측 배치) -->
-        <div id="shippedDateFilterWrapper" class="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs shrink-0 shadow-sm">
+        <!-- 출하일자 기간 검색 필터 -->
+        <div id="shippedDateFilterWrapper" class="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs shrink-0">
           <span class="text-slate-600 font-bold whitespace-nowrap text-[11px]">🚚 출하일:</span>
           <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
           <span class="text-slate-400">~</span>
@@ -581,8 +581,18 @@
           <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-200 rounded text-[10px]">✕</button>
         </div>
 
+        <!-- 출하일자 기간 검색 필터 -->
+        <div id="shippedDateFilterWrapper" class="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs">
+          <span class="text-slate-500 font-bold whitespace-nowrap text-[11px]">🚚 출하일:</span>
+          <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
+          <span class="text-slate-400">~</span>
+          <input type="date" id="filterShipDateEnd" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
+          <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-200 rounded text-[10px]">✕</button>
+        </div>
 
-        
+            <input type="hidden" id="filterStatus" value="">
+          </div>
+        </div>
 
         <div class="flex justify-between items-center text-[10px] sm:text-[11px] text-slate-500 px-1">
           <span>※ 카드를 터치하면 상세 정보 확인 가능</span>
