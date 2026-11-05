@@ -31,6 +31,38 @@ window.openItemDrawer = function(item) {
   setEl('drawerCustomer', item.customer || '');
   setEl('drawerMemo', item.memo || '');
 
+  
+  // 권한 검사 (CS 및 관리자만 수정 가능, 일반 Sales는 읽기 전용)
+  const canEdit = (typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false;
+  const saveBtn = document.getElementById('drawerSaveBtn');
+  const badge = document.getElementById('drawerBadge');
+
+  if (badge) {
+    badge.innerText = canEdit ? 'EDIT' : 'READ ONLY';
+    badge.className = canEdit ? 'text-[10px] bg-indigo-600 px-2 py-0.5 rounded-full font-mono' : 'text-[10px] bg-slate-600 px-2 py-0.5 rounded-full font-mono';
+  }
+
+  if (saveBtn) {
+    if (canEdit) {
+      saveBtn.classList.remove('hidden');
+    } else {
+      saveBtn.classList.add('hidden');
+    }
+  }
+
+  // 드로어 내부의 모든 input, select, textarea 비활성화/활성화 제어
+  drawer.querySelectorAll('input:not(#drawerTrackingNo), select, textarea').forEach(el => {
+    if (el.id === 'drawerItemId') return;
+    el.disabled = !canEdit;
+    if (!canEdit) {
+      el.classList.add('bg-slate-100', 'cursor-not-allowed', 'text-slate-500');
+      el.classList.remove('bg-slate-50', 'bg-white');
+    } else {
+      el.classList.remove('bg-slate-100', 'cursor-not-allowed', 'text-slate-500');
+      el.classList.add('bg-slate-50');
+    }
+  });
+
   drawer.classList.remove('translate-x-full');
   drawer.style.transform = 'translateX(0)';
 };
@@ -117,7 +149,7 @@ function callRenderInventoryHeaders(tab) {
 function callRenderInventoryList(items) {
   const fn = InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default;
   if (typeof fn === 'function') {
-    fn(items, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, isCsOrAdminUser());
+    fn(items, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, (typeof isCsOrAdminUser === 'function' ? isCsOrAdminUser() : false));
   }
 }
 
@@ -1578,6 +1610,10 @@ window.closeItemDrawer = function() {
 };
 
 window.saveDrawerItem = async function() {
+  if (typeof isCsOrAdminUser === 'function' && !isCsOrAdminUser()) {
+    alert("수주 및 출하 관리 데이터 수정 권한이 없습니다. (CS/관리자 전용 기능)");
+    return;
+  }
   const id = document.getElementById('drawerItemId')?.value;
   if (!id) return;
   const btn = document.getElementById('drawerSaveBtn');
