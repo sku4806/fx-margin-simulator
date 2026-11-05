@@ -190,8 +190,8 @@ export function renderInventoryHeaders(activeTab) {
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">SALES</th>
         <th class="py-2.5 px-2 text-left w-[20%]">PART# / MFG</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">재고량 / 배정</th>
-        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">원가 / 가용</th>
-        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">AMOUNT</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">원가(₩) / 가용</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">AMOUNT(₩)</th>
         <th class="py-2.5 px-2 text-left w-[21%]">PONO</th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">수금</th>
       </tr>
@@ -203,7 +203,7 @@ export function renderInventoryHeaders(activeTab) {
         <th class="py-2.5 px-2 text-left w-[13%]">계약처</th>
         <th class="py-2.5 px-2 text-left w-[17%]">PART NO / MFG</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[8%]">수량 / 배정</th>
-        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">판매·원가 / 가용</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">판매·원가(₩) / 가용</th>
         <th class="py-2.5 px-2 text-left whitespace-nowrap w-[10%]">입고 / 출고일</th>
         <th class="py-2.5 px-2 text-left w-[17%]">PO / 송장(B/L)</th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">수금</th>
@@ -255,7 +255,8 @@ function generateLegacyMasterRow(item) {
         <div class="text-[10px] text-amber-700 font-semibold mt-0.5">배정: ${arrangedQty.toLocaleString()}</div>
       </td>
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
-        <div class="text-slate-700 font-semibold">$${unitUsd.toLocaleString(undefined, { minimumFractionDigits: unitUsd >= 10 ? 2 : 3, maximumFractionDigits: 3 })}</div>
+        <div class="text-slate-900 font-bold">₩${Math.round(unitUsd * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString()}</div>
+        <div class="text-[10px] text-slate-500 font-mono mt-0.5">($${unitUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })})</div>
         <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">가용: ${notArranQty.toLocaleString()}</div>
       </td>
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
@@ -386,7 +387,10 @@ function updateGrandSummaries(items) {
   if (elStock) elStock.innerText = totalStock.toLocaleString();
   if (elArranged) elArranged.innerText = totalArranged.toLocaleString();
   if (elAvailable) elAvailable.innerText = totalAvailable.toLocaleString();
-  if (elAmount) elAmount.innerText = '$' + totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (elAmount) {
+    const totalAmountKrw = Math.round(totalAmount * 1350);
+    elAmount.innerText = `₩${totalAmountKrw.toLocaleString()} ($${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+  }
 }
 
 export function renderInventoryUI(items, activeTab, onEdit, onDelete, onSplit, canEdit) {
