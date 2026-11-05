@@ -915,7 +915,7 @@
   <!-- 우측 플로팅 상세/수정 드로어 (기존 테이블 레이아웃 방해 없음) -->
   
   <!-- 우측 플로팅 상세/수정 드로어 (3단 서브탭 통합 관리) -->
-  <div id="itemDetailDrawer" class="fixed inset-y-0 right-0 z-50 w-[480px] bg-white shadow-2xl border-l border-slate-200 transform translate-x-full transition-transform duration-200 ease-in-out flex flex-col">
+  <div id="itemDetailDrawer" class="fixed inset-y-0 right-0 z-50 w-full sm:w-[480px] max-w-full bg-white shadow-2xl border-l border-slate-200 transform translate-x-full transition-transform duration-200 ease-in-out flex flex-col">
     <!-- 헤더 -->
     <div class="p-3.5 bg-slate-900 text-white flex items-center justify-between shadow-md shrink-0">
       <div>
@@ -961,7 +961,7 @@
 
       <!-- [탭 1] 1. 수주 및 배정 등록 -->
       <div id="drawerTabContent1" class="space-y-3">
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">제조사 (MFG)</label>
             <input type="text" id="drawerMaker" class="w-full p-2 border border-slate-300 rounded-lg bg-slate-50 focus:bg-white outline-none">
@@ -972,7 +972,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">총 재고 수량 (EA)</label>
             <input type="number" id="drawerStock" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-black text-slate-900 bg-slate-50 focus:bg-white outline-none">
@@ -983,7 +983,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">매입단가 ($)</label>
             <input type="number" step="0.00000001" id="drawerUnitUsd" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold text-rose-600 bg-slate-50 focus:bg-white outline-none">
@@ -994,7 +994,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">실판매단가 ($)</label>
             <input type="number" step="0.0001" id="drawerSoldPrice" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold text-indigo-700 bg-slate-50 focus:bg-white outline-none">
@@ -1005,7 +1005,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">계약처 / 고객사</label>
             <input type="text" id="drawerCustomer" class="w-full p-2 border border-slate-300 rounded-lg font-semibold bg-slate-50 focus:bg-white outline-none">
@@ -1016,7 +1016,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">발주번호 (PONO)</label>
             <input type="text" id="drawerPono" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white outline-none">
@@ -1030,7 +1030,7 @@
 
       <!-- [탭 2] 2. 출하 및 물류 관리 -->
       <div id="drawerTabContent2" class="space-y-3 hidden">
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">진행 상태 (Status)</label>
             <select id="drawerOrderStatus" class="w-full p-2 border border-slate-300 rounded-lg bg-slate-50 focus:bg-white outline-none font-bold">
@@ -1053,7 +1053,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">실물 출하일</label>
             <input type="date" id="drawerShippedDate" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white outline-none">
@@ -1080,7 +1080,7 @@
 
       <!-- [탭 3] 3. 세금계산서 및 수금 정산 -->
       <div id="drawerTabContent3" class="space-y-3 hidden">
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">수금 상태</label>
             <select id="drawerPaymentStatus" class="w-full p-2 border border-slate-300 rounded-lg bg-slate-50 focus:bg-white outline-none font-bold">
@@ -1094,7 +1094,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">계산서 발행일 (TAXDT)</label>
             <input type="date" id="drawerTaxDate" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white outline-none">
@@ -1105,7 +1105,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">수금 완료일 (Settled Date)</label>
             <input type="date" id="drawerSettledDate" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white outline-none">
