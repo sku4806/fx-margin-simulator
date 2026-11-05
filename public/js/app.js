@@ -695,7 +695,7 @@ function loadFormFromItem(id) {
     return;
   }
 
-  // 2) 출하/채권 관리 탭: 화면 스크롤 점프 없이 우측 플로팅 드로어 오픈
+  // 2) 수주 및 출하 관리 탭: 화면 스크롤 점프 없이 우측 플로팅 드로어 오픈
   if (typeof window.openItemDrawer === 'function') {
     window.openItemDrawer(item);
     return;
