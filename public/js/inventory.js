@@ -218,7 +218,8 @@ export function renderInventoryHeaders(activeTab) {
 function generateLegacyMasterRow(item) {
   const stock = Number(item.stock) || 0;
   const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
-  const amount = stock * unitUsd;
+  const rawAmountKrw = Number(item.raw_amount ?? item.rawAmount) || 0;
+  const amount = rawAmountKrw > 0 ? (rawAmountKrw / shipFx) : (stock * unitUsd);
   const shipFx = Number(item.shipFx ?? item.ship_fx) || 1350;
   const amountKrw = Math.round(amount * shipFx);
 

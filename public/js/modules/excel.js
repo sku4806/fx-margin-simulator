@@ -88,7 +88,9 @@ export function handleExcelFileSelect(file) {
         const isDomestic = (bizType === 'DOMESTIC');
 
         // 3. 매입단가(unit_usd) - 원화 감지 시 환율(1,350) 자동 환산
-        const unitUsd = resolveUnitPrice(
+        // 원본 엑셀 AMOUNT 열 값 정밀 추출
+          const rawAmountVal = parseFloat(String(row['AMOUNT'] ?? row['amount'] ?? row['금액'] ?? '').replace(/[^0-9.-]/g, '')) || 0;
+          const unitUsd = resolveUnitPrice(
           r['US_NETUP'],
           (r['원가'] !== undefined && r['원가'] !== '') ? r['원가'] : (r['NET_UP'] || r['NETUP'] || r['매입단가'] || r['Unit Price']),
           isDomestic,
@@ -134,6 +136,7 @@ export function handleExcelFileSelect(file) {
           settled_date: r['PAYDT'] ? parseExcelDate(r['PAYDT']) : null,
           stock: stock,
           unit_usd: unitUsd,
+            raw_amount: rawAmountVal > 0 ? rawAmountVal : null,
           sold_price_usd: soldPriceUsd,
           ship_fx: 1350,
           margin: 20,
