@@ -4,38 +4,54 @@ let parsedRows = [];
 
 export function normalizeKindValue(val) {
   const s = String(val || '').trim();
-  if (s.includes('외자') || /import/i.test(s)) return 'IMPORT';
-  if (s.includes('비정식') || /informal/i.test(s)) return 'INFORMAL';
+  if (s.includes('외자') || /import/i.test(s) || /overseas/i.test(s)) return 'IMPORT';
+  if (s.includes('비정식') || /informal/i.test(s) || s.includes('반납') || s.includes('불용')) return 'INFORMAL';
   if (s.includes('분할') || /split/i.test(s)) return 'SPLIT';
   return 'DOMESTIC';
 }
 
-// 엑셀 일련번호(Serial Number: 예 37644) 및 문자열 날짜를 YYYY-MM-DD 규격으로 정밀 변환
+// 엑셀 일련번호(25,569일 보정) 및 문자열 날짜를 YYYY-MM-DD 규격으로 정밀 변환
 function parseExcelDate(val) {
   if (!val) return new Date().toISOString().slice(0, 10);
 
-  // 1. 순수 엑셀 일련번호(정수 숫자 형태)인 경우
   const num = Number(val);
   if (!isNaN(num) && num > 10000 && num < 100000) {
-    // 엑셀 기준일(1899-12-30) -> Unix Epoch(1970-01-01) 차이 보정 (25,569일)
     const utcDays = Math.round(num - 25569);
     const date = new Date(utcDays * 86400 * 1000);
     return date.toISOString().slice(0, 10);
   }
 
-  // 2. 이미 Date 객체이거나 날짜 포맷 문자열인 경우
   const str = String(val).trim();
+  if (str.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+
   const d = new Date(str);
   if (!isNaN(d.getTime())) {
     return d.toISOString().slice(0, 10);
   }
 
-  // 3. 앞 10자리(YYYY-MM-DD) 잘라내기
-  if (str.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(str)) {
-    return str.slice(0, 10);
+  return new Date().toISOString().slice(0, 10);
+}
+
+// 원화(KRW) 감지 시 적용 환율(기본 1,350)로 자동 달러 환산
+function resolveUnitPrice(usdVal, rawVal, isDomestic, shipFx = 1350) {
+  if (usdVal !== undefined && usdVal !== null && usdVal !== '') {
+    const parsedUsd = parseFloat(String(usdVal).replace(/[$,]/g, ''));
+    if (!isNaN(parsedUsd) && parsedUsd > 0) return Number(parsedUsd.toFixed(4));
   }
 
-  return new Date().toISOString().slice(0, 10);
+  if (rawVal !== undefined && rawVal !== null && rawVal !== '') {
+    const parsedRaw = parseFloat(String(rawVal).replace(/[₩$,]/g, ''));
+    if (!isNaN(parsedRaw) && parsedRaw > 0) {
+      if (parsedRaw >= 100 || isDomestic) {
+        return Number((parsedRaw / shipFx).toFixed(4));
+      }
+      return Number(parsedRaw.toFixed(4));
+    }
+  }
+
+  return 0;
 }
 
 export function handleExcelFileSelect(file) {
@@ -43,55 +59,87 @@ export function handleExcelFileSelect(file) {
   reader.onload = function(e) {
     try {
       const data = new Uint8Array(e.target.result);
-      // cellDates: true 옵션으로 기본 날짜 파싱 활성화
       const workbook = XLSX.read(data, { type: 'array', cellDates: true });
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
       const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-      // 유효한 부품 행만 필터링 (Grand Summaries 및 빈 품번 행 완벽 제외)
+      // 유효한 부품 행 필터링 (Grand Summaries 및 빈 행 완전 배제)
       const validRows = json.filter(r => {
-        const part = String(r['PART#'] || r['Part Number'] || r['부품명'] || r['제품명'] || '').trim();
-        const kind = String(r['KIND'] || r['구분'] || '').trim();
-        if (!part || part === '-' || part.toLowerCase().includes('grand summar') || kind.toLowerCase().includes('grand summar')) {
+        const part = String(
+          r['PART#'] || r['PARTNO'] || r['Part Number'] || r['부품명'] || r['제품명'] || ''
+        ).trim();
+        const kind = String(r['KIND'] || r['BIZ_TYPE'] || r['구분'] || '').trim();
+        if (!part || part === '-' || /grand summar/i.test(part) || /grand summar/i.test(kind)) {
           return false;
         }
         return true;
       });
 
       parsedRows = validRows.map(r => {
-        const rawStock = r['재고량'] !== undefined && r['재고량'] !== '' ? r['재고량'] : (r['수량'] || r['QTY'] || 0);
+        // 1. 수량 매핑 (3대 양식 호환)
+        const rawStock = (r['재고량'] !== undefined && r['재고량'] !== '') ? r['재고량'] :
+                         (r['수량'] || r['SHIPQTY'] || r['SHIP_QTY'] || r['QTY'] || 0);
         const stock = parseInt(String(rawStock).replace(/,/g, '')) || 0;
 
-        const rawPrice = r['원가'] !== undefined && r['원가'] !== '' ? r['원가'] : (r['매입단가'] || r['Unit Price'] || 0);
-        const unitUsd = parseFloat(String(rawPrice).replace(/[$,]/g, '')) || 0;
+        // 2. 구분 (KIND / BIZ_TYPE)
+        const rawKind = r['KIND'] || r['BIZ_TYPE'] || r['구분'] || '내자입고';
+        const bizType = normalizeKindValue(rawKind);
+        const isDomestic = (bizType === 'DOMESTIC');
 
-        const rawDate = r['입고일'] || r['선적일'] || r['Date'];
+        // 3. 매입단가(unit_usd) - 원화 감지 시 환율(1,350) 자동 환산
+        const unitUsd = resolveUnitPrice(
+          r['US_NETUP'],
+          (r['원가'] !== undefined && r['원가'] !== '') ? r['원가'] : (r['NET_UP'] || r['NETUP'] || r['매입단가'] || r['Unit Price']),
+          isDomestic,
+          1350
+        );
+
+        // 4. 협의 실판매단가(sold_price_usd) 복원
+        const soldPriceUsd = resolveUnitPrice(
+          r['US_SLUP'],
+          r['SLUP'] || r['실판매단가'] || r['실판매가'],
+          isDomestic,
+          1350
+        );
+
+        // 5. 날짜 매핑 (입고일 / 출하일)
+        const rawDate = r['입고일'] || r['선적일'] || r['SHIPDT'] || r['SHIP_DATE'] || r['Date'];
         const entryDate = parseExcelDate(rawDate);
 
-        const sales = String(r['SALES'] || r['담당자'] || r['Owner'] || r['소유권'] || '본사 일반재고').trim();
-        const customer = String(r['CNAME'] || r['고객사'] || r['Customer'] || '-').trim();
+        // 6. 거래처 및 발주번호
+        const customer = String(r['CNAME'] || r['CUSTOMER'] || r['고객사'] || r['Customer'] || '-').trim();
+        const realCustomer = String(r['REALCUST'] || r['실납품처'] || customer || '-').trim();
         const poNo = String(r['PONO'] || r['발주번호'] || r['PO'] || '').trim();
-        const memo = String(r['REMARK'] || r['비고'] || r['Memo'] || '').trim();
-        const rawKind = r['KIND'] || r['구분'] || r['입고구분'] || '내자입고';
+        const sales = String(r['SALES'] || r['담당자'] || r['Owner'] || r['소유권'] || '본사 일반재고').trim();
+        const memo = String(r['REMARK'] || r['비고'] || r['Memo'] || (r['SUPPLY'] ? `공급처: ${r['SUPPLY']}` : '')).trim();
+        const app = String(r['APP'] || r['적용처'] || r['프로젝트'] || '').trim();
+
+        const isShipped = Boolean(r['SHIPDT'] || r['SHIP_DATE']);
 
         return {
           maker: String(r['MFG'] || r['Maker'] || r['제조사'] || '기타').trim(),
-          part_name: String(r['PART#'] || r['Part Number'] || r['부품명'] || r['제품명'] || '').trim(),
+          part_name: String(r['PART#'] || r['PARTNO'] || r['Part Number'] || r['부품명'] || r['제품명'] || '').trim(),
           date_code: String(r['D/C'] || r['DateCode'] || '-').trim(),
-          owner: sales && sales !== '-' ? sales : '본사 일반재고',
+          owner: (sales && sales !== '-') ? sales : '본사 일반재고',
           customer: customer || '-',
-          real_customer: customer || '-',
+          real_customer: realCustomer || '-',
           po_no: poNo,
-          biz_type: normalizeKindValue(rawKind),
+          application: app,
+          biz_type: bizType,
           entry_date: entryDate,
+          shipped_date: isShipped ? entryDate : null,
+          tax_date: r['TAXDT'] ? parseExcelDate(r['TAXDT']) : null,
+          due_date: r['PayDueDT'] ? parseExcelDate(r['PayDueDT']) : null,
+          settled_date: r['PAYDT'] ? parseExcelDate(r['PAYDT']) : null,
           stock: stock,
           unit_usd: unitUsd,
+          sold_price_usd: soldPriceUsd,
           ship_fx: 1350,
           margin: 20,
-          order_status: '배정요청',
+          order_status: isShipped ? '출하완료' : '배정요청',
           payment_terms: 'Net 30',
-          payment_status: '미수',
+          payment_status: (r['PAYDT'] || r['PAY'] === '완료' || r['PAY'] === '수금') ? '완료' : '미수',
           currency: 'USD',
           memo: memo
         };
@@ -127,7 +175,7 @@ function renderPreviewTable(rows) {
       <td class="py-2 px-2 font-bold text-slate-800 whitespace-nowrap">${r.maker}</td>
       <td class="py-2 px-2 font-black text-indigo-950">${r.part_name}</td>
       <td class="py-2 px-2 text-right font-black text-slate-900 whitespace-nowrap">${r.stock.toLocaleString()} EA</td>
-      <td class="py-2 px-2 text-right font-semibold text-slate-700 whitespace-nowrap">$${r.unit_usd.toFixed(3)}</td>
+      <td class="py-2 px-2 text-right font-semibold text-slate-700 whitespace-nowrap" title="실제 매입단가">$${r.unit_usd.toFixed(4)}</td>
       <td class="py-2 px-2 text-slate-600 font-mono text-[10px] whitespace-nowrap">${r.entry_date}</td>
       <td class="py-2 px-2 text-indigo-800 font-bold whitespace-nowrap">${r.owner}</td>
       <td class="py-2 px-2 text-slate-700 truncate max-w-[120px]" title="${r.customer}">${r.customer}</td>
