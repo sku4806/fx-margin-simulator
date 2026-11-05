@@ -217,6 +217,8 @@ function generateLegacyMasterRow(item) {
   const stock = Number(item.stock) || 0;
   const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
   const amount = stock * unitUsd;
+  const shipFx = Number(item.shipFx ?? item.ship_fx) || 1350;
+  const amountKrw = Math.round(amount * shipFx);
 
   const isAssigned = (item.orderStatus === '배정완료' || item.orderStatus === '배정요청' || (item.customer && item.customer !== '-'));
   const arrangedQty = isAssigned ? (Number(item.arrangedQty ?? item.arranged_qty) || stock) : 0;
@@ -257,7 +259,8 @@ function generateLegacyMasterRow(item) {
         <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">가용: ${notArranQty.toLocaleString()}</div>
       </td>
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
-        <div class="font-bold text-rose-600 text-xs">$${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+        <div class="font-bold text-rose-600 text-xs">$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        <div class="text-[10px] text-slate-400 font-mono mt-0.5">(₩${amountKrw.toLocaleString()})</div>
       </td>
       <td class="py-2.5 px-2 text-slate-500 font-mono text-[10px] align-middle truncate max-w-[220px]" title="${pono}">
         <div>PO: ${pono}</div>
