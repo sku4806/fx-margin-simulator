@@ -253,16 +253,20 @@ function generateLegacyMasterRow(item) {
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">MFG: <span class="font-bold text-slate-700">${mfg}</span></div>
       </td>
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
-        <div class="font-black text-slate-900">${stock.toLocaleString()} EA</div>
-        <div class="text-[10px] text-amber-700 font-semibold mt-0.5">배정: ${arrangedQty.toLocaleString()}</div>
-      </td>
-      <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
-        <div class="text-slate-900 font-bold">₩${Math.round(unitUsd * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString()}</div>
-        <div class="text-[10px] text-slate-500 font-mono mt-0.5">($${unitUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })})</div>
+        <div class="text-slate-900 font-bold">
+          ₩${window.isPrecisionMode 
+            ? (unitUsd * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
+            : Math.round(unitUsd * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString()}
+        </div>
+        <div class="text-[10px] text-slate-500 font-mono mt-0.5">($${unitUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: window.isPrecisionMode ? 4 : 3 })})</div>
         <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">가용: ${notArranQty.toLocaleString()}</div>
       </td>
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
-        <div class="font-bold text-rose-600 text-xs">₩${window.isPrecisionMode ? (amount * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(amount * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString()}</div>
+        <div class="font-bold text-rose-600 text-xs">
+          ₩${window.isPrecisionMode 
+            ? (amount * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
+            : Math.round(amount * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString()}
+        </div>
         <div class="text-[10px] text-slate-400 font-mono mt-0.5">($${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: window.isPrecisionMode ? 4 : 2 })})</div>
       </td>
       <td class="py-2.5 px-2 text-slate-500 font-mono text-[10px] align-middle truncate max-w-[220px]" title="${pono}">
@@ -483,7 +487,11 @@ export const renderInventoryList = renderInventoryUI;
 
 window.togglePrecisionMode = function(checked) {
   window.isPrecisionMode = !!checked;
-  if (lastRenderArgs) {
+  if (typeof window.loadAndRenderInventory === 'function') {
+    window.loadAndRenderInventory();
+  } else if (typeof window.renderFilteredInventory === 'function') {
+    window.renderFilteredInventory();
+  } else if (typeof lastRenderArgs !== 'undefined' && lastRenderArgs) {
     renderInventoryUI(lastRenderArgs.items, lastRenderArgs.activeTab, lastRenderArgs.onEdit, lastRenderArgs.onDelete, lastRenderArgs.onSplit, lastRenderArgs.canEdit);
   }
 };
