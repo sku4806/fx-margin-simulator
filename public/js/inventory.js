@@ -204,7 +204,7 @@ export function renderInventoryHeaders(activeTab) {
         <th class="py-2.5 px-2 text-left w-[17%]">PART NO / MFG</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[8%]">수량 / 배정</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[8%]">단가 / 가용</th>
-        <th class="py-2.5 px-2 text-left whitespace-nowrap w-[10%]">출하 / 계산서</th>
+        <th class="py-2.5 px-2 text-left whitespace-nowrap w-[10%]">입고 / 출고일</th>
         <th class="py-2.5 px-2 text-left w-[17%]">PO / 송장(B/L)</th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">수금</th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[13%]">관리</th>
@@ -271,7 +271,11 @@ function generateLegacyMasterRow(item) {
   `;
 }
 
-function generateFulfillmentRow(item, canEdit) {
+function generateFulfillmentRow(item) {
+  const rawDate = item.entryDate || item.entry_date || '-';
+  const entryDate = rawDate.length >= 10 ? rawDate.slice(2, 10) : rawDate;
+  const rawShipDate = item.shippedDate || item.shipped_date || '-';
+  const shippedDate = (rawShipDate && rawShipDate !== '-') ? (rawShipDate.length >= 10 ? rawShipDate.slice(2, 10) : rawShipDate) : '-';
   const stock = Number(item.stock) || 0;
   const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
   const soldPrice = Number(item.soldPriceUsd ?? item.sold_price_usd) || 0;
@@ -316,9 +320,11 @@ function generateFulfillmentRow(item, canEdit) {
         <div class="font-black text-indigo-700">${soldPrice > 0 ? '$' + soldPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '$-'}</div>
         <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">가용:${notArranQty.toLocaleString()}</div>
       </td>
-      <td class="py-2.5 px-2 text-[10px] text-slate-600 align-middle whitespace-nowrap">
-        <div>출하: ${shippedDate}</div>
-        <div class="text-indigo-900 font-semibold mt-0.5">계산서: ${taxDate}</div>
+      <td class="py-2.5 px-2 text-left align-middle whitespace-nowrap text-[10px]">
+        <div class="font-bold text-slate-700">입고: ${entryDate}</div>
+        <div class="font-bold ${shippedDate && shippedDate !== '-' ? 'text-indigo-700' : 'text-slate-400'} mt-0.5">
+          출고: ${shippedDate && shippedDate !== '-' ? shippedDate : '<span class="text-amber-600 font-semibold">미출하</span>'}
+        </div>
       </td>
       <td class="py-2.5 px-2 text-[10px] text-slate-600 align-middle">
         <div class="font-mono text-slate-500 truncate max-w-[140px]">PO: ${pono}</div>
