@@ -38,16 +38,16 @@ function parseExcelDate(val) {
 function resolveUnitPrice(usdVal, rawVal, isDomestic, shipFx = 1350) {
   if (usdVal !== undefined && usdVal !== null && usdVal !== '') {
     const parsedUsd = parseFloat(String(usdVal).replace(/[$,]/g, ''));
-    if (!isNaN(parsedUsd) && parsedUsd > 0) return Number(parsedUsd.toFixed(4));
+    if (!isNaN(parsedUsd) && parsedUsd > 0) return Number(parsedUsd.toFixed(8));
   }
 
   if (rawVal !== undefined && rawVal !== null && rawVal !== '') {
     const parsedRaw = parseFloat(String(rawVal).replace(/[₩$,]/g, ''));
     if (!isNaN(parsedRaw) && parsedRaw > 0) {
       if (parsedRaw >= 100 || isDomestic) {
-        return Number((parsedRaw / shipFx).toFixed(4));
+        return Number((parsedRaw / shipFx).toFixed(8));
       }
-      return Number(parsedRaw.toFixed(4));
+      return Number(parsedRaw.toFixed(8));
     }
   }
 
@@ -175,7 +175,7 @@ function renderPreviewTable(rows) {
       <td class="py-2 px-2 font-bold text-slate-800 whitespace-nowrap">${r.maker}</td>
       <td class="py-2 px-2 font-black text-indigo-950">${r.part_name}</td>
       <td class="py-2 px-2 text-right font-black text-slate-900 whitespace-nowrap">${r.stock.toLocaleString()} EA</td>
-      <td class="py-2 px-2 text-right font-semibold text-slate-700 whitespace-nowrap" title="실제 매입단가">$${r.unit_usd.toFixed(4)}</td>
+      <td class="py-2 px-2 text-right font-semibold text-slate-700 whitespace-nowrap" title="실제 매입단가">$${Number(r.unit_usd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
       <td class="py-2 px-2 text-slate-600 font-mono text-[10px] whitespace-nowrap">${r.entry_date}</td>
       <td class="py-2 px-2 text-indigo-800 font-bold whitespace-nowrap">${r.owner}</td>
       <td class="py-2 px-2 text-slate-700 truncate max-w-[120px]" title="${r.customer}">${r.customer}</td>
