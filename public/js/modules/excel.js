@@ -150,7 +150,7 @@ export function handleExcelFileSelect(file) {
           real_customer: String(r['REALCUST'] || r['실고객사'] || '-').trim(),
           po_no: String(r['PONO'] || r['발주번호'] || '').trim(),
           application: String(r['APP'] || r['적용처'] || '').trim(),
-          biz_type: normalizeKindValue(row['KIND'] || row['구분'] || row['거래구분']),
+          biz_type: normalizeKindValue((typeof r !== 'undefined' ? r : (typeof row !== 'undefined' ? row : item))?.['KIND'] || (typeof r !== 'undefined' ? r : (typeof row !== 'undefined' ? row : item))?.['구분'] || 'DOMESTIC'),
           entry_date: normalizedDate,
           owner: String(r['SALES'] || r['담당자'] || '본사 일반재고').trim(),
           order_status: '배정요청',
