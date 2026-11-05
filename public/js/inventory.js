@@ -274,9 +274,11 @@ function generateLegacyMasterRow(item) {
 function generateFulfillmentRow(item) {
   const rawDate = item.entryDate || item.entry_date || '-';
   const entryDate = rawDate.length >= 10 ? rawDate.slice(2, 10) : rawDate;
-  const rawShipDate = item.shippedDate || item.shipped_date || '-';
-  const shippedDate = (rawShipDate && rawShipDate !== '-') ? (rawShipDate.length >= 10 ? rawShipDate.slice(2, 10) : rawShipDate) : '-';
-  const stock = Number(item.stock) || 0;
+  const rawShipDate = item.shippedDate || item.shipped_date || '';
+  const displayShipDate = (rawShipDate && rawShipDate !== '-' && rawShipDate !== 'null') 
+    ? (rawShipDate.length >= 10 ? rawShipDate.slice(2, 10) : rawShipDate) 
+    : '';
+const stock = Number(item.stock) || 0;
   const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
   const soldPrice = Number(item.soldPriceUsd ?? item.sold_price_usd) || 0;
   const amount = stock * unitUsd;
@@ -294,8 +296,7 @@ function generateFulfillmentRow(item) {
   const pono = item.poNo || item.po_no || '-';
   const orderStatus = item.orderStatus || item.order_status || '배정요청';
   const paymentStatus = item.paymentStatus || item.payment_status || '미수';
-  const shippedDate = item.shippedDate || item.shipped_date || '미출하';
-  const taxDate = item.taxDate || item.tax_date || '-';
+    const taxDate = item.taxDate || item.tax_date || '-';
   const trackingNo = (item.trackingNo || item.tracking_no || '').trim();
 
   return `
@@ -322,8 +323,8 @@ function generateFulfillmentRow(item) {
       </td>
       <td class="py-2.5 px-2 text-left align-middle whitespace-nowrap text-[10px]">
         <div class="font-bold text-slate-700">입고: ${entryDate}</div>
-        <div class="font-bold ${shippedDate && shippedDate !== '-' ? 'text-indigo-700' : 'text-slate-400'} mt-0.5">
-          출고: ${shippedDate && shippedDate !== '-' ? shippedDate : '<span class="text-amber-600 font-semibold">미출하</span>'}
+        <div class="font-bold ${displayShipDate ? 'text-indigo-700' : 'text-slate-400'} mt-0.5">
+          출고: ${displayShipDate ? displayShipDate : '<span class="text-amber-600 font-semibold">미출하</span>'}
         </div>
       </td>
       <td class="py-2.5 px-2 text-[10px] text-slate-600 align-middle">
