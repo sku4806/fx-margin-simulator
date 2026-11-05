@@ -380,7 +380,7 @@ function generateFulfillmentRow(item, canEdit) {
           <button type="button" onclick="event.stopPropagation(); window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold">삭제</button>
         </div>
         ` : `
-        <span class="text-[10px] text-slate-400 font-semibold px-2 py-0.5 bg-slate-50 border border-slate-200 rounded">조회전용</span>
+        <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 text-[10px] font-bold shadow-sm transition-colors">상세보기</button>
         `}
       </td>
     </tr>
