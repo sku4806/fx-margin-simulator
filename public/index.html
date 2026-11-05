@@ -107,7 +107,7 @@
 
     <!-- 3. 환율 마진 시뮬레이터 -->
     <div id="salesQuotationPanel" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
-      <div class="border-b pb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+      <div class="border-b pb-2 flex flex-row flex-wrap items-center sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
           <h2 class="font-bold text-sm sm:text-base text-slate-900">고객사 제시 권고 견적가 (FX Protection)</h2>
           <span class="text-[10px] sm:text-[11px] text-slate-400">달러(USD) 기준 우선 표기 및 원화(@환율) 병기</span>
@@ -188,7 +188,7 @@
 
     <!-- 4. 전문화 입력 폼팩터 -->
     <div id="formSection" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-      <div class="border-b pb-2.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+      <div class="border-b pb-2.5 flex flex-row flex-wrap items-center sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
           <h2 id="formTitle" class="font-bold text-xs sm:text-base text-slate-900">수주 및 재고 배정 등록 (Sales Order Entry)</h2>
           <p id="formSubtitle" class="text-[10px] sm:text-[11px] text-slate-400">공식 배정 물량, 협의 단가 및 Date Code를 설정합니다.</p>
@@ -476,7 +476,7 @@
 
     <!-- 5. 마스터 리스트 -->
     <div class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-2.5 sm:space-y-4">
-      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-2.5">
+      <div class="flex flex-row flex-wrap items-center sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-2.5">
         <div>
           <h2 class="font-black text-xs sm:text-base tracking-wide text-slate-900">Inventory &amp; Fulfillment Master</h2>
           <span id="lockStatusBadge" class="text-[9px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full inline-block mt-0.5">🔒 로그인 필요</span>
@@ -571,9 +571,8 @@
               <option value="미수">미수</option>
               <option value="완료">수금완료</option>
             </select>
-
-        <!-- 출하일자 기간 검색 필터 -->
-        <div id="shippedDateFilterWrapper" class="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs shrink-0">
+        <!-- 출하일자 기간 검색 필터 (단일 탑재) -->
+        <div id="shippedDateFilterWrapper" class="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs shrink-0 shadow-sm">
           <span class="text-slate-600 font-bold whitespace-nowrap text-[11px]">🚚 출하일:</span>
           <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
           <span class="text-slate-400">~</span>
@@ -581,16 +580,7 @@
           <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-200 rounded text-[10px]">✕</button>
         </div>
 
-        <!-- 출하일자 기간 검색 필터 -->
-        <div id="shippedDateFilterWrapper" class="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs">
-          <span class="text-slate-500 font-bold whitespace-nowrap text-[11px]">🚚 출하일:</span>
-          <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
-          <span class="text-slate-400">~</span>
-          <input type="date" id="filterShipDateEnd" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
-          <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-200 rounded text-[10px]">✕</button>
-        </div>
-
-            <input type="hidden" id="filterStatus" value="">
+        <input type="hidden" id="filterStatus" value="">
           </div>
         </div>
 
