@@ -51,10 +51,10 @@ async function fetchInventoryItems() {
     .from('inventory_items')
     .select('*')
     .range(0, 9999)
-    .order('created_at', { ascending: false });
+    .order('entry_date', { ascending: false, nullsFirst: false });
   if (error) throw error;
 
-  return (data || []).map(r => ({
+  const mappedItems = (data || []).map(r => ({
     id: r.id,
     maker: r.maker || '-',
     partName: r.part_name || r.partName || '-',
@@ -110,6 +110,12 @@ async function fetchInventoryItems() {
     approved_debit_usd: Number(r.approved_debit_usd || r.approvedDebitUsd) || 0,
     created_at: r.created_at
   }));
+
+  return mappedItems.sort((a, b) => {
+    const dateA = a.entryDate && a.entryDate !== '-' ? new Date(a.entryDate).getTime() : 0;
+    const dateB = b.entryDate && b.entryDate !== '-' ? new Date(b.entryDate).getTime() : 0;
+    return dateB - dateA;
+  });
 }
 
 async function upsertInventoryItem(payload, id) {
