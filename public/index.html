@@ -545,7 +545,7 @@
 
         <div class="flex justify-between items-center text-[10px] sm:text-[11px] text-slate-500 px-1">
           <span>※ 카드를 터치하면 상세 정보 확인 가능</span>
-          <span id="itemCount" class="font-bold text-indigo-700">총 0건</span>
+          <label class="inline-flex items-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg px-2 py-0.5 select-none transition-colors mr-2"><input type="checkbox" id="togglePrecisionBtn" onchange="window.togglePrecisionMode && window.togglePrecisionMode(this.checked)" class="rounded text-indigo-600 cursor-pointer"><span class="text-[10px] font-bold text-slate-700">소수점 정밀보기 (.00)</span></label><span id="itemCount" class="font-bold text-indigo-700">총 0건</span>
         </div>
 
         <!-- 모바일 카드 내부 스크롤 뷰 -->
