@@ -47,12 +47,35 @@ async function fetchInventoryItems() {
     throw new Error("Supabase client is not ready");
   }
 
-  const { data, error } = await client
-    .from('inventory_items')
-    .select('*')
-    .range(0, 9999)
-    .order('entry_date', { ascending: false, nullsFirst: false });
-  if (error) throw error;
+  // Supabase의 단일 쿼리 1,000건 제한을 우회하여 전건(1,500건 이상) 청크 로드
+  let allData = [];
+  const pageSize = 1000;
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const to = from + pageSize - 1;
+    const { data, error } = await client
+      .from('inventory_items')
+      .select('*')
+      .range(from, to)
+      .order('entry_date', { ascending: false, nullsFirst: false });
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  const data = allData;
 
   const mappedItems = (data || []).map(r => ({
     id: r.id,
