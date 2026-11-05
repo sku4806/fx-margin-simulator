@@ -516,14 +516,14 @@
       <div id="unlockedContent" class="hidden space-y-2.5">
         <div id="kpiSummaryBar" class="pt-1 hidden transition-all duration-200"></div>
 
-        <div class="bg-slate-50 p-2 rounded-xl border border-slate-200/80 grid grid-cols-2 sm:grid-cols-5 gap-1.5 items-center">
-          <div class="col-span-2 relative">
-            <input type="text" id="searchInput" style="min-height: 40px;" placeholder="Part, D/C, 세일즈, 고객사, 송장 검색..." class="w-full pl-7 pr-2.5 py-1.5 border rounded-lg bg-white text-xs outline-none">
-            <span class="absolute left-2 top-1.5 text-slate-400 text-xs">🔍</span>
+        <div class="bg-slate-50 p-2 rounded-xl border border-slate-200/80 flex flex-wrap lg:flex-nowrap gap-1.5 items-center">
+          <div class="flex-1 min-w-[200px] relative">
+            <input type="text" id="searchInput" style="min-height: 38px;" placeholder="Part, D/C, 세일즈, 고객사, 송장 검색..." class="w-full pl-7 pr-2.5 py-1.5 border rounded-lg bg-white text-xs outline-none">
+            <span class="absolute left-2 top-2.5 text-slate-400 text-xs">🔍</span>
           </div>
 
-          <div>
-            <select id="filterMaker" class="w-full p-1.5 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none cursor-pointer">
+          <div class="w-[130px] sm:w-[140px] shrink-0">
+            <select id="filterMaker" class="w-full p-2 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none cursor-pointer">
               <option value="ALL">라인 전체</option>
               <option value="SST">SST (642건)</option>
               <option value="S.BELLING">S.BELLING (99건)</option>
@@ -550,8 +550,8 @@
             </select>
           </div>
 
-          <div>
-            <select id="filterOwner" class="w-full p-1.5 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none">
+          <div class="w-[110px] sm:w-[120px] shrink-0">
+            <select id="filterOwner" class="w-full p-2 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none">
               <option value="ALL">Sales 전체</option>
               <option value="본사 일반재고">본사 일반재고</option>
               <option value="Dustin">Dustin</option>
@@ -565,13 +565,22 @@
             </select>
           </div>
 
-          <div>
-            <select id="filterPayment" class="w-full p-1.5 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none">
+          <div class="w-[100px] sm:w-[110px] shrink-0">
+            <select id="filterPayment" class="w-full p-2 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none">
               <option value="ALL">수금 전체</option>
               <option value="미수">미수</option>
               <option value="완료">수금완료</option>
             </select>
-        <input type="hidden" id="filterStatus" value="">
+            <input type="hidden" id="filterStatus" value="">
+          </div>
+
+          <!-- 🚚 출하일자 기간 검색 필터 (가로 1열 완벽 결합) -->
+          <div id="shippedDateFilterWrapper" class="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs shrink-0 shadow-xs">
+            <span class="text-slate-600 font-bold whitespace-nowrap text-[11px]">🚚 출하일:</span>
+            <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
+            <span class="text-slate-400">~</span>
+            <input type="date" id="filterShipDateEnd" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
+            <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-100 rounded text-[10px] ml-0.5">✕</button>
           </div>
         </div>
 
@@ -670,15 +679,7 @@
             <option value="WIZnet">WIZnet</option>
           </select>
         </div>
-        <!-- 출하일자 기간 검색 필터 (독립 가로 배치) -->
-        <div id="shippedDateFilterWrapper" class="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs shrink-0 shadow-sm">
-          <span class="text-slate-600 font-bold whitespace-nowrap text-[11px]">🚚 출하일:</span>
-          <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
-          <span class="text-slate-400">~</span>
-          <input type="date" id="filterShipDateEnd" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
-          <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-200 rounded text-[10px] ml-0.5">✕</button>
-        </div>
-        <div>
+<div>
           <label class="text-slate-600 block mb-0.5 font-semibold text-[11px]">담당 CS 매니저</label>
           <input type="text" id="pkgConfigCs" required placeholder="예: Trisha / Jamie" class="w-full p-2 border rounded-lg bg-white font-semibold outline-none">
         </div>
