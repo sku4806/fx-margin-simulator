@@ -1,59 +1,49 @@
 
-// --- 행 하이라이트 및 저장 후 위치 자동 추적 함수 (내부 스크롤 지원) ---
+// --- 행 선택 강조 및 저장 후 즉시 스크롤/점멸 추적 (인라인 스타일 보장) ---
+window._lastSavedItemId = null;
+
 window.highlightActiveRow = function(itemId) {
+  // 이전 선택 행들 인라인 스타일 초기화
   document.querySelectorAll('tr[id^="row-item-"]').forEach(tr => {
-    tr.classList.remove('bg-indigo-100/90', 'border-l-4', 'border-indigo-600', 'font-semibold');
+    tr.style.backgroundColor = '';
+    tr.style.borderLeft = '';
   });
   if (!itemId) return;
 
-  const targetTr = document.getElementById(`row-item-${itemId}`);
-  if (targetTr) {
-    targetTr.classList.add('bg-indigo-100/90', 'border-l-4', 'border-indigo-600', 'font-semibold');
+  const tr = document.getElementById(`row-item-${itemId}`) || document.querySelector(`tr[data-item-id="${itemId}"]`);
+  if (tr) {
+    tr.style.backgroundColor = '#dbeafe'; // 부드러운 블루
+    tr.style.borderLeft = '6px solid #4f46e5'; // 진한 인디고 바
   }
 };
 
 window.flashSavedRow = function(itemId) {
   if (!itemId) return;
+  window._lastSavedItemId = itemId;
 
-  let attempts = 0;
-  const maxAttempts = 20; // 최대 2초 동안 DOM 재생성 대기
+  // DOM 렌더링 완료 감지 루프
+  let count = 0;
+  const timer = setInterval(() => {
+    count++;
+    const tr = document.getElementById(`row-item-${itemId}`) || document.querySelector(`tr[data-item-id="${itemId}"]`);
+    if (tr) {
+      clearInterval(timer);
 
-  const tryScrollAndFlash = () => {
-    attempts++;
-    const targetTr = document.getElementById(`row-item-${itemId}`);
-    
-    if (targetTr) {
-      // 1. 내부 부모 스크롤 컨테이너 탐색 (table을 감싸고 있는 overflow-y-auto div)
-      let scrollContainer = targetTr.closest('.overflow-y-auto') || targetTr.closest('.overflow-auto') || targetTr.closest('div[class*="overflow"]');
+      // 1. 해당 행으로 스크롤 부드럽게 이동
+      tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-      if (scrollContainer) {
-        const containerTop = scrollContainer.getBoundingClientRect().top;
-        const elemTop = targetTr.getBoundingClientRect().top;
-        const offset = elemTop - containerTop - (scrollContainer.clientHeight / 2) + (targetTr.clientHeight / 2);
-        
-        scrollContainer.scrollBy({
-          top: offset,
-          behavior: 'smooth'
-        });
-      }
-
-      // 2. 브라우저 전체 스크롤도 동시 지원
-      targetTr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      // 3. 눈에 확 띄는 노란색 강조 깜빡임 및 유지
-      targetTr.classList.remove('bg-amber-100', 'bg-indigo-100/90');
-      targetTr.classList.add('bg-amber-200', 'border-l-4', 'border-amber-600', 'transition-colors', 'duration-500');
-
-      setTimeout(() => {
-        targetTr.classList.remove('bg-amber-200');
-        targetTr.classList.add('bg-indigo-100/70', 'border-l-4', 'border-indigo-500');
-      }, 3000);
-    } else if (attempts < maxAttempts) {
-      setTimeout(tryScrollAndFlash, 100);
+      // 2. 브라우저 네이티브 애니메이션으로 노란색 번쩍임 실행
+      tr.animate([
+        { backgroundColor: '#fef08a', borderLeft: '6px solid #eab308' },
+        { backgroundColor: '#fef9c3', borderLeft: '6px solid #ca8a04' },
+        { backgroundColor: '#dbeafe', borderLeft: '6px solid #4f46e5' }
+      ], {
+        duration: 2500,
+        fill: 'forwards'
+      });
     }
-  };
-
-  setTimeout(tryScrollAndFlash, 100);
+    if (count > 30) clearInterval(timer);
+  }, 100);
 };
 // 분할 모달 열기 함수 (전역 바인딩 및 원본 객체 보장)
 window.openSplitModal = function(itemOrId) {

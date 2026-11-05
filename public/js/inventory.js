@@ -237,7 +237,7 @@ function generateLegacyMasterRow(item) {
   const paymentStatus = item.paymentStatus || item.payment_status || '미수';
 
   return `
-    <tr id="row-item-${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer"  title="클릭 시 상단 견적 계산기에 단가·수량 자동 입력"  onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+    <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 우측 상세/수정 창 오픈" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
       <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         ${getKindBadge(kind)}
       </td>
@@ -319,7 +319,7 @@ function generateFulfillmentRow(item, canEdit) {
     : ((typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false);
 
   return `
-    <tr id="row-item-${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer"  title="클릭 시 우측 상세/수정 창 오픈"  onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+    <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 우측 상세/수정 창 오픈" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
       <!-- 1. 상태 / SALES -->
       <td class="py-2.5 px-1.5 text-center align-middle whitespace-nowrap">
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(orderStatus)}">${orderStatus}</span>
