@@ -136,8 +136,13 @@ export function handleExcelFileSelect(file) {
           due_date: r['PayDueDT'] ? parseExcelDate(r['PayDueDT']) : null,
           settled_date: r['PAYDT'] ? parseExcelDate(r['PAYDT']) : null,
           stock: stock,
-          unit_usd: unitUsd,
-            raw_amount: rawAmountVal > 0 ? rawAmountVal : null,
+          // AMOUNT(원화 총액)가 존재할 경우 단수 오차를 없애기 위해 총액 기준으로 정밀 unit_usd 역산
+          let finalUnitUsd = unitUsd;
+          if (rawAmountVal > 0 && stockQty > 0) {
+            finalUnitUsd = Number((rawAmountVal / (stockQty * 1350)).toFixed(8));
+          }
+            unit_usd: finalUnitUsd,
+            
           sold_price_usd: soldPriceUsd,
           ship_fx: 1350,
           margin: 20,
