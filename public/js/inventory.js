@@ -203,7 +203,7 @@ export function renderInventoryHeaders(activeTab) {
         <th class="py-2.5 px-2 text-left w-[13%]">계약처</th>
         <th class="py-2.5 px-2 text-left w-[17%]">PART NO / MFG</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[8%]">수량 / 배정</th>
-        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[8%]">단가 / 가용</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">판매·원가 / 가용</th>
         <th class="py-2.5 px-2 text-left whitespace-nowrap w-[10%]">입고 / 출고일</th>
         <th class="py-2.5 px-2 text-left w-[17%]">PO / 송장(B/L)</th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">수금</th>
@@ -321,7 +321,12 @@ const stock = Number(item.stock) || 0;
         <div class="text-[10px] text-amber-700 font-semibold mt-0.5">배정:${arrangedQty.toLocaleString()}</div>
       </td>
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
-        <div class="font-black text-indigo-700">${soldPrice > 0 ? '$' + soldPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '$-'}</div>
+        <div class="whitespace-nowrap">
+          ${soldPrice > 0 
+            ? `<span class="text-[9px] font-bold text-indigo-500 mr-1">[판매가]</span><span class="font-black text-indigo-950 text-xs">$${soldPrice.toFixed(3)}</span>`
+            : `<span class="text-[9px] font-bold text-slate-400 mr-1">[매입원가]</span><span class="font-bold text-slate-600 text-xs">$${unitUsd.toFixed(3)}</span>`
+          }
+        </div>
         <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">가용:${notArranQty.toLocaleString()}</div>
       </td>
       <td class="py-2.5 px-2 text-left align-middle whitespace-nowrap text-[10px]">
