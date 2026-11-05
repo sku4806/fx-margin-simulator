@@ -285,14 +285,15 @@ function generateLegacyMasterRow(item) {
   `;
 }
 
-function generateFulfillmentRow(item) {
+function generateFulfillmentRow(item, canEdit) {
   const rawDate = item.entryDate || item.entry_date || '-';
   const entryDate = rawDate.length >= 10 ? rawDate.slice(2, 10) : rawDate;
   const rawShipDate = item.shippedDate || item.shipped_date || '';
   const displayShipDate = (rawShipDate && rawShipDate !== '-' && rawShipDate !== 'null') 
     ? (rawShipDate.length >= 10 ? rawShipDate.slice(2, 10) : rawShipDate) 
     : '';
-const stock = Number(item.stock) || 0;
+
+  const stock = Number(item.stock) || 0;
   const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
   const soldPrice = Number(item.soldPriceUsd ?? item.sold_price_usd) || 0;
   const amount = stock * unitUsd;
@@ -310,27 +311,36 @@ const stock = Number(item.stock) || 0;
   const pono = item.poNo || item.po_no || '-';
   const orderStatus = item.orderStatus || item.order_status || '배정요청';
   const paymentStatus = item.paymentStatus || item.payment_status || '미수';
-    const taxDate = item.taxDate || item.tax_date || '-';
   const trackingNo = (item.trackingNo || item.tracking_no || '').trim();
 
+  // 권한 판별: canEdit가 전달되지 않았을 경우 window.isCsOrAdminUser 직접 확인
+  const isAuthorized = (typeof canEdit === 'boolean') 
+    ? canEdit 
+    : ((typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false);
+
   return `
-    <tr class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 하단 수주·출하·정산 관리 폼에 상세 정보 로드" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+    <tr class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 우측 상세/수정 창 오픈" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+      <!-- 1. 상태 / SALES -->
       <td class="py-2.5 px-1.5 text-center align-middle whitespace-nowrap">
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(orderStatus)}">${orderStatus}</span>
         <div class="text-[9px] text-indigo-800 font-bold mt-1">${sales}</div>
       </td>
+      <!-- 2. 계약처 -->
       <td class="py-2.5 px-2 align-middle">
         <div class="font-bold text-slate-800 truncate max-w-[130px]" title="${cname}">${cname}</div>
         ${(realCust && realCust !== '-' && realCust !== cname) ? `<div class="text-[9px] text-indigo-700 font-normal truncate">↳ ${realCust}</div>` : ''}
       </td>
+      <!-- 3. PART NO / MFG -->
       <td class="py-2.5 px-2 align-middle">
         <div class="font-black text-indigo-950 truncate max-w-[170px]" title="${part}">${part}</div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">${mfg} · <span class="text-indigo-600 font-bold">${kind}</span></div>
       </td>
+      <!-- 4. 수량 / 배정 -->
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
         <div class="font-black text-slate-900">${stock.toLocaleString()} EA</div>
         <div class="text-[10px] text-amber-700 font-semibold mt-0.5">배정:${arrangedQty.toLocaleString()}</div>
       </td>
+      <!-- 5. 판매·원가(₩) / 가용 -->
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
         <div class="whitespace-nowrap">
           ${soldPrice > 0 
@@ -340,12 +350,14 @@ const stock = Number(item.stock) || 0;
         </div>
         <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">가용:${notArranQty.toLocaleString()}</div>
       </td>
+      <!-- 6. 입고 / 출고일 -->
       <td class="py-2.5 px-2 text-left align-middle whitespace-nowrap text-[10px]">
         <div class="font-bold text-slate-700">입고: ${entryDate}</div>
         <div class="font-bold ${displayShipDate ? 'text-indigo-700' : 'text-slate-400'} mt-0.5">
           출고: ${displayShipDate ? displayShipDate : '<span class="text-amber-600 font-semibold">미출하</span>'}
         </div>
       </td>
+      <!-- 7. PO / 송장(B/L) -->
       <td class="py-2.5 px-2 text-[10px] text-slate-600 align-middle">
         <div class="font-mono text-slate-500 truncate max-w-[140px]">PO: ${pono}</div>
         <div class="mt-0.5 flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
@@ -355,11 +367,13 @@ const stock = Number(item.stock) || 0;
           ${trackingNo ? `<button type="button" onclick="event.stopPropagation(); window.openTrackingModal && window.openTrackingModal('${trackingNo}')" class="shrink-0 text-[9px] bg-indigo-50 text-indigo-700 font-bold px-1 py-0.5 rounded border">🚚</button>` : ''}
         </div>
       </td>
+      <!-- 8. 수금 -->
       <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${paymentStatus === '완료' || paymentStatus === '수금완료' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">${paymentStatus}</span>
       </td>
-            <td class="py-2.5 px-2 text-center select-none whitespace-nowrap align-middle" onclick="event.stopPropagation()">
-        ${canEdit ? `
+      <!-- 9. 관리 (권한 분기: CS/Admin -> 수정/분할/삭제, Sales -> 조회전용) -->
+      <td class="py-2.5 px-2 text-center select-none whitespace-nowrap align-middle" onclick="event.stopPropagation()">
+        ${isAuthorized ? `
         <div class="inline-flex items-center justify-center gap-1">
           <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold">수정</button>
           <button type="button" onclick="event.stopPropagation(); window.openSplitModal && window.openSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold">분할</button>
