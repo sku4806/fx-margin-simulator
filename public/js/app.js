@@ -1,3 +1,45 @@
+// 분할 모달 열기 함수 (전역 바인딩 및 원본 객체 보장)
+window.openSplitModal = function(itemOrId) {
+  let item = null;
+  if (typeof itemOrId === 'object' && itemOrId !== null) {
+    item = itemOrId;
+  } else if (typeof cachedItems !== 'undefined' && Array.isArray(cachedItems)) {
+    item = cachedItems.find(it => String(it.id) === String(itemOrId));
+  } else if (typeof inventoryItems !== 'undefined' && Array.isArray(inventoryItems)) {
+    item = inventoryItems.find(it => String(it.id) === String(itemOrId));
+  }
+
+  if (!item) {
+    alert("분할할 원본 부품 정보를 찾을 수 없습니다. 다시 시도해 주세요.");
+    return;
+  }
+
+  window._currentSplitItem = item;
+
+  const modal = document.getElementById('splitShipmentModal');
+  const title = document.getElementById('splitModalTitle');
+  const maxStockText = document.getElementById('splitMaxStockText');
+  const qtyInput = document.getElementById('splitQtyInput');
+  const customerInput = document.getElementById('splitCustomerInput');
+  const priceInput = document.getElementById('splitPriceInput');
+  const repInput = document.getElementById('splitRepInput');
+
+  const stockVal = Number(item.stock) || 0;
+  const partName = item.partName || item.part_name || '-';
+
+  if (title) title.innerText = `부분 출하 분할 (${partName})`;
+  if (maxStockText) maxStockText.innerText = `현재 보유 재고: ${stockVal.toLocaleString()} EA (최대 ${Math.max(0, stockVal - 1).toLocaleString()} EA 분할 가능)`;
+  if (qtyInput) {
+    qtyInput.max = Math.max(0, stockVal - 1);
+    qtyInput.value = '';
+  }
+  if (customerInput) customerInput.value = (item.customer && item.customer !== '-') ? item.customer : '';
+  if (priceInput) priceInput.value = item.soldPriceUsd || item.sold_price_usd || item.unitUsd || item.unit_usd || '';
+  if (repInput) repInput.value = item.owner || '본사 일반재고';
+
+  modal?.classList.remove('hidden');
+};
+
 import { supabase } from './supabase.js';
 import * as InventoryModule from './inventory.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
@@ -1383,3 +1425,7 @@ document.getElementById('splitShipmentForm')?.addEventListener('submit', async (
     }
   }
 });
+
+
+// 기존 분할 버튼 클릭 이벤트 호환 래퍼
+window.handleSplitModalOpen = window.openSplitModal;
