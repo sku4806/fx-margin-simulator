@@ -63,7 +63,9 @@ import {
 } from './modules/packaging.js';
 import { openTrackingModal } from './modules/courier.js';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
-import { recordAuditLog, renderAuditHistory } from './modules/audit.js';
+import { recordAuditLog, renderAuditHistory, fetchAuditLogs } from './modules/audit.js';
+window.recordAuditLog = recordAuditLog;
+window.fetchAuditLogs = fetchAuditLogs;
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 
 let cachedItems = [];
@@ -1453,18 +1455,65 @@ window.handleSplitModalOpen = window.openSplitModal;
 
 
 
-// --- 플로팅 드로어 3단 서브탭 전환 ---
+// --- 플로팅 드로어 4단 서브탭 전환 ---
 window.switchDrawerTab = function(tabIndex) {
-  for (let i = 1; i <= 3; i++) {
+  for (let i = 1; i <= 4; i++) {
     const btn = document.getElementById(`dTabBtn${i}`);
     const content = document.getElementById(`drawerTabContent${i}`);
     if (i === tabIndex) {
       if (btn) btn.className = "flex-1 py-1.5 rounded-md bg-white text-indigo-900 shadow-sm text-center font-bold";
-      if (content) content.classList.remove('hidden');
+      if (content) content?.classList.remove('hidden');
     } else {
       if (btn) btn.className = "flex-1 py-1.5 rounded-md text-slate-600 hover:text-slate-900 text-center font-semibold";
-      if (content) content.classList.add('hidden');
+      if (content) content?.classList.add('hidden');
     }
+  }
+  if (tabIndex === 4 && typeof window.loadDrawerAuditHistory === 'function') {
+    window.loadDrawerAuditHistory();
+  }
+};
+
+// --- 플로팅 드로어 내 실시간 감사 로그 조회 ---
+window.loadDrawerAuditHistory = async function() {
+  const container = document.getElementById('drawerAuditListContainer');
+  const id = document.getElementById('drawerItemId')?.value;
+  if (!container || !id) return;
+
+  container.innerHTML = `<div class="text-[11px] text-slate-400 py-6 text-center">히스토리 조회 중...</div>`;
+
+  try {
+    const fetchFn = window.fetchAuditLogs || (await import('./modules/audit.js')).fetchAuditLogs;
+    const logs = await fetchFn(id);
+
+    if (!logs || logs.length === 0) {
+      container.innerHTML = `<div class="p-4 text-center text-slate-400 text-[11px] bg-slate-50 rounded-lg border border-slate-200">기록된 변경 이력이 없습니다.</div>`;
+      return;
+    }
+
+    container.innerHTML = logs.map(log => {
+      const d = new Date(log.created_at);
+      const timeStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const userShort = log.user_email ? log.user_email.split('@')[0] : '익명';
+
+      let actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">정보수정</span>`;
+      if (log.action_type === 'CREATE') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-800">신규등록</span>`;
+      if (log.action_type === 'SPLIT') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800">출하분할</span>`;
+      if (log.action_type === 'DELETE') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800">삭제</span>`;
+
+      return `
+        <div class="p-2 bg-slate-50 hover:bg-slate-100/70 rounded-lg border border-slate-200 text-[11px] space-y-1">
+          <div class="flex items-center justify-between text-slate-500 font-mono text-[10px]">
+            <span class="flex items-center gap-1 font-bold text-slate-700">
+              ${actionBadge} <span>${userShort}</span>
+            </span>
+            <span>${timeStr}</span>
+          </div>
+          <div class="text-slate-800 font-medium break-all leading-relaxed pl-0.5">${log.details || '-'}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="p-3 text-center text-rose-500 text-[11px]">이력 로드 실패: ${err.message}</div>`;
   }
 };
 
@@ -1534,9 +1583,9 @@ window.saveDrawerItem = async function() {
   }
 };
 
-// --- 플로팅 드로어 3단 서브탭 전환 ---
+// --- 플로팅 드로어 4단 서브탭 전환 ---
 window.switchDrawerTab = function(tabIndex) {
-  for (let i = 1; i <= 3; i++) {
+  for (let i = 1; i <= 4; i++) {
     const btn = document.getElementById(`dTabBtn${i}`);
     const content = document.getElementById(`drawerTabContent${i}`);
     if (i === tabIndex) {
@@ -1546,6 +1595,53 @@ window.switchDrawerTab = function(tabIndex) {
       if (btn) btn.className = "flex-1 py-1.5 rounded-md text-slate-600 hover:text-slate-900 text-center font-semibold";
       if (content) content?.classList.add('hidden');
     }
+  }
+  if (tabIndex === 4 && typeof window.loadDrawerAuditHistory === 'function') {
+    window.loadDrawerAuditHistory();
+  }
+};
+
+// --- 플로팅 드로어 내 실시간 감사 로그 조회 ---
+window.loadDrawerAuditHistory = async function() {
+  const container = document.getElementById('drawerAuditListContainer');
+  const id = document.getElementById('drawerItemId')?.value;
+  if (!container || !id) return;
+
+  container.innerHTML = `<div class="text-[11px] text-slate-400 py-6 text-center">히스토리 조회 중...</div>`;
+
+  try {
+    const fetchFn = window.fetchAuditLogs || (await import('./modules/audit.js')).fetchAuditLogs;
+    const logs = await fetchFn(id);
+
+    if (!logs || logs.length === 0) {
+      container.innerHTML = `<div class="p-4 text-center text-slate-400 text-[11px] bg-slate-50 rounded-lg border border-slate-200">기록된 변경 이력이 없습니다.</div>`;
+      return;
+    }
+
+    container.innerHTML = logs.map(log => {
+      const d = new Date(log.created_at);
+      const timeStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const userShort = log.user_email ? log.user_email.split('@')[0] : '익명';
+
+      let actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">정보수정</span>`;
+      if (log.action_type === 'CREATE') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-800">신규등록</span>`;
+      if (log.action_type === 'SPLIT') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800">출하분할</span>`;
+      if (log.action_type === 'DELETE') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800">삭제</span>`;
+
+      return `
+        <div class="p-2 bg-slate-50 hover:bg-slate-100/70 rounded-lg border border-slate-200 text-[11px] space-y-1">
+          <div class="flex items-center justify-between text-slate-500 font-mono text-[10px]">
+            <span class="flex items-center gap-1 font-bold text-slate-700">
+              ${actionBadge} <span>${userShort}</span>
+            </span>
+            <span>${timeStr}</span>
+          </div>
+          <div class="text-slate-800 font-medium break-all leading-relaxed pl-0.5">${log.details || '-'}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="p-3 text-center text-rose-500 text-[11px]">이력 로드 실패: ${err.message}</div>`;
   }
 };
 
@@ -1710,15 +1806,46 @@ window.saveDrawerItem = async function() {
     };
 
     const client = (typeof supabase !== 'undefined' && supabase?.from) ? supabase : window.supabase;
+    
+    // 원본 데이터와 비교하여 상세 변경 내역(Diff) 추출
+    const orig = (typeof getCachedItem === 'function') ? getCachedItem(id) : (window.cachedItems?.find(it => String(it.id) === String(id)));
+    const labels = {
+      maker: '제조사', date_code: 'D/C', stock: '총재고', arranged_qty: '배정수량',
+      unit_usd: '매입단가($)', ship_fx: '선적환율', sold_price_usd: '판매단가($)',
+      owner: '담당Sales', customer: '계약처', real_customer: '실납품처', po_no: 'PONO',
+      application: '적용처', order_status: '진행상태', biz_type: '거래구분',
+      shipped_date: '출하일', invoice_no: '인보이스', tracking_no: '송장번호',
+      entry_date: '입고일', payment_status: '수금상태', payment_terms: '결제조건',
+      tax_date: '계산서일', due_date: '만기일', settled_date: '수금일', settled_fx: '수금환율',
+      currency: '통화', memo: '비고'
+    };
+
+    const diffs = [];
+    if (orig) {
+      for (const k of Object.keys(payload)) {
+        const camelKey = k.replace(/_([a-z])/g, (_, g) => g.toUpperCase());
+        const oVal = orig[k] !== undefined ? orig[k] : (orig[camelKey] !== undefined ? orig[camelKey] : '');
+        const nVal = payload[k];
+        const strO = (oVal === null || oVal === undefined) ? '' : String(oVal).trim();
+        const strN = (nVal === null || nVal === undefined) ? '' : String(nVal).trim();
+        if (strO !== strN) {
+          diffs.push(`${labels[k] || k}: [${strO || '-'}] ➔ [${strN || '-'}]`);
+        }
+      }
+    }
+    const changeDetails = diffs.length > 0 ? diffs.join(', ') : '필드 값 갱신 (내용 동일)';
+
     const { error } = await client.from('inventory_items').update(payload).eq('id', id);
     if (error) throw error;
 
+    // 감사 로그 기록
     try {
-      const partDisplay = document.getElementById('drawerPartDisplay')?.innerText || '-';
-      if (typeof recordAuditLog === 'function') {
-        await recordAuditLog(id, partDisplay, 'UPDATE', '플로팅 드로어 통합 수정');
-      }
-    } catch(e) {}
+      const partDisplay = document.getElementById('drawerPartDisplay')?.innerText || orig?.part_name || orig?.partName || '-';
+      const logFn = window.recordAuditLog || (await import('./modules/audit.js')).recordAuditLog;
+      await logFn(id, partDisplay, 'UPDATE', changeDetails);
+    } catch(e) {
+      console.warn("감사 로그 저장 예외:", e);
+    }
 
     alert("성공적으로 저장되었습니다.");
     window.closeItemDrawer();

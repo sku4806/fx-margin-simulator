@@ -964,7 +964,7 @@
     </div>
 
     <!-- 3단 서브탭 네비게이션 -->
-    <div class="flex items-center gap-1 bg-slate-100 p-1.5 border-b border-slate-200 text-xs font-bold select-none shrink-0">
+    <div class="flex items-center gap-1 bg-slate-100 p-1.5 border-b border-slate-200 text-[11px] font-bold select-none shrink-0">
       <button type="button" id="dTabBtn1" onclick="window.switchDrawerTab(1)" class="flex-1 py-1.5 rounded-md bg-white text-indigo-900 shadow-sm text-center">
         1. 수주·배정
       </button>
@@ -973,6 +973,9 @@
       </button>
       <button type="button" id="dTabBtn3" onclick="window.switchDrawerTab(3)" class="flex-1 py-1.5 rounded-md text-slate-600 hover:text-slate-900 text-center">
         3. 세금·수금
+      </button>
+      <button type="button" id="dTabBtn4" onclick="window.switchDrawerTab(4)" class="flex-1 py-1.5 rounded-md text-slate-600 hover:text-slate-900 text-center flex items-center justify-center gap-1">
+        <span>🕒</span> 4. 변경 이력
       </button>
     </div>
     
@@ -1155,6 +1158,20 @@
             <option value="USD">USD ($)</option>
             <option value="KRW">KRW (₩)</option>
           </select>
+        </div>
+      </div>
+
+      
+      <!-- [탭 4] 4. 부품 변경 이력 (감사 로그 타임라인) -->
+      <div id="drawerTabContent4" class="space-y-2 hidden">
+        <div class="flex items-center justify-between pb-1 border-b border-slate-200">
+          <span class="font-bold text-slate-800 text-xs flex items-center gap-1">
+            <span>📜</span> 변경 히스토리 타임라인
+          </span>
+          <button type="button" onclick="if(window.loadDrawerAuditHistory) window.loadDrawerAuditHistory()" class="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">새로고침</button>
+        </div>
+        <div id="drawerAuditListContainer" class="space-y-1.5 min-h-[180px] max-h-[350px] overflow-y-auto pr-1">
+          <div class="text-[11px] text-slate-400 py-6 text-center">변경 이력을 불러오는 중...</div>
         </div>
       </div>
 
