@@ -640,7 +640,7 @@ function loadFormFromItem(id) {
     if (shipFxInp) shipFxInp.value = item.shipFx || item.ship_fx || 1350;
 
     runEngine();
-    document.getElementById('salesQuotationPanel')?.scrollIntoView({ behavior: 'smooth' });
+    // /* scroll blocked */ // 상단 스크롤 차단
     return;
   }
 
@@ -712,7 +712,7 @@ function loadFormFromItem(id) {
   if (item && item.id) {
     renderAuditHistory('auditHistoryContainer', item.id, item.partName || item.part_name);
   }
-  document.getElementById('formSection')?.scrollIntoView({ behavior: 'smooth' });
+  /* scroll blocked */
 }
 
 export function resetCurrentForm() {
