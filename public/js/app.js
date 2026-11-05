@@ -1,3 +1,48 @@
+
+window.openItemDrawer = function(item) {
+  const drawer = document.getElementById('itemDetailDrawer');
+  if (!drawer) {
+    console.error("itemDetailDrawer 요소를 찾을 수 없습니다.");
+    return;
+  }
+  if (!item) return;
+
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val !== undefined && val !== null ? val : '';
+  };
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = val !== undefined && val !== null ? val : '-';
+  };
+
+  setEl('drawerItemId', item.id);
+  setText('drawerPartDisplay', item.part || item.part_no || '-');
+  setText('drawerMfgDisplay', item.mfg || '-');
+  setText('drawerSubTitle', `${item.part || item.part_no || ''} | PO: ${item.pono || '-'}`);
+
+  setEl('drawerStock', item.stock || 0);
+  setEl('drawerArranged', item.arrangedQty ?? item.arranged_qty ?? 0);
+  setEl('drawerUnitUsd', item.unitUsd ?? item.unit_usd ?? 0);
+  setEl('drawerShipFx', item.shipFx ?? item.ship_fx ?? 1350);
+  setEl('drawerSoldPrice', item.soldPriceUsd ?? item.sold_price_usd ?? 0);
+  setEl('drawerSales', item.salesRep ?? item.sales_rep ?? '');
+  setEl('drawerPono', item.pono || '');
+  setEl('drawerCustomer', item.customer || '');
+  setEl('drawerMemo', item.memo || '');
+
+  drawer.classList.remove('translate-x-full');
+  drawer.style.transform = 'translateX(0)';
+};
+
+window.closeItemDrawer = function() {
+  const drawer = document.getElementById('itemDetailDrawer');
+  if (drawer) {
+    drawer.classList.add('translate-x-full');
+    drawer.style.transform = 'translateX(100%)';
+  }
+};
+
 // 분할 모달 열기 함수 (전역 바인딩 및 원본 객체 보장)
 window.openSplitModal = function(itemOrId) {
   let item = null;
