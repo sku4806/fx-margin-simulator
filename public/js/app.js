@@ -1274,3 +1274,112 @@ function handleOpenSplitModal(id) {
     alert(`[분할 모달 알림] 현재 ${part} (재고 ${stock} EA)의 분할 대상이 설정되었습니다.`);
   }
 }
+
+
+// 부분 출하 분할 실행 핸들러 (신규 분할건 DB 생성 보장)
+document.getElementById('splitShipmentForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = '출하 분할 처리 중...';
+  }
+
+  try {
+    const originalId = window._currentSplitItem?.id;
+    if (!originalId) {
+      throw new Error("분할할 원본 부품 정보를 찾을 수 없습니다.");
+    }
+
+    const splitQty = parseInt(document.getElementById('splitQtyInput')?.value) || 0;
+    const splitCustomer = document.getElementById('splitCustomerInput')?.value?.trim() || '-';
+    const splitPrice = parseFloat(document.getElementById('splitPriceInput')?.value) || 0;
+    const splitRep = document.getElementById('splitRepInput')?.value || '본사 일반재고';
+    const deadStockChoice = document.getElementById('splitDeadStockSelect')?.value || 'maintain';
+
+    const originalStock = parseInt(window._currentSplitItem.stock) || 0;
+    if (splitQty <= 0 || splitQty >= originalStock) {
+      alert(`분할 수량은 1 이상 ${originalStock - 1} 이하만 가능합니다.`);
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = '출하 분할 실행'; }
+      return;
+    }
+
+    const remainingStock = originalStock - splitQty;
+    const client = (typeof supabase !== 'undefined' && supabase?.from) ? supabase : window.supabase;
+
+    // 1. 원본 재고 수량 차감 업데이트 (잔여 재고 소유권 정책 반영)
+    const originalUpdatePayload = {
+      stock: remainingStock
+    };
+    if (deadStockChoice === 'hq') {
+      originalUpdatePayload.owner = '본사 일반재고';
+      originalUpdatePayload.customer = '-';
+      originalUpdatePayload.real_customer = '-';
+      originalUpdatePayload.order_status = '배정요청';
+    }
+
+    const { error: updateError } = await client
+      .from('inventory_items')
+      .update(originalUpdatePayload)
+      .eq('id', originalId);
+
+    if (updateError) throw new Error("원본 재고 수량 차감 실패: " + updateError.message);
+
+    // 2. 분할된 신규 출하 품목 생성 (id 및 created_at을 절대 포함하지 않음)
+    const orig = window._currentSplitItem;
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const newSplitRecord = {
+      maker: orig.maker || '기타',
+      part_name: orig.partName || orig.part_name || '-',
+      date_code: orig.dateCode || orig.date_code || '-',
+      owner: splitRep,
+      customer: splitCustomer,
+      real_customer: splitCustomer,
+      po_no: orig.poNo || orig.po_no || '',
+      application: orig.application || '',
+      biz_type: 'SPLIT',
+      entry_date: orig.entryDate || orig.entry_date || todayStr,
+      shipped_date: todayStr,
+      stock: splitQty,
+      unit_usd: orig.unitUsd ?? orig.unit_usd ?? 0,
+      sold_price_usd: splitPrice,
+      ship_fx: orig.shipFx ?? orig.ship_fx ?? 1350,
+      margin: 20,
+      order_status: '출하완료',
+      payment_terms: 'Net 30',
+      payment_status: '미수',
+      currency: 'USD',
+      memo: `[출하분할] 원본(${orig.partName || orig.part_name})에서 ${splitQty}EA 분할 출하`
+    };
+
+    const { data: insertData, error: insertError } = await client
+      .from('inventory_items')
+      .insert([newSplitRecord])
+      .select();
+
+    if (insertError) {
+      throw new Error("분할 신규 재고 생성 실패: " + insertError.message);
+    }
+
+    alert(`✅ 부분 출하 분할이 성공적으로 완료되었습니다!\n- 기존 잔여 수량: ${remainingStock.toLocaleString()} EA\n- 신규 분할 출하: ${splitQty.toLocaleString()} EA (출하완료)`);
+    
+    document.getElementById('splitShipmentModal')?.classList.add('hidden');
+    
+    // 목록 새로고침
+    if (typeof loadAndRenderInventory === 'function') {
+      await loadAndRenderInventory();
+    } else {
+      location.reload();
+    }
+  } catch (err) {
+    console.error("출하 분할 에러:", err);
+    alert("❌ 분할 작업 실패: " + err.message);
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = '출하 분할 실행';
+    }
+  }
+});
