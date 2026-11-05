@@ -487,11 +487,10 @@ export const renderInventoryList = renderInventoryUI;
 
 window.togglePrecisionMode = function(checked) {
   window.isPrecisionMode = !!checked;
-  if (typeof window.loadAndRenderInventory === 'function') {
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput) {
+    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+  } else if (typeof window.loadAndRenderInventory === 'function') {
     window.loadAndRenderInventory();
-  } else if (typeof window.renderFilteredInventory === 'function') {
-    window.renderFilteredInventory();
-  } else if (typeof lastRenderArgs !== 'undefined' && lastRenderArgs) {
-    renderInventoryUI(lastRenderArgs.items, lastRenderArgs.activeTab, lastRenderArgs.onEdit, lastRenderArgs.onDelete, lastRenderArgs.onSplit, lastRenderArgs.canEdit);
   }
 };
