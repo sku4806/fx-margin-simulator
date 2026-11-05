@@ -172,14 +172,15 @@ export function renderInventoryHeaders(activeTab) {
   if (activeTab === 'sales') {
     thead.innerHTML = `
       <tr class="bg-slate-100/95 text-slate-700 text-[11px] font-bold border-b border-slate-200 select-none">
-        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[6%]">KIND</th>
-        <th class="py-2.5 px-2 text-left w-[14%]">CNAME / 입고일</th>
-        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[8%]">SALES</th>
-        <th class="py-2.5 px-2 text-left w-[22%]">PART# / MFG</th>
+        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[5%]">KIND</th>
+        <th class="py-2.5 px-2 text-left w-[13%]">CNAME / 입고일</th>
+        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">SALES</th>
+        <th class="py-2.5 px-2 text-left w-[20%]">PART# / MFG</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">재고량 / 배정</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">원가 / 가용</th>
-        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[10%]">AMOUNT</th>
-        <th class="py-2.5 px-2 text-left w-[22%]">PONO</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">AMOUNT</th>
+        <th class="py-2.5 px-2 text-left w-[21%]">PONO</th>
+        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">수금</th>
       </tr>
     `;
   } else {
@@ -216,6 +217,7 @@ function generateLegacyMasterRow(item) {
   const entryDate = rawDate.length >= 10 ? rawDate.slice(2, 10) : rawDate;
   const mfg = item.maker || '-';
   const pono = item.poNo || item.po_no || '-';
+  const paymentStatus = item.paymentStatus || item.payment_status || '미수';
 
   return `
     <tr class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 상단 견적 계산기에 단가·수량 자동 입력" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
@@ -248,6 +250,11 @@ function generateLegacyMasterRow(item) {
       </td>
       <td class="py-2.5 px-2 text-slate-500 font-mono text-[10px] align-middle truncate max-w-[220px]" title="${pono}">
         <div>PO: ${pono}</div>
+      </td>
+      <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
+        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${paymentStatus === '완료' || paymentStatus === '수금완료' || paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">
+          ${paymentStatus === '완료' || paymentStatus === '수금완료' || paymentStatus === 'paid' ? '완료' : '미수'}
+        </span>
       </td>
     </tr>
   `;
