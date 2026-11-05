@@ -107,7 +107,7 @@
 
     <!-- 3. 환율 마진 시뮬레이터 -->
     <div id="salesQuotationPanel" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
-      <div class="border-b pb-2 flex flex-row flex-wrap items-center sm:flex-row justify-between items-start sm:items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2 p-3">
         <div>
           <h2 class="font-bold text-sm sm:text-base text-slate-900">고객사 제시 권고 견적가 (FX Protection)</h2>
           <span class="text-[10px] sm:text-[11px] text-slate-400">달러(USD) 기준 우선 표기 및 원화(@환율) 병기</span>
@@ -571,15 +571,6 @@
               <option value="미수">미수</option>
               <option value="완료">수금완료</option>
             </select>
-        <!-- 출하일자 기간 검색 필터 (단일 탑재) -->
-        <div id="shippedDateFilterWrapper" class="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs shrink-0 shadow-sm">
-          <span class="text-slate-600 font-bold whitespace-nowrap text-[11px]">🚚 출하일:</span>
-          <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
-          <span class="text-slate-400">~</span>
-          <input type="date" id="filterShipDateEnd" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
-          <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-200 rounded text-[10px]">✕</button>
-        </div>
-
         <input type="hidden" id="filterStatus" value="">
           </div>
         </div>
@@ -678,6 +669,14 @@
             <option value="Giantec">Giantec</option>
             <option value="WIZnet">WIZnet</option>
           </select>
+        </div>
+        <!-- 출하일자 기간 검색 필터 (독립 가로 배치) -->
+        <div id="shippedDateFilterWrapper" class="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs shrink-0 shadow-sm">
+          <span class="text-slate-600 font-bold whitespace-nowrap text-[11px]">🚚 출하일:</span>
+          <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
+          <span class="text-slate-400">~</span>
+          <input type="date" id="filterShipDateEnd" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
+          <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-200 rounded text-[10px] ml-0.5">✕</button>
         </div>
         <div>
           <label class="text-slate-600 block mb-0.5 font-semibold text-[11px]">담당 CS 매니저</label>
