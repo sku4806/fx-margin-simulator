@@ -648,6 +648,22 @@ function applyFilters() {
     });
   }
 
+  
+  // 출하일자 기간 검색 필터링 (shippedDate 기준)
+  const shipStart = document.getElementById('filterShipDateStart')?.value;
+  const shipEnd = document.getElementById('filterShipDateEnd')?.value;
+
+  if (shipStart || shipEnd) {
+    filtered = filtered.filter(item => {
+      const rawShip = String(item.shippedDate || item.shipped_date || '').trim();
+      if (!rawShip || rawShip === '-' || rawShip === 'null') return false;
+      const shipDate = rawShip.slice(0, 10);
+      if (shipStart && shipDate < shipStart) return false;
+      if (shipEnd && shipDate > shipEnd) return false;
+      return true;
+    });
+  }
+
   const countBadge = document.getElementById('filterCountBadge');
   if (countBadge) {
     countBadge.innerText = `총 ${filtered.length.toLocaleString()}건`;
@@ -920,6 +936,16 @@ function bindInputs() {
     safeAddListener(id, 'change', applyFilters);
   });
 
+  ['filterShipDateStart', 'filterShipDateEnd'].forEach(id => {
+    safeAddListener(id, 'change', applyFilters);
+  });
+  safeAddListener('resetShipDateBtn', 'click', () => {
+    const s = document.getElementById('filterShipDateStart');
+    const e = document.getElementById('filterShipDateEnd');
+    if (s) s.value = '';
+    if (e) e.value = '';
+    applyFilters();
+  });
   safeAddListener('saveItemBtn', 'click', saveCurrentForm);
   safeAddListener('resetFormSelectionBtn', 'click', resetCurrentForm);
 
