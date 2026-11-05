@@ -260,8 +260,8 @@ function generateLegacyMasterRow(item) {
         <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">가용: ${notArranQty.toLocaleString()}</div>
       </td>
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
-        <div class="font-bold text-rose-600 text-xs">$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-        <div class="text-[10px] text-slate-400 font-mono mt-0.5">(₩${amountKrw.toLocaleString()})</div>
+        <div class="font-bold text-rose-600 text-xs">₩${Math.round(amount * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString()}</div>
+        <div class="text-[10px] text-slate-400 font-mono mt-0.5">($${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</div>
       </td>
       <td class="py-2.5 px-2 text-slate-500 font-mono text-[10px] align-middle truncate max-w-[220px]" title="${pono}">
         <div>PO: ${pono}</div>
