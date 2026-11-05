@@ -89,7 +89,8 @@ export function handleExcelFileSelect(file) {
 
         // 3. 매입단가(unit_usd) - 원화 감지 시 환율(1,350) 자동 환산
         // 원본 엑셀 AMOUNT 열 값 정밀 추출
-          const rawAmountVal = parseFloat(String(row['AMOUNT'] ?? row['amount'] ?? row['금액'] ?? '').replace(/[^0-9.-]/g, '')) || 0;
+          const _currRow = (typeof r !== 'undefined') ? r : ((typeof row !== 'undefined') ? row : {});
+          const rawAmountVal = parseFloat(String(_currRow['AMOUNT'] ?? _currRow['amount'] ?? _currRow['금액'] ?? '').replace(/[^0-9.-]/g, '')) || 0;
           const unitUsd = resolveUnitPrice(
           r['US_NETUP'],
           (r['원가'] !== undefined && r['원가'] !== '') ? r['원가'] : (r['NET_UP'] || r['NETUP'] || r['매입단가'] || r['Unit Price']),
