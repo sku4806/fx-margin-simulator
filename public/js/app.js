@@ -1488,32 +1488,93 @@ document.getElementById('splitShipmentForm')?.addEventListener('submit', async (
 window.handleSplitModalOpen = window.openSplitModal;
 
 
-// --- 플로팅 드로어 상세/수정 제어 함수 ---
+
+// --- 플로팅 드로어 3단 서브탭 전환 ---
+window.switchDrawerTab = function(tabIndex) {
+  for (let i = 1; i <= 3; i++) {
+    const btn = document.getElementById(`dTabBtn${i}`);
+    const content = document.getElementById(`drawerTabContent${i}`);
+    if (i === tabIndex) {
+      if (btn) btn.className = "flex-1 py-1.5 rounded-md bg-white text-indigo-900 shadow-sm text-center font-bold";
+      if (content) content.classList.remove('hidden');
+    } else {
+      if (btn) btn.className = "flex-1 py-1.5 rounded-md text-slate-600 hover:text-slate-900 text-center font-semibold";
+      if (content) content.classList.add('hidden');
+    }
+  }
+};
+
+// --- 플로팅 드로어 전체 필드 바인딩 ---
 window.openItemDrawer = function(item) {
   const drawer = document.getElementById('itemDetailDrawer');
   if (!drawer || !item) return;
 
-  document.getElementById('drawerItemId').value = item.id || '';
-  document.getElementById('drawerPartDisplay').innerText = item.part || item.part_no || '-';
-  document.getElementById('drawerMfgDisplay').innerText = item.mfg || '-';
-  document.getElementById('drawerSubTitle').innerText = `${item.part || item.part_no || ''} | PO: ${item.pono || '-'}`;
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = (val !== undefined && val !== null) ? val : '';
+  };
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = (val !== undefined && val !== null && String(val).trim() !== '') ? val : '-';
+  };
 
-  document.getElementById('drawerStock').value = item.stock || 0;
-  document.getElementById('drawerArranged').value = item.arrangedQty ?? item.arranged_qty ?? 0;
-  document.getElementById('drawerUnitUsd').value = item.unitUsd ?? item.unit_usd ?? 0;
-  document.getElementById('drawerShipFx').value = item.shipFx ?? item.ship_fx ?? 1350;
-  document.getElementById('drawerSoldPrice').value = item.soldPriceUsd ?? item.sold_price_usd ?? 0;
-  document.getElementById('drawerSales').value = item.salesRep ?? item.sales_rep ?? '';
-  document.getElementById('drawerPono').value = item.pono || '';
-  document.getElementById('drawerCustomer').value = item.customer || '';
-  document.getElementById('drawerMemo').value = item.memo || '';
+  const part = item.part_name || item.partName || item.part || '-';
+  const mfg = item.maker || item.mfg || '-';
+  const po = item.po_no || item.poNo || item.pono || '-';
+  const owner = item.owner || item.salesRep || item.sales_rep || '본사 일반재고';
+
+  setEl('drawerItemId', item.id);
+  setText('drawerPartDisplay', part);
+  setText('drawerMfgDisplay', mfg);
+  setText('drawerSubTitle', `${part} | PO: ${po}`);
+
+  // 1. 수주·배정 탭
+  setEl('drawerMaker', mfg);
+  setEl('drawerDateCode', item.date_code || item.dateCode || '-');
+  setEl('drawerStock', item.stock || 0);
+  setEl('drawerArranged', item.arranged_qty ?? item.arrangedQty ?? 0);
+  setEl('drawerUnitUsd', item.unit_usd ?? item.unitUsd ?? 0);
+  setEl('drawerShipFx', item.ship_fx ?? item.shipFx ?? 1350);
+  setEl('drawerSoldPrice', item.sold_price_usd ?? item.soldPriceUsd ?? 0);
+  setEl('drawerSales', owner);
+  setEl('drawerCustomer', item.customer || '');
+  setEl('drawerRealCustomer', item.real_customer || item.realCustomer || '');
+  setEl('drawerPono', item.po_no || item.poNo || '');
+  setEl('drawerApplication', item.application || '');
+
+  // 2. 출하·물류 탭
+  setEl('drawerOrderStatus', item.order_status || item.orderStatus || '배정요청');
+  setEl('drawerBizType', item.biz_type || item.bizType || 'DOMESTIC');
+  setEl('drawerShippedDate', item.shipped_date || item.shippedDate || '');
+  setEl('drawerInvoiceNo', item.invoice_no || item.invoiceNo || '');
+  setEl('drawerTrackingNo', item.tracking_no || item.trackingNo || '');
+  setEl('drawerEntryDate', item.entry_date || item.entryDate || '');
+
+  // 3. 세금·수금 탭
+  setEl('drawerPaymentStatus', item.payment_status || item.paymentStatus || '미수');
+  setEl('drawerPaymentTerms', item.payment_terms || item.paymentTerms || 'Net 30');
+  setEl('drawerTaxDate', item.tax_date || item.taxDate || '');
+  setEl('drawerDueDate', item.due_date || item.dueDate || '');
+  setEl('drawerSettledDate', item.settled_date || item.settledDate || '');
+  setEl('drawerSettledFx', item.settled_fx || item.settledFx || '');
+  setEl('drawerCurrency', item.currency || 'USD');
+
+  // 공통 메모
+  setEl('drawerMemo', item.memo || '');
+
+  // 기본은 1번 탭(수주·배정) 활성화
+  window.switchDrawerTab(1);
 
   drawer.classList.remove('translate-x-full');
+  drawer.style.transform = 'translateX(0)';
 };
 
 window.closeItemDrawer = function() {
   const drawer = document.getElementById('itemDetailDrawer');
-  if (drawer) drawer.classList.add('translate-x-full');
+  if (drawer) {
+    drawer.classList.add('translate-x-full');
+    drawer.style.transform = 'translateX(100%)';
+  }
 };
 
 window.saveDrawerItem = async function() {
@@ -1524,27 +1585,56 @@ window.saveDrawerItem = async function() {
 
   try {
     const payload = {
-      stock: parseInt(document.getElementById('drawerStock').value) || 0,
-      arranged_qty: parseInt(document.getElementById('drawerArranged').value) || 0,
-      unit_usd: parseFloat(document.getElementById('drawerUnitUsd').value) || 0,
-      ship_fx: parseFloat(document.getElementById('drawerShipFx').value) || 1350,
-      sold_price_usd: parseFloat(document.getElementById('drawerSoldPrice').value) || 0,
-      sales_rep: document.getElementById('drawerSales').value.trim(),
-      pono: document.getElementById('drawerPono').value.trim(),
-      customer: document.getElementById('drawerCustomer').value.trim(),
-      memo: document.getElementById('drawerMemo').value.trim()
+      maker: document.getElementById('drawerMaker')?.value.trim() || '기타',
+      date_code: document.getElementById('drawerDateCode')?.value.trim() || '-',
+      stock: parseInt(document.getElementById('drawerStock')?.value) || 0,
+      arranged_qty: parseInt(document.getElementById('drawerArranged')?.value) || 0,
+      unit_usd: parseFloat(document.getElementById('drawerUnitUsd')?.value) || 0,
+      ship_fx: parseFloat(document.getElementById('drawerShipFx')?.value) || 1350,
+      sold_price_usd: parseFloat(document.getElementById('drawerSoldPrice')?.value) || 0,
+      owner: document.getElementById('drawerSales')?.value.trim() || '본사 일반재고',
+      customer: document.getElementById('drawerCustomer')?.value.trim() || '-',
+      real_customer: document.getElementById('drawerRealCustomer')?.value.trim() || '-',
+      po_no: document.getElementById('drawerPono')?.value.trim() || '',
+      application: document.getElementById('drawerApplication')?.value.trim() || '',
+
+      order_status: document.getElementById('drawerOrderStatus')?.value || '배정요청',
+      biz_type: document.getElementById('drawerBizType')?.value || 'DOMESTIC',
+      shipped_date: document.getElementById('drawerShippedDate')?.value || null,
+      invoice_no: document.getElementById('drawerInvoiceNo')?.value.trim() || '',
+      tracking_no: document.getElementById('drawerTrackingNo')?.value.trim() || '',
+      entry_date: document.getElementById('drawerEntryDate')?.value || null,
+
+      payment_status: document.getElementById('drawerPaymentStatus')?.value || '미수',
+      payment_terms: document.getElementById('drawerPaymentTerms')?.value.trim() || 'Net 30',
+      tax_date: document.getElementById('drawerTaxDate')?.value || null,
+      due_date: document.getElementById('drawerDueDate')?.value || null,
+      settled_date: document.getElementById('drawerSettledDate')?.value || null,
+      settled_fx: parseFloat(document.getElementById('drawerSettledFx')?.value) || null,
+      currency: document.getElementById('drawerCurrency')?.value || 'USD',
+
+      memo: document.getElementById('drawerMemo')?.value.trim() || ''
     };
 
-    const { error } = await supabaseClient.from('inventory_items').update(payload).eq('id', id);
+    const client = (typeof supabase !== 'undefined' && supabase?.from) ? supabase : window.supabase;
+    const { error } = await client.from('inventory_items').update(payload).eq('id', id);
     if (error) throw error;
 
-    alert("성공적으로 수정되었습니다.");
+    // 감사 로그 기록
+    try {
+      const partDisplay = document.getElementById('drawerPartDisplay')?.innerText || '-';
+      if (typeof recordAuditLog === 'function') {
+        await recordAuditLog(id, partDisplay, 'UPDATE', '플로팅 드로어 통합 수정');
+      }
+    } catch(e) {}
+
+    alert("성공적으로 저장되었습니다.");
     window.closeItemDrawer();
     if (typeof refreshInventory === 'function') await refreshInventory();
-    else if (typeof loadAndRenderInventory === 'function') await loadAndRenderInventory();
   } catch (err) {
-    alert("수정 실패: " + err.message);
+    alert("저장 실패: " + err.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.innerText = "변경사항 저장"; }
+    if (btn) { btn.disabled = false; btn.innerText = "전체 변경사항 저장"; }
   }
 };
+
