@@ -1,3 +1,35 @@
+
+// --- 행 하이라이트 및 저장 후 위치 자동 추적 함수 ---
+window.highlightActiveRow = function(itemId) {
+  // 기존 하이라이트 행 원복
+  document.querySelectorAll('tr[id^="row-item-"]').forEach(tr => {
+    tr.classList.remove('bg-indigo-100/90', 'border-l-4', 'border-indigo-600', 'font-semibold');
+  });
+  if (!itemId) return;
+
+  const targetTr = document.getElementById(`row-item-${itemId}`);
+  if (targetTr) {
+    targetTr.classList.add('bg-indigo-100/90', 'border-l-4', 'border-indigo-600', 'font-semibold');
+  }
+};
+
+window.flashSavedRow = function(itemId) {
+  if (!itemId) return;
+  setTimeout(() => {
+    const targetTr = document.getElementById(`row-item-${itemId}`);
+    if (targetTr) {
+      // 해당 행으로 부드럽게 스크롤 이동
+      targetTr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // 2.5초간 노란색 하이라이트 깜빡임
+      targetTr.classList.add('bg-amber-100', 'border-l-4', 'border-amber-500');
+      setTimeout(() => {
+        targetTr.classList.remove('bg-amber-100', 'border-amber-500');
+        targetTr.classList.add('bg-indigo-50', 'border-indigo-400');
+      }, 2500);
+    }
+  }, 250);
+};
+
 // 분할 모달 열기 함수 (전역 바인딩 및 원본 객체 보장)
 window.openSplitModal = function(itemOrId) {
   const canEdit = (typeof window.isCsOrAdminUser === 'function') 
@@ -1575,7 +1607,10 @@ window.saveDrawerItem = async function() {
 
     alert("성공적으로 저장되었습니다.");
     window.closeItemDrawer();
-    if (typeof refreshInventory === 'function') await refreshInventory();
+    if (typeof refreshInventory === 'function') {
+      await refreshInventory();
+      if (typeof window.flashSavedRow === 'function') window.flashSavedRow(id);
+    }
   } catch (err) {
     alert("저장 실패: " + err.message);
   } finally {
@@ -1649,6 +1684,7 @@ window.loadDrawerAuditHistory = async function() {
 window.openItemDrawer = function(item) {
   const drawer = document.getElementById('itemDetailDrawer');
   if (!drawer || !item) return;
+  if (typeof window.highlightActiveRow === 'function') window.highlightActiveRow(item.id);
 
   const setEl = (id, val) => {
     const el = document.getElementById(id);
@@ -1750,6 +1786,7 @@ window.openItemDrawer = function(item) {
 };
 
 window.closeItemDrawer = function() {
+  if (typeof window.highlightActiveRow === 'function') window.highlightActiveRow(null);
   const drawer = document.getElementById('itemDetailDrawer');
   if (drawer) {
     drawer.classList.add('translate-x-full');
