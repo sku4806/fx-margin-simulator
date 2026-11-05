@@ -1,5 +1,13 @@
 // 분할 모달 열기 함수 (전역 바인딩 및 원본 객체 보장)
 window.openSplitModal = function(itemOrId) {
+  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
+    ? window.isCsOrAdminUser() 
+    : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
+
+  if (!canEdit) {
+    alert("부분 출하 분할 기능은 CS 및 관리자 권한만 가능합니다.");
+    return;
+  }
   let item = null;
   if (typeof itemOrId === 'object' && itemOrId !== null) {
     item = itemOrId;

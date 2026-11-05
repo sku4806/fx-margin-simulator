@@ -358,12 +358,16 @@ const stock = Number(item.stock) || 0;
       <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${paymentStatus === '완료' || paymentStatus === '수금완료' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">${paymentStatus}</span>
       </td>
-      <td class="py-2.5 px-2 text-center select-none whitespace-nowrap align-middle" onclick="event.stopPropagation()">
+            <td class="py-2.5 px-2 text-center select-none whitespace-nowrap align-middle" onclick="event.stopPropagation()">
+        ${canEdit ? `
         <div class="inline-flex items-center justify-center gap-1">
           <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold">수정</button>
-          <button type="button" onclick="window.openSplitModal && window.openSplitModal(\'${item.id}\')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold">분할</button>
+          <button type="button" onclick="event.stopPropagation(); window.openSplitModal && window.openSplitModal('${item.id}')" class="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold">분할</button>
           <button type="button" onclick="event.stopPropagation(); window.handleDeleteItem && window.handleDeleteItem('${item.id}')" class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-200 text-[10px] font-bold">삭제</button>
         </div>
+        ` : `
+        <span class="text-[10px] text-slate-400 font-semibold px-2 py-0.5 bg-slate-50 border border-slate-200 rounded">조회전용</span>
+        `}
       </td>
     </tr>
   `;
