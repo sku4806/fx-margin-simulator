@@ -676,6 +676,7 @@ function loadFormFromItem(id) {
   const item = getCachedItem(id);
   if (!item) return;
 
+  // 1) 영업 견적 탭: 상단 계산기 데이터 채우고 최상단으로 부드럽게 스크롤
   if (activeTab === 'sales') {
     const unitUsdInp = document.getElementById('inputUsd');
     const stockInp = document.getElementById('inputStock');
@@ -685,7 +686,18 @@ function loadFormFromItem(id) {
     if (shipFxInp) shipFxInp.value = item.shipFx || item.ship_fx || 1350;
 
     runEngine();
-    // /* scroll blocked */ // 상단 스크롤 차단
+    const panel = document.getElementById('salesQuotationPanel');
+    if (panel) {
+      panel.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    return;
+  }
+
+  // 2) 출하/채권 관리 탭: 화면 스크롤 점프 없이 우측 플로팅 드로어 오픈
+  if (typeof window.openItemDrawer === 'function') {
+    window.openItemDrawer(item);
     return;
   }
 

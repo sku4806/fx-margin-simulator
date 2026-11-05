@@ -253,6 +253,10 @@ function generateLegacyMasterRow(item) {
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">MFG: <span class="font-bold text-slate-700">${mfg}</span></div>
       </td>
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
+        <div class="font-black text-slate-900">${stock.toLocaleString()} EA</div>
+        <div class="text-[10px] text-amber-700 font-semibold mt-0.5">배정: ${arrangedQty.toLocaleString()}</div>
+      </td>
+      <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
         <div class="text-slate-900 font-bold">
           ₩${window.isPrecisionMode 
             ? (unitUsd * (Number(item.shipFx ?? item.ship_fx) || 1350)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
