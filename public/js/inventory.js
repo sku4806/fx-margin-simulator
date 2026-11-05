@@ -1,3 +1,16 @@
+function getKindBadge(kindRaw) {
+  const k = String(kindRaw || 'DOMESTIC').trim().toUpperCase();
+  if (k.includes('외자') || k === 'IMPORT' || k === 'OVERSEAS') {
+    return '<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-100 text-blue-800 border border-blue-200">외자</span>';
+  } else if (k.includes('비정식') || k === 'INFORMAL' || k.includes('반납') || k.includes('불용')) {
+    return '<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-200">비정식</span>';
+  } else if (k.includes('분할') || k === 'SPLIT') {
+    return '<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-200">분할</span>';
+  } else {
+    return '<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-indigo-100 text-indigo-800 border border-indigo-200">내자</span>';
+  }
+}
+
 import { sbClient } from './supabase.js';
 
 let cachedItems = [];
@@ -222,9 +235,7 @@ function generateLegacyMasterRow(item) {
   return `
     <tr class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 상단 견적 계산기에 단가·수량 자동 입력" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
       <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
-        <span class="px-2 py-0.5 rounded text-[9px] font-bold ${kind.includes('내자') || kind.includes('DOMESTIC') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
-          ${kind.length > 4 ? kind.slice(0, 4) : kind}
-        </span>
+        ${getKindBadge(kind)}
       </td>
       <td class="py-2.5 px-2 align-middle">
         <div class="font-bold text-slate-800 truncate max-w-[150px]" title="${cname}">${cname}</div>

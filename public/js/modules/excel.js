@@ -1,3 +1,11 @@
+function normalizeKindValue(raw) {
+  const str = String(raw || '').trim();
+  if (str.includes('외자') || /import/i.test(str)) return 'IMPORT';
+  if (str.includes('비정식') || /informal/i.test(str)) return 'INFORMAL';
+  if (str.includes('분할') || /split/i.test(str)) return 'SPLIT';
+  return 'DOMESTIC';
+}
+
 /**
  * 📥 레거시 마스터(SalesMaster.xls) 완벽 호환 엑셀 다운로드 및 일괄 업로드 모듈
  */
@@ -142,7 +150,7 @@ export function handleExcelFileSelect(file) {
           real_customer: String(r['REALCUST'] || r['실고객사'] || '-').trim(),
           po_no: String(r['PONO'] || r['발주번호'] || '').trim(),
           application: String(r['APP'] || r['적용처'] || '').trim(),
-          biz_type: String(r['BIZ_TYPE'] || 'DOMESTIC').trim(),
+          biz_type: normalizeKindValue(row['KIND'] || row['구분'] || row['거래구분']),
           entry_date: normalizedDate,
           owner: String(r['SALES'] || r['담당자'] || '본사 일반재고').trim(),
           order_status: '배정요청',
