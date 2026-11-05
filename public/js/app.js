@@ -429,7 +429,7 @@ function applyFilters() {
   const searchInput = document.getElementById('searchQuery') || document.getElementById('searchInput');
   const lineFilter = document.getElementById('filterLine') || document.getElementById('filterMaker') || document.getElementById('selectLine');
   const salesFilter = document.getElementById('filterSales') || document.getElementById('filterOwner') || document.getElementById('selectSales');
-  const statusFilter = document.getElementById('filterStatus') || document.getElementById('filterPayment') || document.getElementById('selectStatus');
+  const statusFilter = document.getElementById('filterPayment') || document.getElementById('filterStatus') || document.getElementById('selectStatus');
 
   const q = (searchInput?.value || '').trim().toLowerCase();
   const selectedLine = (lineFilter?.value || 'ALL').trim();
