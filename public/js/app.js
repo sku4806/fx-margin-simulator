@@ -1,4 +1,3 @@
-
 // --- 행 선택 강조 및 저장 후 즉시 스크롤/점멸 추적 (인라인 스타일 보장) ---
 window._lastSavedItemId = null;
 
@@ -688,6 +687,7 @@ function setSelectValue(selectId, customInputId, val, customVal) {
 function loadFormFromItem(id) {
   const item = getCachedItem(id);
   if (!item) return;
+  if (typeof window.highlightActiveRow === "function") window.highlightActiveRow(id);
 
   // 1) 영업 견적 탭: 상단 계산기 데이터 채우고 최상단으로 부드럽게 스크롤
   if (activeTab === 'sales') {
@@ -1500,140 +1500,90 @@ document.getElementById('splitShipmentForm')?.addEventListener('submit', async (
 // 기존 분할 버튼 클릭 이벤트 호환 래퍼
 window.handleSplitModalOpen = window.openSplitModal;
 
+// ========================================================
+// 🌟 행 하이라이트 & 저장 후 자동 스크롤 추적 엔진 (완전판)
+// ========================================================
+window._currentActiveItemId = null;
 
+// [1] 행 클릭 시 즉시 짙은 강조 (파란색 배경 + 왼쪽 굵은 인디고 인라인 바)
+window.highlightActiveRow = function(itemId) {
+  window._currentActiveItemId = itemId;
 
-// --- 플로팅 드로어 4단 서브탭 전환 ---
-window.switchDrawerTab = function(tabIndex) {
-  for (let i = 1; i <= 4; i++) {
-    const btn = document.getElementById(`dTabBtn${i}`);
-    const content = document.getElementById(`drawerTabContent${i}`);
-    if (i === tabIndex) {
-      if (btn) btn.className = "flex-1 py-1.5 rounded-md bg-white text-indigo-900 shadow-sm text-center font-bold";
-      if (content) content?.classList.remove('hidden');
-    } else {
-      if (btn) btn.className = "flex-1 py-1.5 rounded-md text-slate-600 hover:text-slate-900 text-center font-semibold";
-      if (content) content?.classList.add('hidden');
-    }
-  }
-  if (tabIndex === 4 && typeof window.loadDrawerAuditHistory === 'function') {
-    window.loadDrawerAuditHistory();
-  }
-};
+  // 이전 선택된 모든 행의 배경 및 테두리 초기화
+  document.querySelectorAll('tr[id^="row-item-"]').forEach(tr => {
+    tr.style.backgroundColor = '';
+    tr.querySelectorAll('td').forEach(td => {
+      td.style.backgroundColor = '';
+      td.style.borderTop = '';
+      td.style.borderBottom = '';
+      td.style.borderLeft = '';
+    });
+  });
+  if (!itemId) return;
 
-// --- 플로팅 드로어 내 실시간 감사 로그 조회 ---
-window.loadDrawerAuditHistory = async function() {
-  const container = document.getElementById('drawerAuditListContainer');
-  const id = document.getElementById('drawerItemId')?.value;
-  if (!container || !id) return;
-
-  container.innerHTML = `<div class="text-[11px] text-slate-400 py-6 text-center">히스토리 조회 중...</div>`;
-
-  try {
-    const fetchFn = window.fetchAuditLogs || (await import('./modules/audit.js')).fetchAuditLogs;
-    const logs = await fetchFn(id);
-
-    if (!logs || logs.length === 0) {
-      container.innerHTML = `<div class="p-4 text-center text-slate-400 text-[11px] bg-slate-50 rounded-lg border border-slate-200">기록된 변경 이력이 없습니다.</div>`;
-      return;
-    }
-
-    container.innerHTML = logs.map(log => {
-      const d = new Date(log.created_at);
-      const timeStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      const userShort = log.user_email ? log.user_email.split('@')[0] : '익명';
-
-      let actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">정보수정</span>`;
-      if (log.action_type === 'CREATE') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-800">신규등록</span>`;
-      if (log.action_type === 'SPLIT') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800">출하분할</span>`;
-      if (log.action_type === 'DELETE') actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800">삭제</span>`;
-
-      return `
-        <div class="p-2 bg-slate-50 hover:bg-slate-100/70 rounded-lg border border-slate-200 text-[11px] space-y-1">
-          <div class="flex items-center justify-between text-slate-500 font-mono text-[10px]">
-            <span class="flex items-center gap-1 font-bold text-slate-700">
-              ${actionBadge} <span>${userShort}</span>
-            </span>
-            <span>${timeStr}</span>
-          </div>
-          <div class="text-slate-800 font-medium break-all leading-relaxed pl-0.5">${log.details || '-'}</div>
-        </div>
-      `;
-    }).join('');
-  } catch (err) {
-    container.innerHTML = `<div class="p-3 text-center text-rose-500 text-[11px]">이력 로드 실패: ${err.message}</div>`;
+  const targetTr = document.getElementById(`row-item-${itemId}`) || document.querySelector(`tr[data-item-id="${itemId}"]`);
+  if (targetTr) {
+    const tds = targetTr.querySelectorAll('td');
+    tds.forEach((td, idx) => {
+      td.style.backgroundColor = '#dbeafe'; // 눈에 확 띄는 밝은 인디고 블루
+      td.style.borderTop = '2px solid #6366f1';
+      td.style.borderBottom = '2px solid #6366f1';
+      if (idx === 0) td.style.borderLeft = '6px solid #4338ca'; // 좌측 굵은 인디고 바
+    });
   }
 };
 
-// --- 플로팅 드로어 전체 필드 바인딩 ---
-window.saveDrawerItem = async function() {
-  if (typeof isCsOrAdminUser === 'function' && !isCsOrAdminUser()) {
-    alert("수주 및 출하 관리 데이터 수정 권한이 없습니다. (CS/관리자 전용 기능)");
-    return;
-  }
-  const id = document.getElementById('drawerItemId')?.value;
-  if (!id) return;
-  const btn = document.getElementById('drawerSaveBtn');
-  if (btn) { btn.disabled = true; btn.innerText = "저장 중..."; }
+// [2] 저장 후 방금 수정한 품목 위치로 부모 스크롤 이동 및 노란색 번쩍임
+window.flashSavedRow = function(itemId) {
+  if (!itemId) return;
 
-  try {
-    const payload = {
-      maker: document.getElementById('drawerMaker')?.value.trim() || '기타',
-      date_code: document.getElementById('drawerDateCode')?.value.trim() || '-',
-      stock: parseInt(document.getElementById('drawerStock')?.value) || 0,
-      arranged_qty: parseInt(document.getElementById('drawerArranged')?.value) || 0,
-      unit_usd: parseFloat(document.getElementById('drawerUnitUsd')?.value) || 0,
-      ship_fx: parseFloat(document.getElementById('drawerShipFx')?.value) || 1350,
-      sold_price_usd: parseFloat(document.getElementById('drawerSoldPrice')?.value) || 0,
-      owner: document.getElementById('drawerSales')?.value.trim() || '본사 일반재고',
-      customer: document.getElementById('drawerCustomer')?.value.trim() || '-',
-      real_customer: document.getElementById('drawerRealCustomer')?.value.trim() || '-',
-      po_no: document.getElementById('drawerPono')?.value.trim() || '',
-      application: document.getElementById('drawerApplication')?.value.trim() || '',
+  let attempts = 0;
+  const timer = setInterval(() => {
+    attempts++;
+    const targetTr = document.getElementById(`row-item-${itemId}`) || document.querySelector(`tr[data-item-id="${itemId}"]`);
+    
+    if (targetTr) {
+      clearInterval(timer);
 
-      order_status: document.getElementById('drawerOrderStatus')?.value || '배정요청',
-      biz_type: document.getElementById('drawerBizType')?.value || 'DOMESTIC',
-      shipped_date: document.getElementById('drawerShippedDate')?.value || null,
-      invoice_no: document.getElementById('drawerInvoiceNo')?.value.trim() || '',
-      tracking_no: document.getElementById('drawerTrackingNo')?.value.trim() || '',
-      entry_date: document.getElementById('drawerEntryDate')?.value || null,
-
-      payment_status: document.getElementById('drawerPaymentStatus')?.value || '미수',
-      payment_terms: document.getElementById('drawerPaymentTerms')?.value.trim() || 'Net 30',
-      tax_date: document.getElementById('drawerTaxDate')?.value || null,
-      due_date: document.getElementById('drawerDueDate')?.value || null,
-      settled_date: document.getElementById('drawerSettledDate')?.value || null,
-      settled_fx: parseFloat(document.getElementById('drawerSettledFx')?.value) || null,
-      currency: document.getElementById('drawerCurrency')?.value || 'USD',
-
-      memo: document.getElementById('drawerMemo')?.value.trim() || ''
-    };
-
-    const client = (typeof supabase !== 'undefined' && supabase?.from) ? supabase : window.supabase;
-    const { error } = await client.from('inventory_items').update(payload).eq('id', id);
-    if (error) throw error;
-
-    // 감사 로그 기록
-    try {
-      const partDisplay = document.getElementById('drawerPartDisplay')?.innerText || '-';
-      if (typeof recordAuditLog === 'function') {
-        await recordAuditLog(id, partDisplay, 'UPDATE', '플로팅 드로어 통합 수정');
+      // 1. 내부 스크롤 컨테이너 또는 브라우저 창 스크롤 중앙 정렬
+      const scrollParent = targetTr.closest('.overflow-y-auto') || targetTr.closest('div[class*="overflow"]');
+      if (scrollParent) {
+        const pTop = scrollParent.getBoundingClientRect().top;
+        const eTop = targetTr.getBoundingClientRect().top;
+        scrollParent.scrollBy({
+          top: eTop - pTop - (scrollParent.clientHeight / 2) + 20,
+          behavior: 'smooth'
+        });
       }
-    } catch(e) {}
+      targetTr.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-    alert("성공적으로 저장되었습니다.");
-    window.closeItemDrawer();
-    if (typeof refreshInventory === 'function') {
-      await refreshInventory();
-      if (typeof window.flashSavedRow === 'function') window.flashSavedRow(id);
+      // 2. 3초간 노란색 형광펜 하이라이트 번쩍임
+      const tds = targetTr.querySelectorAll('td');
+      tds.forEach((td, idx) => {
+        td.style.backgroundColor = '#fef08a'; // 선명한 옐로우
+        td.style.borderTop = '2px solid #eab308';
+        td.style.borderBottom = '2px solid #eab308';
+        if (idx === 0) td.style.borderLeft = '6px solid #ca8a04';
+      });
+
+      // 3. 2.5초 후 차분한 인디고 블루 강조 상태로 유지
+      setTimeout(() => {
+        tds.forEach((td, idx) => {
+          td.style.backgroundColor = '#e0e7ff';
+          td.style.borderTop = '1px solid #c7d2fe';
+          td.style.borderBottom = '1px solid #c7d2fe';
+          if (idx === 0) td.style.borderLeft = '6px solid #4f46e5';
+        });
+      }, 2500);
     }
-  } catch (err) {
-    alert("저장 실패: " + err.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerText = "전체 변경사항 저장"; }
-  }
+
+    if (attempts > 30) clearInterval(timer);
+  }, 100);
 };
 
-// --- 플로팅 드로어 4단 서브탭 전환 ---
+// ========================================================
+// 📦 플로팅 드로어 4단 서브탭 및 감사로그 단일 통합본
+// ========================================================
 window.switchDrawerTab = function(tabIndex) {
   for (let i = 1; i <= 4; i++) {
     const btn = document.getElementById(`dTabBtn${i}`);
@@ -1651,7 +1601,6 @@ window.switchDrawerTab = function(tabIndex) {
   }
 };
 
-// --- 플로팅 드로어 내 실시간 감사 로그 조회 ---
 window.loadDrawerAuditHistory = async function() {
   const container = document.getElementById('drawerAuditListContainer');
   const id = document.getElementById('drawerItemId')?.value;
@@ -1695,11 +1644,12 @@ window.loadDrawerAuditHistory = async function() {
   }
 };
 
-// --- 플로팅 드로어 전체 필드 바인딩 및 강력 권한 가드 ---
 window.openItemDrawer = function(item) {
   const drawer = document.getElementById('itemDetailDrawer');
   if (!drawer || !item) return;
-  if (typeof window.highlightActiveRow === 'function') window.highlightActiveRow(item.id);
+
+  // 클릭한 행 즉시 강조 실행
+  window.highlightActiveRow(item.id);
 
   const setEl = (id, val) => {
     const el = document.getElementById(id);
@@ -1720,7 +1670,6 @@ window.openItemDrawer = function(item) {
   setText('drawerMfgDisplay', mfg);
   setText('drawerSubTitle', `${part} | PO: ${po}`);
 
-  // 1. 수주·배정 탭 필드
   setEl('drawerMaker', mfg);
   setEl('drawerDateCode', item.date_code || item.dateCode || '-');
   setEl('drawerStock', item.stock || 0);
@@ -1734,7 +1683,6 @@ window.openItemDrawer = function(item) {
   setEl('drawerPono', item.po_no || item.poNo || '');
   setEl('drawerApplication', item.application || '');
 
-  // 2. 출하·물류 탭 필드
   setEl('drawerOrderStatus', item.order_status || item.orderStatus || '배정요청');
   setEl('drawerBizType', item.biz_type || item.bizType || 'DOMESTIC');
   setEl('drawerShippedDate', item.shipped_date || item.shippedDate || '');
@@ -1742,7 +1690,6 @@ window.openItemDrawer = function(item) {
   setEl('drawerTrackingNo', item.tracking_no || item.trackingNo || '');
   setEl('drawerEntryDate', item.entry_date || item.entryDate || '');
 
-  // 3. 세금·수금 탭 필드
   setEl('drawerPaymentStatus', item.payment_status || item.paymentStatus || '미수');
   setEl('drawerPaymentTerms', item.payment_terms || item.paymentTerms || 'Net 30');
   setEl('drawerTaxDate', item.tax_date || item.taxDate || '');
@@ -1751,13 +1698,10 @@ window.openItemDrawer = function(item) {
   setEl('drawerSettledFx', item.settled_fx || item.settledFx || '');
   setEl('drawerCurrency', item.currency || 'USD');
 
-  // 공통 메모
   setEl('drawerMemo', item.memo || '');
 
-  // 기본은 1번 탭(수주·배정) 활성화
-  if (typeof window.switchDrawerTab === 'function') window.switchDrawerTab(1);
+  window.switchDrawerTab(1);
 
-  // [권한 제어 가드] CS/관리자 여부 판정
   const canEdit = (typeof window.isCsOrAdminUser === 'function') 
     ? window.isCsOrAdminUser() 
     : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
@@ -1773,22 +1717,16 @@ window.openItemDrawer = function(item) {
   }
 
   if (saveBtn) {
-    if (canEdit) {
-      saveBtn.classList.remove('hidden');
-    } else {
-      saveBtn.classList.add('hidden');
-    }
+    saveBtn.classList.toggle('hidden', !canEdit);
   }
 
-  // 드로어 내부 모든 입력 요소(배송조회 버튼 제외) 읽기 전용 및 비활성화 처리
-  const inputs = drawer.querySelectorAll('input:not(#drawerTrackingNo), select, textarea');
-  inputs.forEach(el => {
+  drawer.querySelectorAll('input:not(#drawerTrackingNo), select, textarea').forEach(el => {
     if (el.id === 'drawerItemId') return;
     el.disabled = !canEdit;
     if (!canEdit) {
       el.setAttribute('readonly', 'true');
       el.classList.add('bg-slate-100', 'cursor-not-allowed', 'text-slate-500');
-      el.classList.remove('bg-slate-50', 'bg-white', 'text-slate-900', 'text-indigo-700', 'text-rose-600');
+      el.classList.remove('bg-slate-50', 'bg-white');
     } else {
       el.removeAttribute('readonly');
       el.classList.remove('bg-slate-100', 'cursor-not-allowed', 'text-slate-500');
@@ -1801,7 +1739,6 @@ window.openItemDrawer = function(item) {
 };
 
 window.closeItemDrawer = function() {
-  if (typeof window.highlightActiveRow === 'function') window.highlightActiveRow(null);
   const drawer = document.getElementById('itemDetailDrawer');
   if (drawer) {
     drawer.classList.add('translate-x-full');
@@ -1901,7 +1838,12 @@ window.saveDrawerItem = async function() {
 
     alert("성공적으로 저장되었습니다.");
     window.closeItemDrawer();
-    if (typeof refreshInventory === 'function') await refreshInventory();
+
+    // 인벤토리 목록 갱신 후 반드시 flashSavedRow 실행
+    if (typeof refreshInventory === 'function') {
+      await refreshInventory();
+      window.flashSavedRow(id);
+    }
   } catch (err) {
     alert("저장 실패: " + err.message);
   } finally {
