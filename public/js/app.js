@@ -275,6 +275,64 @@ function safeAddListener(id, event, handler) {
   if (el) el.addEventListener(event, handler);
 }
 
+
+// ========================================================
+// 🛡️ [1단계] 스마트 입력 마스크 & 콤마 자동 서식 유틸리티
+// ========================================================
+function formatNumberWithMask(rawValue, maxDecimals = 2) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') return '';
+  let clean = String(rawValue).replace(/[^0-9.]/g, '');
+  const parts = clean.split('.');
+  let integerPart = parts[0];
+  let decimalPart = parts.length > 1 ? parts[1].slice(0, maxDecimals) : null;
+
+  if (integerPart) {
+    integerPart = parseInt(integerPart, 10).toLocaleString();
+  } else if (clean.startsWith('.')) {
+    integerPart = '0';
+  }
+
+  return decimalPart !== null ? `${integerPart}.${decimalPart}` : integerPart;
+}
+
+function parseMaskedNumber(val) {
+  if (val === undefined || val === null || val === '') return 0;
+  const num = parseFloat(String(val).replace(/,/g, ''));
+  return isNaN(num) ? 0 : Math.max(0, num);
+}
+
+function setupInputMasks() {
+  const maskConfigs = [
+    { id: 'inputUsd', decimals: 4, handler: () => { if (typeof runEngine === 'function') runEngine(); } },
+    { id: 'inputTargetOffer', decimals: 4, handler: () => { if (typeof runEngine === 'function') runEngine(); } },
+    { id: 'inputSoldPrice', decimals: 4, handler: null },
+    { id: 'inputShipFx', decimals: 0, handler: () => { if (typeof updateFxVarianceFeedback === 'function') updateFxVarianceFeedback(); if (typeof runEngine === 'function') runEngine(); } },
+    { id: 'inputSettledFx', decimals: 0, handler: () => { if (typeof updateFxVarianceFeedback === 'function') updateFxVarianceFeedback(); } },
+    { id: 'inputStock', decimals: 0, handler: () => { if (typeof updateSpqNotice === 'function') updateSpqNotice(); if (typeof runEngine === 'function') runEngine(); } },
+    { id: 'inputSpq', decimals: 0, handler: () => { if (typeof updateSpqNotice === 'function') updateSpqNotice(); } },
+    { id: 'drawerStock', decimals: 0, handler: null },
+    { id: 'drawerArranged', decimals: 0, handler: null },
+    { id: 'drawerUnitUsd', decimals: 4, handler: null },
+    { id: 'drawerShipFx', decimals: 0, handler: null },
+    { id: 'drawerSoldPrice', decimals: 4, handler: null },
+    { id: 'drawerSettledFx', decimals: 0, handler: null }
+  ];
+
+  maskConfigs.forEach(({ id, decimals, handler }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('inputmode', decimals > 0 ? 'decimal' : 'numeric');
+    el.addEventListener('input', () => {
+      const start = el.selectionStart;
+      const prevLen = el.value.length;
+      el.value = formatNumberWithMask(el.value, decimals);
+      const diff = el.value.length - prevLen;
+      el.setSelectionRange(start + diff, start + diff);
+      if (typeof handler === 'function') handler();
+    });
+  });
+}
+
 export async function bootstrap() {
   const entryDateEl = document.getElementById('inputEntryDate');
   if (entryDateEl) entryDateEl.value = new Date().toISOString().slice(0, 10);
@@ -297,6 +355,7 @@ export async function bootstrap() {
 
   bindTabSwitch();
   bindInputs();
+  setupInputMasks();
   bindModals();
   initManualViewer();
 
@@ -710,9 +769,9 @@ function loadFormFromItem(id) {
     const unitUsdInp = document.getElementById('inputUsd');
     const stockInp = document.getElementById('inputStock');
     const shipFxInp = document.getElementById('inputShipFx');
-    if (unitUsdInp) unitUsdInp.value = item.unitUsd || item.unit_usd || 0;
-    if (stockInp) stockInp.value = item.stock || 0;
-    if (shipFxInp) shipFxInp.value = item.shipFx || item.ship_fx || 1350;
+    if (unitUsdInp) unitUsdInp.value = formatNumberWithMask(item.unitUsd || item.unit_usd || 0, 4);
+    if (stockInp) stockInp.value = formatNumberWithMask(item.stock || 0, 0);
+    if (shipFxInp) shipFxInp.value = formatNumberWithMask(item.shipFx || item.ship_fx || 1350, 0);
 
     runEngine();
     const panel = document.getElementById('salesQuotationPanel');
@@ -756,7 +815,7 @@ function loadFormFromItem(id) {
   setVal('inputApplication', item.application || '');
   setVal('inputTaxDate', item.taxDate || item.tax_date || '');
   setVal('selectBizType', item.bizType || item.biz_type || 'DOMESTIC');
-  setVal('inputSoldPrice', item.soldPriceUsd || item.sold_price_usd || '');
+  setVal('inputSoldPrice', item.soldPriceUsd ? formatNumberWithMask(item.soldPriceUsd, 4) : '');
   setVal('selectOrderStatus', item.orderStatus || item.order_status || '배정요청');
   setVal('selectPaymentTerms', item.paymentTerms || item.payment_terms || 'Net 30');
   setVal('selectPaymentStatus', item.paymentStatus || item.payment_status || '미수');
@@ -769,9 +828,9 @@ function loadFormFromItem(id) {
   setVal('inputSettledFx', item.settledFx || item.settled_fx || '');
   setVal('inputEntryDate', item.entryDate || item.entry_date || '');
   setVal('inputMemo', item.memo || '');
-  setVal('inputUsd', item.unitUsd || item.unit_usd || 0);
-  setVal('inputShipFx', item.shipFx || item.ship_fx || 1350);
-  setVal('inputStock', item.stock || '');
+  setVal('inputUsd', formatNumberWithMask(item.unitUsd || item.unit_usd || 0, 4));
+  setVal('inputShipFx', formatNumberWithMask(item.shipFx || item.ship_fx || 1350, 0));
+  setVal('inputStock', formatNumberWithMask(item.stock || '', 0));
   setVal('inputSpq', item.spq || getStandardSpq(item.maker) || '');
 
   const spaCheck = document.getElementById('checkIsSpa');
@@ -1012,8 +1071,8 @@ function updateSpqNotice() {
   const container = document.getElementById('spqFeedbackContainer');
   if (!stockEl || !container) return;
 
-  const qty = parseInt(stockEl.value) || 0;
-  const spq = parseInt(spqEl?.value) || 0;
+  const qty = Math.round(parseMaskedNumber(stockEl.value));
+  const spq = Math.round(parseMaskedNumber(spqEl?.value));
   const res = evaluatePackaging(qty, spq);
 
   if (res.isValid || qty === 0 || spq === 0) {
@@ -1056,10 +1115,10 @@ function renderPackagingTable() {
 }
 
 function updateFxVarianceFeedback() {
-  const orderFx = parseFloat(document.getElementById('inputShipFx')?.value) || 1350;
-  const settledFx = parseFloat(document.getElementById('inputSettledFx')?.value) || 0;
-  const soldPrice = parseFloat(document.getElementById('inputSoldPrice')?.value) || 0;
-  const stock = parseInt(document.getElementById('inputStock')?.value) || 0;
+  const orderFx = parseMaskedNumber(document.getElementById(\'inputShipFx\')?.value) || 1350;
+  const settledFx = parseMaskedNumber(document.getElementById(\'inputSettledFx\')?.value);
+  const soldPrice = parseMaskedNumber(document.getElementById(\'inputSoldPrice\')?.value);
+  const stock = Math.round(parseMaskedNumber(document.getElementById(\'inputStock\')?.value));
   const display = document.getElementById('fxVarianceDisplay');
 
   if (!display) return;
@@ -1121,14 +1180,14 @@ function bindModals() {
 }
 
 function runEngine() {
-  const unitUsd = parseFloat(document.getElementById('inputUsd')?.value) || 0;
-  const stock = parseFloat(document.getElementById('inputStock')?.value) || 0;
-  const shipFx = parseFloat(document.getElementById('inputShipFx')?.value) || 0;
+  const unitUsd = parseMaskedNumber(document.getElementById('inputUsd')?.value);
+  const stock = parseMaskedNumber(document.getElementById('inputStock')?.value);
+  const shipFx = parseMaskedNumber(document.getElementById('inputShipFx')?.value);
   const overhead = (parseFloat(document.getElementById('inputOverhead')?.value) || 0) / 100;
-  const targetOffer = parseFloat(document.getElementById('inputTargetOffer')?.value) || 0;
+  const targetOffer = parseMaskedNumber(document.getElementById('inputTargetOffer')?.value);
 
   const isSpa = document.getElementById('checkIsSpa')?.checked || false;
-  const approvedDebit = parseFloat(document.getElementById('inputApprovedDebit')?.value) || 0;
+  const approvedDebit = parseMaskedNumber(document.getElementById('inputApprovedDebit')?.value);
 
   const result = computeQuotation({
     unitUsd,
@@ -1225,7 +1284,7 @@ async function saveCurrentForm() {
   const owner = (ownerSel && ownerSel.value === '__CUSTOM_OWNER__') ? document.getElementById('inputCustomOwner')?.value.trim() : ownerSel?.value;
 
   const isSpa = document.getElementById('checkIsSpa')?.checked || false;
-  const approvedDebit = parseFloat(document.getElementById('inputApprovedDebit')?.value) || 0;
+  const approvedDebit = parseMaskedNumber(document.getElementById('inputApprovedDebit')?.value);
 
   const payload = {
     maker: maker || "기타",
@@ -1238,7 +1297,7 @@ async function saveCurrentForm() {
     application: document.getElementById('inputApplication')?.value.trim() || "",
     biz_type: document.getElementById('selectBizType')?.value || "DOMESTIC",
     tax_date: document.getElementById('inputTaxDate')?.value || null,
-    sold_price_usd: parseFloat(document.getElementById('inputSoldPrice')?.value) || 0,
+    sold_price_usd: parseMaskedNumber(document.getElementById(\'inputSoldPrice\')?.value),
     order_status: document.getElementById('selectOrderStatus')?.value || "배정요청",
     payment_terms: document.getElementById('selectPaymentTerms')?.value || "Net 30",
     payment_status: document.getElementById('selectPaymentStatus')?.value || "미수",
@@ -1248,16 +1307,16 @@ async function saveCurrentForm() {
     due_date: document.getElementById('inputDueDate')?.value || null,
     shipped_date: document.getElementById('inputShippedDate')?.value || null,
     settled_date: document.getElementById('inputSettledDate')?.value || null,
-    settled_fx: parseFloat(document.getElementById('inputSettledFx')?.value) || 0,
+    settled_fx: parseMaskedNumber(document.getElementById(\'inputSettledFx\')?.value),
     entry_date: document.getElementById('inputEntryDate')?.value || new Date().toISOString().slice(0, 10),
     memo: document.getElementById('inputMemo')?.value.trim() || "",
-    unit_usd: parseFloat(document.getElementById('inputUsd')?.value) || 0,
-    ship_fx: parseFloat(document.getElementById('inputShipFx')?.value) || 1350,
-    stock: parseInt(document.getElementById('inputStock')?.value) || 0,
-    spq: parseInt(document.getElementById('inputSpq')?.value) || null,
+    unit_usd: parseMaskedNumber(document.getElementById(\'inputUsd\')?.value),
+    ship_fx: parseMaskedNumber(document.getElementById(\'inputShipFx\')?.value) || 1350,
+    stock: Math.round(parseMaskedNumber(document.getElementById(\'inputStock\')?.value)),
+    spq: Math.round(parseMaskedNumber(document.getElementById(\'inputSpq\')?.value)) || null,
     margin: 20,
     is_spa: isSpa,
-    approved_debit_usd: isSpa ? approvedDebit : 0
+    approved_debit_usd: isSpa ? parseMaskedNumber(document.getElementById(\'inputApprovedDebit\')?.value) : 0
   };
 
   try {
@@ -1698,11 +1757,11 @@ window.openItemDrawer = function(item) {
 
   setEl('drawerMaker', mfg);
   setEl('drawerDateCode', item.date_code || item.dateCode || '-');
-  setEl('drawerStock', item.stock || 0);
-  setEl('drawerArranged', item.arranged_qty ?? item.arrangedQty ?? 0);
-  setEl('drawerUnitUsd', item.unit_usd ?? item.unitUsd ?? 0);
-  setEl('drawerShipFx', item.ship_fx ?? item.shipFx ?? 1350);
-  setEl('drawerSoldPrice', item.sold_price_usd ?? item.soldPriceUsd ?? 0);
+  setEl('drawerStock', formatNumberWithMask(item.stock || 0, 0));
+  setEl('drawerArranged', formatNumberWithMask(item.arranged_qty ?? item.arrangedQty ?? 0, 0));
+  setEl('drawerUnitUsd', formatNumberWithMask(item.unit_usd ?? item.unitUsd ?? 0, 4));
+  setEl('drawerShipFx', formatNumberWithMask(item.ship_fx ?? item.shipFx ?? 1350, 0));
+  setEl('drawerSoldPrice', item.sold_price_usd ? formatNumberWithMask(item.sold_price_usd, 4) : '');
   setEl('drawerSales', owner);
   setEl('drawerCustomer', item.customer || '');
   setEl('drawerRealCustomer', item.real_customer || item.realCustomer || '');
@@ -1791,11 +1850,11 @@ window.saveDrawerItem = async function() {
     const payload = {
       maker: document.getElementById('drawerMaker')?.value.trim() || '기타',
       date_code: document.getElementById('drawerDateCode')?.value.trim() || '-',
-      stock: parseInt(document.getElementById('drawerStock')?.value) || 0,
-      arranged_qty: parseInt(document.getElementById('drawerArranged')?.value) || 0,
-      unit_usd: parseFloat(document.getElementById('drawerUnitUsd')?.value) || 0,
-      ship_fx: parseFloat(document.getElementById('drawerShipFx')?.value) || 1350,
-      sold_price_usd: parseFloat(document.getElementById('drawerSoldPrice')?.value) || 0,
+      stock: Math.round(parseMaskedNumber(document.getElementById(\'drawerStock\')?.value)),
+      arranged_qty: Math.round(parseMaskedNumber(document.getElementById(\'drawerArranged\')?.value)),
+      unit_usd: parseMaskedNumber(document.getElementById(\'drawerUnitUsd\')?.value),
+      ship_fx: parseMaskedNumber(document.getElementById(\'drawerShipFx\')?.value) || 1350,
+      sold_price_usd: parseMaskedNumber(document.getElementById(\'drawerSoldPrice\')?.value),
       owner: document.getElementById('drawerSales')?.value.trim() || '본사 일반재고',
       customer: document.getElementById('drawerCustomer')?.value.trim() || '-',
       real_customer: document.getElementById('drawerRealCustomer')?.value.trim() || '-',
@@ -1814,7 +1873,7 @@ window.saveDrawerItem = async function() {
       tax_date: document.getElementById('drawerTaxDate')?.value || null,
       due_date: document.getElementById('drawerDueDate')?.value || null,
       settled_date: document.getElementById('drawerSettledDate')?.value || null,
-      settled_fx: parseFloat(document.getElementById('drawerSettledFx')?.value) || null,
+      settled_fx: parseMaskedNumber(document.getElementById(\'drawerSettledFx\')?.value) || null,
       currency: document.getElementById('drawerCurrency')?.value || 'USD',
 
       memo: document.getElementById('drawerMemo')?.value.trim() || ''
