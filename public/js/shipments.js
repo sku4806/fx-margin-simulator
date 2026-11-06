@@ -16,6 +16,7 @@ export async function fetchShipments() {
 
   if (error) {
     console.error("출하 이력 로드 실패:", error);
+    alert("출하 이력 로드 실패: Supabase SQL Editor에서 'ALTER TABLE public.legacy_shipments DISABLE ROW LEVEL SECURITY;'를 실행해 주세요.");
     return [];
   }
   cachedShipments = data || [];
@@ -30,14 +31,14 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
   const totalSales = cachedShipments.reduce((sum, item) => sum + (item.total_sales_amount || 0), 0);
 
   container.innerHTML = `
-    <div class="space-y-4">
+    <div class="space-y-4 pt-2">
       <!-- 상단 요약 카드 -->
-      <div class="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
+      <div class="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs shadow-sm">
         <div class="font-bold text-amber-900 text-sm flex items-center gap-2">
-          <span>🚚 출하/수주 Grand Summaries</span>
+          <span>🚚 최근 출하/수주 Grand Summaries</span>
           <span class="text-xs font-normal text-amber-700">(${cachedShipments.length}건)</span>
         </div>
-        <div class="flex flex-wrap items-center gap-4 text-slate-700">
+        <div class="flex flex-wrap items-center gap-5 text-slate-700">
           <div>총 출하수량: <span class="font-bold text-slate-900">${totalQty.toLocaleString()} EA</span></div>
           <div>총 매출액: <span class="font-bold text-rose-600">₩${Math.round(totalSales).toLocaleString()}</span></div>
         </div>
@@ -72,7 +73,6 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
     </div>
   `;
 
-  // 실시간 검색 리스너
   const searchInput = document.getElementById("shipmentSearchInput");
   if (searchInput) {
     searchInput.addEventListener("input", (e) => {
@@ -90,7 +90,7 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
 
 function generateTableRows(items) {
   if (!items || items.length === 0) {
-    return `<tr><td colspan="8" class="text-center py-8 text-slate-400">출하/수주 이력이 없습니다.</td></tr>`;
+    return '<tr><td colspan="8" class="text-center py-8 text-slate-400">출하/수주 이력이 없습니다.</td></tr>';
   }
   return items.map(item => `
     <tr class="hover:bg-slate-50/80 transition-colors">

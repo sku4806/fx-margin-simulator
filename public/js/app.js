@@ -2206,6 +2206,7 @@ window.saveDrawerItem = async function() {
 };
 
 
+
 // 출하/수주 이력 탭 이벤트 연동
 document.addEventListener('DOMContentLoaded', () => {
   const tabShipments = document.getElementById('tabShipments');
@@ -2213,25 +2214,41 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabSales = document.getElementById('tabSales');
   const tabFulfillment = document.getElementById('tabFulfillment');
   
-  if (tabShipments && shipmentsSection) {
-    tabShipments.addEventListener('click', async () => {
-      // 탭 스타일 활성화
-      [tabSales, tabFulfillment].forEach(t => {
-        if (t) {
-          t.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
+  function hideAllViews() {
+    const selectors = ['#salesView', '#fulfillmentView', '#inventoryView', '#mainContentArea', 'main > div:not(#shipmentsSection)'];
+    selectors.forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => {
+        if (el && el.id !== 'shipmentsSection' && el.id !== 'dynamicSubTabNav') {
+          el.classList.add('hidden');
         }
       });
+    });
+  }
+
+  if (tabShipments && shipmentsSection) {
+    tabShipments.addEventListener('click', async () => {
+      // 탭 활성 스타일
+      if (tabSales) tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
+      if (tabFulfillment) tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
       tabShipments.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
 
-      // 기존 뷰 숨김 처리
-      document.querySelectorAll('main > div, #salesSection, #inventorySection, #fulfillmentSection').forEach(el => {
-        if (el !== shipmentsSection && el.id !== 'dynamicSubTabNav') el.classList.add('hidden');
-      });
+      hideAllViews();
       shipmentsSection.classList.remove('hidden');
 
-      // 데이터 패치 및 렌더링
       await fetchShipments();
       renderShipmentsView('shipmentsSection');
+    });
+
+    // 다른 탭 클릭 시 shipmentsSection 숨김
+    [tabSales, tabFulfillment].forEach(t => {
+      if (t) {
+        t.addEventListener('click', () => {
+          shipmentsSection.classList.add('hidden');
+          if (tabShipments) {
+            tabShipments.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
+          }
+        });
+      }
     });
   }
 });
