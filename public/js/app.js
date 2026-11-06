@@ -3,36 +3,45 @@
 // 📄 BSK 표준 견적서 모달 열기 및 데이터 매핑
 // ========================================================
 function openQuotationModal() {
-  const partName = document.getElementById("inputPartName")?.value.trim() || document.getElementById("drawerPartDisplay")?.innerText || "-";
-  const maker = document.getElementById("selectMaker")?.value || document.getElementById("drawerMfgDisplay")?.innerText || "-";
-  const customer = document.getElementById("inputCustomer")?.value.trim() || document.getElementById("drawerCustomer")?.value.trim() || "프라젠";
-  const sales = document.getElementById("selectOwner")?.value || document.getElementById("drawerSales")?.value.trim() || "김경래";
-  
-  // 수량
-  let stock = parseMaskedNumber(document.getElementById("inputStock")?.value);
-  if (!stock || stock <= 0) {
-    stock = parseMaskedNumber(document.getElementById("drawerStock")?.value) || 1;
+  // 현재 선택된 행 아이템 추출
+  let item = null;
+  const activeId = window._currentActiveItemId || document.getElementById("drawerItemId")?.value;
+  if (activeId && window.cachedItems) {
+    item = window.cachedItems.find(it => String(it.id) === String(activeId));
   }
 
-  // 실판매단가($) 또는 계산기 원화단가
-  let soldUsd = parseMaskedNumber(document.getElementById("inputSoldPrice")?.value);
-  let shipFx = parseMaskedNumber(document.getElementById("inputShipFx")?.value) || 1350;
+  // 1. 부품명 / 제조사
+  const partName = (item && (item.partName || item.part_name)) || document.getElementById("inputPartName")?.value.trim() || document.getElementById("drawerPartDisplay")?.innerText || "XK-VOICE-SQ66";
+  const maker = (item && item.maker) || document.getElementById("selectMaker")?.value || document.getElementById("drawerMfgDisplay")?.innerText || "XMOS";
+  
+  // 2. 고객사 / 담당자
+  const rawCustomer = (item && item.customer && item.customer !== "-") ? item.customer : (document.getElementById("inputCustomer")?.value.trim() || "프라젠");
+  const customer = rawCustomer !== "-" ? rawCustomer : "프라젠";
+  const sales = (item && item.owner && item.owner !== "-" && item.owner !== "본사 일반재고") ? item.owner : (document.getElementById("selectOwner")?.value || "김경래");
 
-  let unitKrw = 0;
-  if (soldUsd > 0) {
-    unitKrw = Math.round(soldUsd * shipFx);
+  // 3. 수량
+  let stock = 1;
+  if (item && item.stock) {
+    stock = Number(item.stock) || 1;
   } else {
-    // 계산기 원화 권장선 추출
+    stock = parseMaskedNumber(document.getElementById("inputStock")?.value) || parseMaskedNumber(document.getElementById("drawerStock")?.value) || 1;
+  }
+
+  // 4. 단가 및 금액 계산
+  const shipFx = (item && (item.shipFx || item.ship_fx)) ? Number(item.shipFx || item.ship_fx) : (parseMaskedNumber(document.getElementById("inputShipFx")?.value) || 1350);
+  
+  let unitKrw = 0;
+  if (item && item.soldPriceUsd && Number(item.soldPriceUsd) > 0) {
+    unitKrw = Math.round(Number(item.soldPriceUsd) * shipFx);
+  } else if (item && item.unitUsd && Number(item.unitUsd) > 0) {
+    unitKrw = Math.round(Number(item.unitUsd) * shipFx);
+  } else {
     const rawKrwText = document.getElementById("minSaleUnitReplaceKrw")?.innerText || "";
     const match = rawKrwText.match(/₩([0-9,]+)/);
-    if (match) {
-      unitKrw = parseInt(match[1].replace(/,/g, ""), 10);
-    } else {
-      unitKrw = 350000;
-    }
+    unitKrw = match ? parseInt(match[1].replace(/,/g, ""), 10) : 350000;
   }
 
-  // 오늘 날짜 및 REF 번호 (QBK년월-일련번호)
+  // 오늘 날짜 및 REF 번호
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, "0");
@@ -47,11 +56,11 @@ function openQuotationModal() {
     else el.innerText = val;
   };
 
-  setEl("qpCustomer", (customer && customer !== "-") ? customer : "프라젠");
+  setEl("qpCustomer", customer);
   setEl("qpDate", todayStr);
   setEl("qpRefNo", refNo);
-  setEl("qpSales", (sales && sales !== "-" && sales !== "본사 일반재고") ? sales : "김경래");
-  setEl("qpPartName", partName !== "-" ? partName : "XK-VOICE-SQ66");
+  setEl("qpSales", (sales && sales !== "본사 일반재고") ? sales : "김경래");
+  setEl("qpPartName", partName);
   setEl("qpMaker", (maker && maker !== "__CUSTOM_MAKER__") ? maker : "XMOS");
   setEl("qpQty", `${stock.toLocaleString()} EA`);
 
@@ -68,6 +77,7 @@ function openQuotationModal() {
   document.getElementById("quotationModal")?.classList.remove("hidden");
 }
 window.openQuotationModal = openQuotationModal;
+
 
 
 
