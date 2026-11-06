@@ -256,7 +256,7 @@ export function renderInventoryHeaders(activeTab) {
   if (activeTab === 'sales') {
     thead.innerHTML = `
       <tr class="bg-slate-100/95 text-slate-700 text-[11px] font-bold border-b border-slate-200 select-none">
-        <th class="py-2 px-1 text-center w-8 no-print"><input type="checkbox" id="quoteSelectAll" class="rounded cursor-pointer" title="전체 선택"></th>
+        <th class="py-2.5 px-3 text-center w-12 no-print"><input type="checkbox" id="quoteSelectAll" class="rounded cursor-pointer" title="전체 선택"></th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[5%]">KIND</th>
         <th class="py-2.5 px-2 text-left w-[13%]">CNAME / 입고일</th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">SALES</th>
@@ -271,7 +271,7 @@ export function renderInventoryHeaders(activeTab) {
   } else {
     thead.innerHTML = `
       <tr class="bg-slate-100/95 text-slate-700 text-[10px] font-bold border-b border-slate-200 select-none">
-        <th class="py-2 px-1 text-center w-8 no-print"><input type="checkbox" id="quoteSelectAllFulfillment" class="rounded cursor-pointer" title="전체 선택"></th>
+        <th class="py-2.5 px-3 text-center w-12 no-print"><input type="checkbox" id="quoteSelectAllFulfillment" class="rounded cursor-pointer" title="전체 선택"></th>
         <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-[7%]">상태 / SALES</th>
         <th class="py-2.5 px-2 text-left w-[13%]">계약처</th>
         <th class="py-2.5 px-2 text-left w-[17%]">PART NO / MFG</th>
@@ -309,7 +309,7 @@ function generateLegacyMasterRow(item) {
 
   return `
     <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 우측 상세/수정 창 오픈" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
-      <td class="py-2 px-1 text-center no-print" onclick="event.stopPropagation()"><input type="checkbox" class="quote-select-checkbox rounded cursor-pointer" value="${item.id}" onchange="updateSelectedQuoteCount()"></td><td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
+      <td class="py-2.5 px-3 text-center align-middle no-print" onclick="event.stopPropagation()"><input type="checkbox" class="quote-select-checkbox rounded cursor-pointer w-3.5 h-3.5" value="${item.id}" onchange="updateSelectedQuoteCount()"></td><td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         ${getKindBadge(kind)}
       </td>
       <td class="py-2.5 px-2 align-middle">
@@ -391,7 +391,7 @@ function generateFulfillmentRow(item, canEdit) {
 
   return `
     <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 우측 상세/수정 창 오픈" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
-      <td class="py-2 px-1 text-center no-print" onclick="event.stopPropagation()"><input type="checkbox" class="quote-select-checkbox rounded cursor-pointer" value="${item.id}" onchange="updateSelectedQuoteCount()"></td>
+      <td class="py-2.5 px-3 text-center align-middle no-print" onclick="event.stopPropagation()"><input type="checkbox" class="quote-select-checkbox rounded cursor-pointer w-3.5 h-3.5" value="${item.id}" onchange="updateSelectedQuoteCount()"></td>
       <!-- 1. 상태 / SALES -->
       <td class="py-2.5 px-1.5 text-center align-middle whitespace-nowrap">
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(orderStatus)}">${orderStatus}</span>
