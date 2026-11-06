@@ -1297,50 +1297,46 @@
             </div>
           </div>
 
-          <!-- 3. 수신/발신 메타 데이터 박스 -->
-          <div class="quote-border-box p-2 text-[10.5px]">
+          <!-- 3. 수신/발신 메타 데이터 박스 (원본 1:1 무테두리 인라인 텍스트 스타일) -->
+          <div class="quote-border-box p-2.5 text-[11px]">
             <div class="grid grid-cols-2 gap-4">
               <!-- 좌측: 수신 고객사 정보 -->
-              <div class="space-y-0.5">
+              <div class="space-y-1">
                 <div class="flex items-center">
-                  <span class="w-14 font-bold text-slate-900">TO :</span>
-                  <input type="text" id="qpCustomer" class="flex-1 font-bold outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder="* 업체명 입력 (필수)">
+                  <span class="w-16 font-normal text-black tracking-wider">TO :</span>
+                  <input type="text" id="qpCustomer" class="flex-1 font-medium text-black outline-none bg-transparent border-none p-0 focus:bg-amber-50/50" placeholder="업체명">
                 </div>
                 <div class="flex items-center">
-                  <span class="w-14 font-bold text-slate-900">ATTN :</span>
-                  <div class="flex-1 flex items-center gap-1">
-                    <input type="text" id="qpAttnName" class="w-24 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder="* 담당자 (필수)">
-                    <input type="text" id="qpAttnRank" class="w-16 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder="직급">
-                    <span>님</span>
-                  </div>
+                  <span class="w-16 font-normal text-black tracking-wider">ATTN :</span>
+                  <input type="text" id="qpAttnFull" class="flex-1 font-medium text-black outline-none bg-transparent border-none p-0 focus:bg-amber-50/50" placeholder="담당자 직급 님 (예: 김생기  수석님)">
                 </div>
                 <div class="flex items-center">
-                  <span class="w-14 font-bold text-slate-900">TEL :</span>
-                  <input type="text" id="qpTel" class="flex-1 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder=".">
+                  <span class="w-16 font-normal text-black tracking-wider">TEL :</span>
+                  <input type="text" id="qpTel" class="flex-1 text-black outline-none bg-transparent border-none p-0 focus:bg-amber-50/50" value=".">
                 </div>
                 <div class="flex items-center">
-                  <span class="w-14 font-bold text-slate-900">FAX :</span>
-                  <input type="text" id="qpFax" class="flex-1 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder="">
+                  <span class="w-16 font-normal text-black tracking-wider">FAX :</span>
+                  <input type="text" id="qpFax" class="flex-1 text-black outline-none bg-transparent border-none p-0 focus:bg-amber-50/50" value="">
                 </div>
               </div>
 
               <!-- 우측: 견적 메타 정보 -->
-              <div class="space-y-0.5">
+              <div class="space-y-1">
                 <div class="flex items-center">
-                  <span class="w-16 font-bold text-slate-900">DATE :</span>
-                  <input type="text" id="qpDate" class="flex-1 outline-none bg-transparent font-mono" value="2026-11-06">
+                  <span class="w-20 font-normal text-black tracking-wider">DATE :</span>
+                  <input type="text" id="qpDate" class="flex-1 text-black outline-none bg-transparent border-none p-0 font-mono" value="2026-11-06">
                 </div>
                 <div class="flex items-center">
-                  <span class="w-16 font-bold text-slate-900">PAGE :</span>
-                  <span class="flex-1 font-mono">1 OF 1</span>
+                  <span class="w-20 font-normal text-black tracking-wider">PAGE :</span>
+                  <span class="flex-1 font-mono text-black">1 OF 1</span>
                 </div>
                 <div class="flex items-center">
-                  <span class="w-16 font-bold text-slate-900">REF :</span>
-                  <input type="text" id="qpRefNo" class="flex-1 outline-none bg-transparent font-mono font-bold text-red-600" value="QBK2611-0001">
+                  <span class="w-20 font-normal text-black tracking-wider">REF :</span>
+                  <input type="text" id="qpRefNo" class="flex-1 outline-none bg-transparent border-none p-0 font-mono font-bold text-red-600" value="QBK2608-1025">
                 </div>
                 <div class="flex items-center">
-                  <span class="w-16 font-bold text-slate-900">FROM :</span>
-                  <input type="text" id="qpSales" class="flex-1 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent font-bold text-indigo-950" placeholder="* 담당 영업명 (필수)">
+                  <span class="w-20 font-normal text-black tracking-wider">FROM :</span>
+                  <input type="text" id="qpSales" class="flex-1 text-black outline-none bg-transparent border-none p-0 font-medium focus:bg-amber-50/50" placeholder="영업담당자">
                 </div>
               </div>
             </div>

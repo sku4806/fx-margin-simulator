@@ -4,7 +4,7 @@
 // ========================================================
 function executeQuotationPrint() {
   const custEl = document.getElementById("qpCustomer");
-  const attnEl = document.getElementById("qpAttnName");
+  const attnEl = document.getElementById("qpAttnFull");
   const salesEl = document.getElementById("qpSales");
   const banner = document.getElementById("quoteValidationBanner");
   const bannerText = document.getElementById("quoteValidationText");
@@ -110,8 +110,7 @@ function openQuotationModal() {
   };
 
   setEl("qpCustomer", customer);
-  setEl("qpAttnName", "");
-  setEl("qpAttnRank", "");
+  setEl("qpAttnFull", "");
   setEl("qpDate", todayStr);
   setEl("qpRefNo", refNo);
   setEl("qpSales", sales);
