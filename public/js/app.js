@@ -1,3 +1,4 @@
+import { fetchShipments, renderShipmentsView } from './shipments.js';
 
 // ========================================================
 // 🛡️ 견적서 필수 입력값 검증 및 인쇄 실행
@@ -2203,3 +2204,34 @@ window.saveDrawerItem = async function() {
     if (btn) { btn.disabled = false; btn.innerText = "전체 변경사항 저장"; }
   }
 };
+
+
+// 출하/수주 이력 탭 이벤트 연동
+document.addEventListener('DOMContentLoaded', () => {
+  const tabShipments = document.getElementById('tabShipments');
+  const shipmentsSection = document.getElementById('shipmentsSection');
+  const tabSales = document.getElementById('tabSales');
+  const tabFulfillment = document.getElementById('tabFulfillment');
+  
+  if (tabShipments && shipmentsSection) {
+    tabShipments.addEventListener('click', async () => {
+      // 탭 스타일 활성화
+      [tabSales, tabFulfillment].forEach(t => {
+        if (t) {
+          t.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
+        }
+      });
+      tabShipments.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
+
+      // 기존 뷰 숨김 처리
+      document.querySelectorAll('main > div, #salesSection, #inventorySection, #fulfillmentSection').forEach(el => {
+        if (el !== shipmentsSection && el.id !== 'dynamicSubTabNav') el.classList.add('hidden');
+      });
+      shipmentsSection.classList.remove('hidden');
+
+      // 데이터 패치 및 렌더링
+      await fetchShipments();
+      renderShipmentsView('shipmentsSection');
+    });
+  }
+});
