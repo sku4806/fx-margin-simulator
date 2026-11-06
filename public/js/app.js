@@ -50,6 +50,14 @@ window.executeQuotationPrint = executeQuotationPrint;
 window.quoteItemsData = [];
 
 function openQuotationModal() {
+  // 🛡️ 보안 통제: CS 매니저 또는 관리자만 견적서 발행 가능 (Sales 차단)
+  const isAuthorized = (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
+  if (!isAuthorized) {
+    alert("⚠️ [접근 제한] 공식 견적서 발행 권한이 없습니다.
+견적서 발행은 담당 CS 매니저에게 요청해 주세요.");
+    return;
+  }
+
   window.quoteItemsData = [];
   
   // 1. 체크박스로 선택된 항목들 수집

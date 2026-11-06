@@ -1,4 +1,37 @@
 
+// --- 🛡️ CS/Admin 권한에 따른 견적서 버튼 및 체크박스 표시 제어 ---
+function syncQuotationPermissionUI(canEdit) {
+  const isAuthorized = (typeof canEdit === 'boolean') 
+    ? canEdit 
+    : ((typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false);
+
+  const quoteBtn = document.getElementById('openQuotationModalBtn');
+  const countBadge = document.getElementById('selectedQuoteCountBadge');
+  
+  if (quoteBtn) {
+    if (isAuthorized) {
+      quoteBtn.classList.remove('hidden');
+    } else {
+      quoteBtn.classList.add('hidden');
+      if (countBadge) countBadge.classList.add('hidden');
+    }
+  }
+
+  // Sales 계정이면 테이블 내 체크박스 열 숨김 처리
+  const checkCells = document.querySelectorAll('.quote-select-checkbox, #quoteSelectAll, #quoteSelectAllFulfillment');
+  checkCells.forEach(el => {
+    const parentThTd = el.closest('th, td');
+    if (parentThTd) {
+      if (isAuthorized) {
+        parentThTd.classList.remove('hidden');
+      } else {
+        parentThTd.classList.add('hidden');
+      }
+    }
+  });
+}
+
+
 // --- 📄 견적서 다중 품목 체크박스 유틸 ---
 function updateSelectedQuoteCount() {
   const checked = document.querySelectorAll('.quote-select-checkbox:checked');
@@ -467,6 +500,7 @@ export function renderInventoryUI(items, activeTab, onEdit, onDelete, onSplit, c
 
   renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit);
   renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit);
+  syncQuotationPermissionUI(canEdit);
 }
 
 function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit) {
