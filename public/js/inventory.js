@@ -171,7 +171,37 @@ export async function upsertInventoryItem(payload, editingItemId = null) {
       .eq('id', editingItemId)
       .select();
     if (error) throw error;
-    return data && data[0] ? data[0] : { id: editingItemId, ...payload };
+    const updated = data && data[0] ? data[0] : { id: editingItemId, ...payload };
+
+    // '출하완료' 상태로 저장 시 legacy_shipments에 자동 출하 이력 등록
+    if (payload.order_status === '출하완료') {
+      try {
+        const shipDate = payload.shipped_date || new Date().toISOString().split('T')[0];
+        const shipQty = payload.arranged_qty || payload.stock || 0;
+        const fx = Number(payload.ship_fx) || 1350;
+        const unitKrw = Math.round((Number(payload.sold_price_usd) || Number(payload.unit_usd) || 0) * fx);
+        const costKrw = Math.round((Number(payload.unit_usd) || 0) * fx);
+        const totalSales = unitKrw * shipQty;
+
+        await sbClient.from('legacy_shipments').insert([{
+          part_name: payload.part_name || updated.part_name,
+          maker: payload.maker || updated.maker || 'OTHERS',
+          qty: shipQty,
+          unit_price: unitKrw,
+          cost_price: costKrw,
+          total_sales_amount: totalSales,
+          po_no: payload.po_no || payload.tracking_no || 'MANUAL-SHIP',
+          order_date: shipDate,
+          status: 'SHIPPED',
+          last_synced_at: new Date().toISOString()
+        }]);
+        console.log("✅ [legacy_shipments] 출하 이력 자동 등록 완료");
+      } catch (shipErr) {
+        console.error("출하 이력 자동 연동 오류:", shipErr);
+      }
+    }
+
+    return updated;
   } else {
     const { data, error } = await sbClient
       .from('inventory_items')
