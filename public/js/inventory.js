@@ -1,3 +1,32 @@
+
+// --- 📄 견적서 다중 품목 체크박스 유틸 ---
+function updateSelectedQuoteCount() {
+  const checked = document.querySelectorAll('.quote-select-checkbox:checked');
+  const badge = document.getElementById('selectedQuoteCountBadge');
+  const btn = document.getElementById('openQuotationModalBtn');
+  if (badge) {
+    if (checked.length > 0) {
+      badge.innerText = `${checked.length}건 선택`;
+      badge.classList.remove('hidden');
+      if (btn) btn.innerHTML = `<span>📄</span> ${checked.length}개 품목 견적서 출력 (PDF)`;
+    } else {
+      badge.classList.add('hidden');
+      if (btn) btn.innerHTML = `<span>📄</span> 견적서 출력 (PDF)`;
+    }
+  }
+}
+
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'quoteSelectAll') {
+    const isChecked = e.target.checked;
+    document.querySelectorAll('.quote-select-checkbox').forEach(cb => {
+      cb.checked = isChecked;
+    });
+    updateSelectedQuoteCount();
+  }
+});
+window.updateSelectedQuoteCount = updateSelectedQuoteCount;
+
 window.isPrecisionMode = false;
 let lastRenderArgs = null;
 function getKindBadge(kindRaw) {
@@ -238,7 +267,7 @@ function generateLegacyMasterRow(item) {
 
   return `
     <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 우측 상세/수정 창 오픈" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
-      <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
+      <td class="py-2 px-1 text-center no-print" onclick="event.stopPropagation()"><input type="checkbox" class="quote-select-checkbox rounded cursor-pointer" value="${item.id}" onchange="updateSelectedQuoteCount()"></td><td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         ${getKindBadge(kind)}
       </td>
       <td class="py-2.5 px-2 align-middle">
