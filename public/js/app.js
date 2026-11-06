@@ -280,18 +280,15 @@ function safeAddListener(id, event, handler) {
 // 🛡️ [1단계] 스마트 입력 마스크 & 콤마 자동 서식 유틸리티
 // ========================================================
 function formatNumberWithMask(rawValue, maxDecimals = 2) {
-  if (rawValue === undefined || rawValue === null || rawValue === '') return '';
-  let str = String(rawValue).replace(/[^0-9.]/g, '');
-  if (!str) return '';
-  const parts = str.split('.');
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (rawValue === undefined || rawValue === null || rawValue === "") return "";
+  let str = String(rawValue).replace(/[^0-9.]/g, "");
+  if (!str) return "";
+  const parts = str.split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   if (parts.length > 1) {
-    return parts[0] + '.' + parts[1].slice(0, maxDecimals);
+    return parts[0] + "." + parts[1].slice(0, maxDecimals);
   }
   return parts[0];
-}
-
-  return decimalPart !== null ? `${integerPart}.${decimalPart}` : integerPart;
 }
 
 function parseMaskedNumber(val) {
