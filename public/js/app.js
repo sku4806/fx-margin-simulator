@@ -1,3 +1,15 @@
+
+// --- ⚡ 성능 최적화: 디바운스 (Debounce) 함수 ---
+function debounce(func, delay = 250) {
+  let timer = null;
+  return function(...args) {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      func.apply(this, args);
+    }, delay);
+  };
+}
+
 // --- 행 선택 강조 및 저장 후 즉시 스크롤/점멸 추적 (인라인 스타일 보장) ---
 window._lastSavedItemId = null;
 
@@ -299,8 +311,8 @@ function parseMaskedNumber(val) {
 
 function setupInputMasks() {
   const maskConfigs = [
-    { id: 'inputUsd', decimals: 4, handler: () => { if (typeof runEngine === 'function') runEngine(); } },
-    { id: 'inputTargetOffer', decimals: 4, handler: () => { if (typeof runEngine === 'function') runEngine(); } },
+    { id: 'inputUsd', decimals: 4, handler: debounce(() => { if (typeof runEngine === 'function') runEngine(); }, 150) },
+    { id: 'inputTargetOffer', decimals: 4, handler: debounce(() => { if (typeof runEngine === 'function') runEngine(); }, 150) },
     { id: 'inputSoldPrice', decimals: 4, handler: null },
     { id: 'inputShipFx', decimals: 0, handler: () => { if (typeof updateFxVarianceFeedback === 'function') updateFxVarianceFeedback(); if (typeof runEngine === 'function') runEngine(); } },
     { id: 'inputSettledFx', decimals: 0, handler: () => { if (typeof updateFxVarianceFeedback === 'function') updateFxVarianceFeedback(); } },
@@ -986,8 +998,9 @@ function bindInputs() {
     'filterSales', 'filterOwner', 'selectSales', 
     'filterStatus', 'filterPayment', 'selectStatus'
   ];
+  const debouncedApplyFilters = debounce(applyFilters, 200);
   filterElementIds.forEach(id => {
-    safeAddListener(id, 'input', applyFilters);
+    safeAddListener(id, 'input', debouncedApplyFilters);
     safeAddListener(id, 'change', applyFilters);
   });
 
