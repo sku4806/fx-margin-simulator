@@ -1339,20 +1339,16 @@
                   <th class="py-1 text-right px-2 w-24 font-bold">U/P</th>
                   <th class="py-1 text-right px-2 w-28 font-bold">AMOUNT</th>
                   <th class="py-1 text-center w-20 font-bold">DELIVERY</th>
+                  <th class="w-6 no-print"></th>
                 </tr>
               </thead>
-              <tbody id="qpItemTbody">
-                <tr>
-                  <td class="py-2 text-center">1</td>
-                  <td id="qpPartName" class="text-left px-2 font-bold">-</td>
-                  <td id="qpMaker" class="text-center">-</td>
-                  <td id="qpQty" class="text-center font-mono">-</td>
-                  <td id="qpUnitPrice" class="text-right px-2 font-mono">₩0</td>
-                  <td id="qpAmount" class="text-right px-2 font-mono font-bold">₩0</td>
-                  <td class="text-center"><input type="text" id="qpDelivery" class="w-full text-center outline-none bg-transparent" value="2-3WKS"></td>
-                </tr>
-              </tbody>
+              <tbody id="qpItemTbody"></tbody>
             </table>
+            <div class="no-print pt-1 flex justify-start">
+              <button type="button" onclick="addBlankQuoteRow()" class="text-[10px] text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded font-bold transition-colors">
+                + 품목 추가
+              </button>
+            </div>
           </div>
 
           <!-- 5. 합계 금액 -->

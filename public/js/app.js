@@ -43,58 +43,84 @@ window.executeQuotationPrint = executeQuotationPrint;
 // ========================================================
 // 📄 BSK 표준 견적서 모달 열기 및 데이터 매핑
 // ========================================================
+
+// ========================================================
+// 📄 다품목 동적 견적서 엔진 (Multi-Item Quotation Engine)
+// ========================================================
+window.quoteItemsData = [];
+
 function openQuotationModal() {
-  // 현재 선택된 행 아이템 추출
-  let item = null;
-  const activeId = window._currentActiveItemId || document.getElementById("drawerItemId")?.value;
-  if (activeId && window.cachedItems) {
-    item = window.cachedItems.find(it => String(it.id) === String(activeId));
-  }
-
-  // 1. 부품명 / 제조사
-  const partName = (item && (item.partName || item.part_name)) || document.getElementById("inputPartName")?.value.trim() || document.getElementById("drawerPartDisplay")?.innerText || "";
-  const maker = (item && item.maker) || document.getElementById("selectMaker")?.value || document.getElementById("drawerMfgDisplay")?.innerText || "";
+  window.quoteItemsData = [];
   
-  // 2. 고객사 / 담당자 (기본 하드코딩 제거 -> 비어있으면 빈칸)
-  let customer = "";
-  if (item && item.customer && item.customer !== "-") {
-    customer = item.customer;
-  } else {
-    customer = document.getElementById("inputCustomer")?.value.trim() || "";
-    if (customer === "-") customer = "";
+  // 1. 체크박스로 선택된 항목들 수집
+  const checkedBoxes = document.querySelectorAll('.quote-select-checkbox:checked');
+  let selectedItems = [];
+
+  if (checkedBoxes.length > 0 && window.cachedItems) {
+    checkedBoxes.forEach(cb => {
+      const it = window.cachedItems.find(item => String(item.id) === String(cb.value));
+      if (it) selectedItems.push(it);
+    });
   }
 
-  let sales = "";
-  if (item && item.owner && item.owner !== "-" && item.owner !== "본사 일반재고") {
-    sales = item.owner;
-  } else {
-    sales = document.getElementById("selectOwner")?.value || "";
-    if (sales === "본사 일반재고" || sales === "-") sales = "";
+  // 2. 체크된 것이 없으면 현재 활성화된 단일 행(window._currentActiveItemId 또는 드로어) 수집
+  if (selectedItems.length === 0) {
+    const activeId = window._currentActiveItemId || document.getElementById("drawerItemId")?.value;
+    if (activeId && window.cachedItems) {
+      const it = window.cachedItems.find(item => String(item.id) === String(activeId));
+      if (it) selectedItems.push(it);
+    }
   }
 
-  // 3. 수량
-  let stock = 0;
-  if (item && item.stock !== undefined && item.stock !== null) {
-    stock = Number(item.stock);
-  } else {
-    stock = parseMaskedNumber(document.getElementById("inputStock")?.value) || parseMaskedNumber(document.getElementById("drawerStock")?.value) || 0;
-  }
+  // 3. 대표 고객사 및 영업담당자 추정
+  let defaultCust = "";
+  let defaultSales = "";
 
-  // 4. 단가 및 금액 계산
-  const shipFx = (item && (item.shipFx || item.ship_fx)) ? Number(item.shipFx || item.ship_fx) : (parseMaskedNumber(document.getElementById("inputShipFx")?.value) || 1350);
-  
-  let unitKrw = 0;
-  if (item && item.soldPriceUsd && Number(item.soldPriceUsd) > 0) {
-    unitKrw = Math.round(Number(item.soldPriceUsd) * shipFx);
-  } else if (item && item.unitUsd && Number(item.unitUsd) > 0) {
-    unitKrw = Math.round(Number(item.unitUsd) * shipFx);
+  if (selectedItems.length > 0) {
+    selectedItems.forEach(it => {
+      if (!defaultCust && it.customer && it.customer !== "-") defaultCust = it.customer;
+      if (!defaultSales && it.owner && it.owner !== "-" && it.owner !== "본사 일반재고") defaultSales = it.owner;
+      
+      const stock = Number(it.stock) || 1;
+      const shipFx = Number(it.shipFx || it.ship_fx) || 1350;
+      let unitKrw = 0;
+      if (it.soldPriceUsd && Number(it.soldPriceUsd) > 0) {
+        unitKrw = Math.round(Number(it.soldPriceUsd) * shipFx);
+      } else if (it.unitUsd && Number(it.unitUsd) > 0) {
+        unitKrw = Math.round(Number(it.unitUsd) * shipFx);
+      } else {
+        unitKrw = 0;
+      }
+
+      window.quoteItemsData.push({
+        partName: it.partName || it.part_name || "-",
+        maker: it.maker || "-",
+        qty: stock,
+        unitKrw: unitKrw,
+        delivery: "2-3WKS"
+      });
+    });
   } else {
+    // 아무것도 선택되지 않았을 경우 계산기 기본값으로 1행 생성
+    const partName = document.getElementById("inputPartName")?.value.trim() || "-";
+    const maker = document.getElementById("selectMaker")?.value || "-";
+    const stock = parseMaskedNumber(document.getElementById("inputStock")?.value) || 0;
+    
+    let unitKrw = 0;
     const rawKrwText = document.getElementById("minSaleUnitReplaceKrw")?.innerText || "";
     const match = rawKrwText.match(/₩([0-9,]+)/);
-    unitKrw = match ? parseInt(match[1].replace(/,/g, ""), 10) : 0;
+    if (match) unitKrw = parseInt(match[1].replace(/,/g, ""), 10);
+
+    window.quoteItemsData.push({
+      partName: partName,
+      maker: maker !== "__CUSTOM_MAKER__" ? maker : "-",
+      qty: stock,
+      unitKrw: unitKrw,
+      delivery: "2-3WKS"
+    });
   }
 
-  // 오늘 날짜 및 REF 번호
+  // 오늘 날짜 및 REF 번호 설정
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, "0");
@@ -109,28 +135,116 @@ function openQuotationModal() {
     else el.innerText = val;
   };
 
-  setEl("qpCustomer", customer);
+  setEl("qpCustomer", defaultCust);
   setEl("qpAttnFull", "");
   setEl("qpDate", todayStr);
   setEl("qpRefNo", refNo);
-  setEl("qpSales", sales);
-  setEl("qpPartName", partName || "-");
-  setEl("qpMaker", (maker && maker !== "__CUSTOM_MAKER__") ? maker : "-");
-  setEl("qpQty", stock > 0 ? `${stock.toLocaleString()} EA` : "-");
+  setEl("qpSales", defaultSales);
 
-  const amountKrw = unitKrw * stock;
-  const vatKrw = Math.round(amountKrw * 0.1);
-  const grandTotalKrw = amountKrw + vatKrw;
+  renderQuotationTableRows();
 
-  setEl("qpUnitPrice", unitKrw > 0 ? `₩${unitKrw.toLocaleString()}` : "₩0");
-  setEl("qpAmount", amountKrw > 0 ? `₩${amountKrw.toLocaleString()}` : "₩0");
-  setEl("qpSubTotal", amountKrw > 0 ? `₩${amountKrw.toLocaleString()}` : "₩0");
-  setEl("qpVat", vatKrw > 0 ? `₩${vatKrw.toLocaleString()}` : "₩0");
-  setEl("qpGrandTotal", grandTotalKrw > 0 ? `₩${grandTotalKrw.toLocaleString()}` : "₩0");
-
-  const m = document.getElementById("quotationModal"); if (m) m.classList.add("active-modal");
+  const m = document.getElementById("quotationModal");
+  if (m) m.classList.add("active-modal");
 }
+
+function renderQuotationTableRows() {
+  const tbody = document.getElementById("qpItemTbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = window.quoteItemsData.map((row, idx) => {
+    const amount = row.unitKrw * row.qty;
+    return `
+      <tr class="hover:bg-slate-50 transition-colors" data-quote-row-idx="${idx}">
+        <td class="py-2 text-center font-mono">${idx + 1}</td>
+        <td class="px-2">
+          <input type="text" class="w-full font-bold text-black outline-none bg-transparent" value="${row.partName}" oninput="updateQuoteRowItem(${idx}, 'partName', this.value)">
+        </td>
+        <td class="text-center">
+          <input type="text" class="w-full text-center outline-none bg-transparent" value="${row.maker}" oninput="updateQuoteRowItem(${idx}, 'maker', this.value)">
+        </td>
+        <td class="text-center">
+          <input type="number" class="w-full text-center font-mono outline-none bg-transparent" value="${row.qty}" oninput="updateQuoteRowItem(${idx}, 'qty', this.value)">
+        </td>
+        <td class="text-right px-2">
+          <input type="number" class="w-full text-right font-mono outline-none bg-transparent" value="${row.unitKrw}" oninput="updateQuoteRowItem(${idx}, 'unitKrw', this.value)">
+        </td>
+        <td class="text-right px-2 font-mono font-bold text-black">
+          ₩${amount.toLocaleString()}
+        </td>
+        <td class="text-center">
+          <input type="text" class="w-full text-center outline-none bg-transparent text-[10px]" value="${row.delivery}" oninput="updateQuoteRowItem(${idx}, 'delivery', this.value)">
+        </td>
+        <td class="text-center no-print">
+          <button type="button" onclick="removeQuoteRowItem(${idx})" class="text-slate-400 hover:text-red-600 font-bold text-xs p-0.5">✕</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  recalculateQuoteTotals();
+}
+
+function updateQuoteRowItem(idx, key, val) {
+  if (!window.quoteItemsData[idx]) return;
+  if (key === 'qty' || key === 'unitKrw') {
+    window.quoteItemsData[idx][key] = Math.max(0, parseInt(val, 10) || 0);
+  } else {
+    window.quoteItemsData[idx][key] = val;
+  }
+  recalculateQuoteTotals();
+  
+  // AMOUNT 셀만 실시간 갱신
+  const rowEl = document.querySelector(`tr[data-quote-row-idx="${idx}"]`);
+  if (rowEl) {
+    const amountCell = rowEl.cells[5];
+    const amount = window.quoteItemsData[idx].qty * window.quoteItemsData[idx].unitKrw;
+    if (amountCell) amountCell.innerText = `₩${amount.toLocaleString()}`;
+  }
+}
+
+function removeQuoteRowItem(idx) {
+  window.quoteItemsData.splice(idx, 1);
+  if (window.quoteItemsData.length === 0) {
+    window.quoteItemsData.push({ partName: "-", maker: "-", qty: 0, unitKrw: 0, delivery: "2-3WKS" });
+  }
+  renderQuotationTableRows();
+}
+
+function addBlankQuoteRow() {
+  window.quoteItemsData.push({
+    partName: "신규 부품명",
+    maker: "-",
+    qty: 1000,
+    unitKrw: 0,
+    delivery: "2-3WKS"
+  });
+  renderQuotationTableRows();
+}
+
+function recalculateQuoteTotals() {
+  let subTotal = 0;
+  window.quoteItemsData.forEach(r => {
+    subTotal += (r.unitKrw * r.qty);
+  });
+
+  const vat = Math.round(subTotal * 0.1);
+  const grandTotal = subTotal + vat;
+
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = val;
+  };
+
+  setEl("qpSubTotal", `₩${subTotal.toLocaleString()}`);
+  setEl("qpVat", `₩${vat.toLocaleString()}`);
+  setEl("qpGrandTotal", `₩${grandTotal.toLocaleString()}`);
+}
+
+window.addBlankQuoteRow = addBlankQuoteRow;
+window.removeQuoteRowItem = removeQuoteRowItem;
+window.updateQuoteRowItem = updateQuoteRowItem;
 window.openQuotationModal = openQuotationModal;
+
 
 
 
