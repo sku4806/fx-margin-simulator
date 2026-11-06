@@ -1,5 +1,46 @@
 
 // ========================================================
+// 🛡️ 견적서 필수 입력값 검증 및 인쇄 실행
+// ========================================================
+function executeQuotationPrint() {
+  const custEl = document.getElementById("qpCustomer");
+  const attnEl = document.getElementById("qpAttnName");
+  const salesEl = document.getElementById("qpSales");
+  const banner = document.getElementById("quoteValidationBanner");
+  const bannerText = document.getElementById("quoteValidationText");
+
+  // 이전 에러 표시 초기화
+  [custEl, attnEl, salesEl].forEach(el => el?.classList.remove("quote-input-error"));
+
+  const custVal = custEl?.value.trim() || "";
+  const attnVal = attnEl?.value.trim() || "";
+  const salesVal = salesEl?.value.trim() || "";
+
+  const missing = [];
+  if (!custVal) { missing.push("TO(업체명)"); custEl?.classList.add("quote-input-error"); }
+  if (!attnVal) { missing.push("ATTN(담당자명)"); attnEl?.classList.add("quote-input-error"); }
+  if (!salesVal) { missing.push("FROM(영업담당자)"); salesEl?.classList.add("quote-input-error"); }
+
+  if (missing.length > 0) {
+    if (banner && bannerText) {
+      bannerText.innerText = `⚠️ 필수 정보 누락: [ ${missing.join(", ")} ] 항목을 입력해 주세요!`;
+      banner.classList.remove("hidden");
+    }
+    // 첫 번째 빈칸으로 자동 포커스
+    if (!custVal) custEl?.focus();
+    else if (!attnVal) attnEl?.focus();
+    else if (!salesVal) salesEl?.focus();
+    return;
+  }
+
+  // 모든 필수값이 정상이면 배너 숨기고 인쇄 실행
+  if (banner) banner.classList.add("hidden");
+  window.print();
+}
+window.executeQuotationPrint = executeQuotationPrint;
+
+
+// ========================================================
 // 📄 BSK 표준 견적서 모달 열기 및 데이터 매핑
 // ========================================================
 function openQuotationModal() {

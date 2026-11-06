@@ -1206,6 +1206,7 @@
   
   
   
+  
   <!-- 📄 BSK 원본과 100% 동일한 A4 견적서 팝업 모달 -->
   <style>
     @media print {
@@ -1216,9 +1217,8 @@
         left: 0 !important;
         top: 0 !important;
         width: 100% !important;
-        height: 100% !important;
         margin: 0 !important;
-        padding: 10mm 15mm !important;
+        padding: 8mm 12mm !important;
         box-shadow: none !important;
         border: none !important;
         background: white !important;
@@ -1229,7 +1229,7 @@
     }
 
     .quote-box-shadow {
-      box-shadow: 3.5px 3.5px 0px #000000;
+      box-shadow: 3px 3px 0px #000000;
     }
     .quote-border-box {
       border: 1px solid #000000;
@@ -1238,18 +1238,23 @@
       border-top: 1.8px solid #000000;
       border-bottom: 1px dotted #555555;
     }
+    .quote-input-error {
+      border-bottom: 2px solid #ef4444 !important;
+      background-color: #fef2f2 !important;
+    }
   </style>
 
   <div id="quotationModal" style="display: none;" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
     <div class="bg-white w-full max-w-4xl max-h-[96vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      
       <!-- 상단 컨트롤러 -->
       <div class="p-3 bg-slate-900 text-white flex items-center justify-between no-print shrink-0">
         <div class="flex items-center gap-2">
           <span class="text-base">📄</span>
-          <h3 class="text-xs sm:text-sm font-bold">BSK 표준 견적서 출력 (원본 1:1 매칭)</h3>
+          <h3 class="text-xs sm:text-sm font-bold">BSK 표준 견적서 출력 (A4 미리보기)</h3>
         </div>
         <div class="flex items-center gap-2">
-          <button type="button" onclick="window.print()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg shadow flex items-center gap-1 transition-colors">
+          <button type="button" onclick="executeQuotationPrint()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg shadow flex items-center gap-1.5 transition-colors">
             <span>🖨️</span> PDF 저장 / 인쇄
           </button>
           <button type="button" onclick="document.getElementById('quotationModal').style.display = 'none'" class="text-slate-400 hover:text-white p-1 rounded-lg">
@@ -1258,24 +1263,185 @@
         </div>
       </div>
 
+      <!-- ⚠️ 필수값 누락 알림 팝업 배너 (동적 알림) -->
+      <div id="quoteValidationBanner" class="hidden bg-amber-500 text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md shrink-0 animate-pulse no-print">
+        <div class="flex items-center gap-1.5">
+          <span>⚠️</span>
+          <span id="quoteValidationText">견적서 작성을 위해 필수 정보를 입력해 주세요.</span>
+        </div>
+        <button type="button" onclick="document.getElementById('quoteValidationBanner').classList.add('hidden')" class="text-white hover:text-amber-100 font-bold ml-2">✕</button>
+      </div>
+
       <!-- 인쇄 미리보기 스크롤 영역 -->
       <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100 flex justify-center">
-        <!-- A4 표준 규격 캔버스 -->
-        <div id="quotationPrintArea" class="bg-white w-full max-w-[740px] min-h-[980px] p-8 sm:p-10 shadow-lg font-sans text-black text-[10.5px] leading-tight flex flex-col justify-between box-border">
+        <!-- A4 표준 규격 캔버스 (중간 과대 여백 제거) -->
+        <div id="quotationPrintArea" class="bg-white w-full max-w-[740px] p-6 sm:p-8 shadow-lg font-sans text-black text-[10.5px] leading-tight space-y-2.5 box-border">
           
-          <div class="space-y-3">
-            <!-- 1. 상단 중앙 회사 로고 및 주소 -->
-            <div class="flex items-center justify-center gap-3 pb-1">
-              <div class="w-13 h-13 flex items-center justify-center shrink-0">
-                <img src="/BSK.jpg" alt="BSK" class="w-12 h-12 object-contain" onerror="this.onerror=null; this.src='https://www.bigshine.co.kr/img/common/logo.png';">
+          <!-- 1. 상단 중앙 회사 로고 및 주소 -->
+          <div class="flex items-center justify-center gap-3 pb-0.5">
+            <div class="w-12 h-12 flex items-center justify-center shrink-0">
+              <img src="/BSK.jpg" alt="BSK" class="w-11 h-11 object-contain" onerror="this.onerror=null; this.src='https://www.bigshine.co.kr/img/common/logo.png';">
+            </div>
+            <div class="text-[9.5px] leading-tight">
+              <div class="font-black text-sm text-black tracking-wide">BIGSHINE KOREA CO., LTD</div>
+              <div>B-601, Yongin TechnoValley, 357 Guseong-ro, Giheung-gu,</div>
+              <div>Yongin-si, Gyeonggi-do 16914, Rep. of Korea</div>
+              <div>Tel: 82-31-711-8881 Fax : 82-31-711-8174</div>
+            </div>
+          </div>
+
+          <!-- 2. 입체 그림자 QUOTATION 타이틀 박스 -->
+          <div class="flex justify-center my-1.5">
+            <div class="border-[1.5px] border-black bg-white px-12 py-0.5 quote-box-shadow">
+              <h1 class="text-xl font-serif italic font-black tracking-widest text-black">QUOTATION</h1>
+            </div>
+          </div>
+
+          <!-- 3. 수신/발신 메타 데이터 박스 -->
+          <div class="quote-border-box p-2 text-[10.5px]">
+            <div class="grid grid-cols-2 gap-4">
+              <!-- 좌측: 수신 고객사 정보 -->
+              <div class="space-y-0.5">
+                <div class="flex items-center">
+                  <span class="w-14 font-bold text-slate-900">TO :</span>
+                  <input type="text" id="qpCustomer" class="flex-1 font-bold outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder="* 업체명 입력 (필수)">
+                </div>
+                <div class="flex items-center">
+                  <span class="w-14 font-bold text-slate-900">ATTN :</span>
+                  <div class="flex-1 flex items-center gap-1">
+                    <input type="text" id="qpAttnName" class="w-24 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder="* 담당자 (필수)">
+                    <input type="text" id="qpAttnRank" class="w-16 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder="직급">
+                    <span>님</span>
+                  </div>
+                </div>
+                <div class="flex items-center">
+                  <span class="w-14 font-bold text-slate-900">TEL :</span>
+                  <input type="text" id="qpTel" class="flex-1 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder=".">
+                </div>
+                <div class="flex items-center">
+                  <span class="w-14 font-bold text-slate-900">FAX :</span>
+                  <input type="text" id="qpFax" class="flex-1 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent" placeholder="">
+                </div>
               </div>
-              <div class="text-[10px] leading-snug">
-                <div class="font-black text-sm text-black tracking-wide">BIGSHINE KOREA CO., LTD</div>
-                <div>B-601, Yongin TechnoValley, 357 Guseong-ro, Giheung-gu,</div>
-                <div>Yongin-si, Gyeonggi-do 16914, Rep. of Korea</div>
-                <div>Tel: 82-31-711-8881 Fax : 82-31-711-8174</div>
+
+              <!-- 우측: 견적 메타 정보 -->
+              <div class="space-y-0.5">
+                <div class="flex items-center">
+                  <span class="w-16 font-bold text-slate-900">DATE :</span>
+                  <input type="text" id="qpDate" class="flex-1 outline-none bg-transparent font-mono" value="2026-11-06">
+                </div>
+                <div class="flex items-center">
+                  <span class="w-16 font-bold text-slate-900">PAGE :</span>
+                  <span class="flex-1 font-mono">1 OF 1</span>
+                </div>
+                <div class="flex items-center">
+                  <span class="w-16 font-bold text-slate-900">REF :</span>
+                  <input type="text" id="qpRefNo" class="flex-1 outline-none bg-transparent font-mono font-bold text-red-600" value="QBK2611-0001">
+                </div>
+                <div class="flex items-center">
+                  <span class="w-16 font-bold text-slate-900">FROM :</span>
+                  <input type="text" id="qpSales" class="flex-1 outline-none border-b border-dashed border-slate-300 pb-0.5 bg-transparent font-bold text-indigo-950" placeholder="* 담당 영업명 (필수)">
+                </div>
               </div>
             </div>
+          </div>
+
+          <!-- 4. 부품 명세 테이블 -->
+          <div class="pt-0.5">
+            <table class="w-full text-[10.5px] border-collapse">
+              <thead>
+                <tr class="quote-table-header">
+                  <th class="py-1 text-center w-8 font-bold">No</th>
+                  <th class="py-1 text-left px-2 font-bold">PART#</th>
+                  <th class="py-1 text-center w-20 font-bold">MFG</th>
+                  <th class="py-1 text-center w-16 font-bold">QTY</th>
+                  <th class="py-1 text-right px-2 w-24 font-bold">U/P</th>
+                  <th class="py-1 text-right px-2 w-28 font-bold">AMOUNT</th>
+                  <th class="py-1 text-center w-20 font-bold">DELIVERY</th>
+                </tr>
+              </thead>
+              <tbody id="qpItemTbody">
+                <tr>
+                  <td class="py-2 text-center">1</td>
+                  <td id="qpPartName" class="text-left px-2 font-bold">-</td>
+                  <td id="qpMaker" class="text-center">-</td>
+                  <td id="qpQty" class="text-center font-mono">-</td>
+                  <td id="qpUnitPrice" class="text-right px-2 font-mono">₩0</td>
+                  <td id="qpAmount" class="text-right px-2 font-mono font-bold">₩0</td>
+                  <td class="text-center"><input type="text" id="qpDelivery" class="w-full text-center outline-none bg-transparent" value="2-3WKS"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 5. 합계 금액 영역 -->
+          <div class="border-t border-black pt-1 space-y-0.5">
+            <div class="flex justify-end items-center text-[10.5px]">
+              <span class="w-32 font-bold text-right pr-6">AMOUNT :</span>
+              <span id="qpSubTotal" class="w-32 text-right font-black font-mono">₩0</span>
+            </div>
+            <div class="flex justify-end items-center text-[10.5px]">
+              <span class="w-32 font-bold text-right pr-6">VAT (10%) :</span>
+              <span id="qpVat" class="w-32 text-right font-black font-mono">₩0</span>
+            </div>
+            <div class="border-t-2 border-black pt-1 mt-0.5 flex justify-end items-center text-[11.5px]">
+              <span class="w-44 font-black text-right pr-6">* TOTAL AMOUNT :</span>
+              <span id="qpGrandTotal" class="w-32 text-right font-black font-mono text-sm">₩0</span>
+            </div>
+          </div>
+
+          <!-- 6. 거래 조건 및 영문 안내 (Terms & Conditions) -->
+          <div class="pt-1.5 text-[9.5px] space-y-0.5">
+            <div class="flex items-center">
+              <span class="w-36 font-bold">* PAYMENT TERMS :</span>
+              <input type="text" id="qpPaymentTerms" class="flex-1 outline-none bg-transparent" value="선입금 (VAT 포함)">
+            </div>
+            <div class="flex items-center">
+              <span class="w-36 font-bold">* INCO TERMS :</span>
+              <input type="text" id="qpIncoTerms" class="flex-1 outline-none bg-transparent" value="DOMESTIC">
+            </div>
+            <div class="flex items-center">
+              <span class="w-36 font-bold">* ORIGIN :</span>
+              <input type="text" id="qpOrigin" class="flex-1 outline-none bg-transparent" value="Hong Kong">
+            </div>
+            <div class="flex items-center">
+              <span class="w-36 font-bold">* SHIPPING PORT :</span>
+              <input type="text" id="qpShippingPort" class="flex-1 outline-none bg-transparent" value="H.K.">
+            </div>
+            <div class="flex items-center">
+              <span class="w-36 font-bold">* VALIDITY :</span>
+              <input type="text" id="qpValidity" class="flex-1 outline-none bg-transparent" value="7 DAYS">
+            </div>
+            <div class="flex items-center">
+              <span class="w-36 font-bold">* REMARKS :</span>
+              <input type="text" id="qpRemarks" class="flex-1 outline-none bg-transparent" value="-">
+            </div>
+            
+            <p class="pt-0.5 text-[9px] text-slate-700">We are pleased to offer you the parts on the terms and conditions described as above.</p>
+          </div>
+
+          <!-- 7. 하단 입금 계좌 및 결재 서명란 (간격 정돈 완료) -->
+          <div class="pt-2 flex justify-between items-end text-[9.5px] border-t border-slate-300">
+            <div class="space-y-0.5">
+              <div class="font-bold text-black">* ACCOUNT INFO :</div>
+              <div class="font-bold text-center w-52 py-0.5 text-[10px] text-slate-900">- 원화(₩) 계좌 -</div>
+              <div class="font-bold text-black">KEB하나은행으로 송금부탁드립니다.</div>
+              <div>예금주 : (주)빅샤인코리아</div>
+              <div class="font-mono font-medium">계좌번호 : 374-890003-50704 (144-22-01385-8)</div>
+            </div>
+
+            <div class="text-right space-y-1 pr-2">
+              <div class="text-[9px] font-mono text-slate-600">CC : D.I.Lee</div>
+              <div class="font-bold text-black">* Authorized by</div>
+              <div class="font-black text-xs tracking-wider">BIGSHINE KOREA</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
 
             <!-- 2. 입체 그림자 QUOTATION 타이틀 박스 -->
             <div class="flex justify-center my-2">
