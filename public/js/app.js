@@ -2207,48 +2207,68 @@ window.saveDrawerItem = async function() {
 
 
 
-// 출하/수주 이력 탭 이벤트 연동
+
+// 출하/수주 이력 탭 이벤트 연동 (단독 뷰 완전 전환)
 document.addEventListener('DOMContentLoaded', () => {
-  const tabShipments = document.getElementById('tabShipments');
-  const shipmentsSection = document.getElementById('shipmentsSection');
   const tabSales = document.getElementById('tabSales');
   const tabFulfillment = document.getElementById('tabFulfillment');
-  
-  function hideAllViews() {
-    const selectors = ['#salesView', '#fulfillmentView', '#inventoryView', '#mainContentArea', 'main > div:not(#shipmentsSection)'];
-    selectors.forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => {
-        if (el && el.id !== 'shipmentsSection' && el.id !== 'dynamicSubTabNav') {
+  const tabShipments = document.getElementById('tabShipments');
+
+  const shipmentsSection = document.getElementById('shipmentsSection');
+
+  function updateTabStyles(activeTab) {
+    [tabSales, tabFulfillment, tabShipments].forEach(btn => {
+      if (!btn) return;
+      if (btn === activeTab) {
+        btn.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors flex items-center gap-1";
+      } else {
+        btn.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors flex items-center gap-1";
+      }
+    });
+  }
+
+  // 기존 재고/견적 화면의 모든 메인 컨테이너 영역 일괄 제어
+  function setMainViewsVisible(visible) {
+    const mainChildren = document.querySelectorAll('main > div, #salesSection, #inventorySection, #fulfillmentSection, #mainContentArea');
+    mainChildren.forEach(el => {
+      if (el && el.id !== 'shipmentsSection' && el.id !== 'dynamicSubTabNav' && !el.closest('header')) {
+        if (visible) {
+          el.classList.remove('hidden');
+        } else {
           el.classList.add('hidden');
         }
-      });
+      }
     });
   }
 
   if (tabShipments && shipmentsSection) {
+    // 1. [출하/수주 이력] 탭 클릭 시 -> 기존 재고 화면 완전 숨김 & 출하 이력만 단독 표시
     tabShipments.addEventListener('click', async () => {
-      // 탭 활성 스타일
-      if (tabSales) tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
-      if (tabFulfillment) tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
-      tabShipments.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
+      updateTabStyles(tabShipments);
+      setMainViewsVisible(false); // 재고 목록 숨김
+      shipmentsSection.classList.remove('hidden'); // 출하 그리드만 표시
 
-      hideAllViews();
-      shipmentsSection.classList.remove('hidden');
-
+      const { fetchShipments, renderShipmentsView } = await import('./shipments.js');
       await fetchShipments();
       renderShipmentsView('shipmentsSection');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
-    // 다른 탭 클릭 시 shipmentsSection 숨김
-    [tabSales, tabFulfillment].forEach(t => {
-      if (t) {
-        t.addEventListener('click', () => {
-          shipmentsSection.classList.add('hidden');
-          if (tabShipments) {
-            tabShipments.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
-          }
-        });
-      }
-    });
+    // 2. [영업 견적·재고] 탭 클릭 시 -> 출하 이력 숨김 & 재고 화면 복원
+    if (tabSales) {
+      tabSales.addEventListener('click', () => {
+        updateTabStyles(tabSales);
+        shipmentsSection.classList.add('hidden');
+        setMainViewsVisible(true);
+      });
+    }
+
+    // 3. [수주 및 출하 관리] 탭 클릭 시 -> 출하 이력 숨김
+    if (tabFulfillment) {
+      tabFulfillment.addEventListener('click', () => {
+        updateTabStyles(tabFulfillment);
+        shipmentsSection.classList.add('hidden');
+      });
+    }
   }
 });
