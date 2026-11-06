@@ -1115,10 +1115,10 @@ function renderPackagingTable() {
 }
 
 function updateFxVarianceFeedback() {
-  const orderFx = parseMaskedNumber(document.getElementById(\'inputShipFx\')?.value) || 1350;
-  const settledFx = parseMaskedNumber(document.getElementById(\'inputSettledFx\')?.value);
-  const soldPrice = parseMaskedNumber(document.getElementById(\'inputSoldPrice\')?.value);
-  const stock = Math.round(parseMaskedNumber(document.getElementById(\'inputStock\')?.value));
+  const orderFx = parseMaskedNumber(document.getElementById('inputShipFx')?.value) || 1350;
+  const settledFx = parseMaskedNumber(document.getElementById('inputSettledFx')?.value);
+  const soldPrice = parseMaskedNumber(document.getElementById('inputSoldPrice')?.value);
+  const stock = Math.round(parseMaskedNumber(document.getElementById('inputStock')?.value));
   const display = document.getElementById('fxVarianceDisplay');
 
   if (!display) return;
@@ -1297,7 +1297,7 @@ async function saveCurrentForm() {
     application: document.getElementById('inputApplication')?.value.trim() || "",
     biz_type: document.getElementById('selectBizType')?.value || "DOMESTIC",
     tax_date: document.getElementById('inputTaxDate')?.value || null,
-    sold_price_usd: parseMaskedNumber(document.getElementById(\'inputSoldPrice\')?.value),
+    sold_price_usd: parseMaskedNumber(document.getElementById('inputSoldPrice')?.value),
     order_status: document.getElementById('selectOrderStatus')?.value || "배정요청",
     payment_terms: document.getElementById('selectPaymentTerms')?.value || "Net 30",
     payment_status: document.getElementById('selectPaymentStatus')?.value || "미수",
@@ -1307,16 +1307,16 @@ async function saveCurrentForm() {
     due_date: document.getElementById('inputDueDate')?.value || null,
     shipped_date: document.getElementById('inputShippedDate')?.value || null,
     settled_date: document.getElementById('inputSettledDate')?.value || null,
-    settled_fx: parseMaskedNumber(document.getElementById(\'inputSettledFx\')?.value),
+    settled_fx: parseMaskedNumber(document.getElementById('inputSettledFx')?.value),
     entry_date: document.getElementById('inputEntryDate')?.value || new Date().toISOString().slice(0, 10),
     memo: document.getElementById('inputMemo')?.value.trim() || "",
-    unit_usd: parseMaskedNumber(document.getElementById(\'inputUsd\')?.value),
-    ship_fx: parseMaskedNumber(document.getElementById(\'inputShipFx\')?.value) || 1350,
-    stock: Math.round(parseMaskedNumber(document.getElementById(\'inputStock\')?.value)),
-    spq: Math.round(parseMaskedNumber(document.getElementById(\'inputSpq\')?.value)) || null,
+    unit_usd: parseMaskedNumber(document.getElementById('inputUsd')?.value),
+    ship_fx: parseMaskedNumber(document.getElementById('inputShipFx')?.value) || 1350,
+    stock: Math.round(parseMaskedNumber(document.getElementById('inputStock')?.value)),
+    spq: Math.round(parseMaskedNumber(document.getElementById('inputSpq')?.value)) || null,
     margin: 20,
     is_spa: isSpa,
-    approved_debit_usd: isSpa ? parseMaskedNumber(document.getElementById(\'inputApprovedDebit\')?.value) : 0
+    approved_debit_usd: isSpa ? parseMaskedNumber(document.getElementById('inputApprovedDebit')?.value) : 0
   };
 
   try {
@@ -1850,11 +1850,11 @@ window.saveDrawerItem = async function() {
     const payload = {
       maker: document.getElementById('drawerMaker')?.value.trim() || '기타',
       date_code: document.getElementById('drawerDateCode')?.value.trim() || '-',
-      stock: Math.round(parseMaskedNumber(document.getElementById(\'drawerStock\')?.value)),
-      arranged_qty: Math.round(parseMaskedNumber(document.getElementById(\'drawerArranged\')?.value)),
-      unit_usd: parseMaskedNumber(document.getElementById(\'drawerUnitUsd\')?.value),
-      ship_fx: parseMaskedNumber(document.getElementById(\'drawerShipFx\')?.value) || 1350,
-      sold_price_usd: parseMaskedNumber(document.getElementById(\'drawerSoldPrice\')?.value),
+      stock: Math.round(parseMaskedNumber(document.getElementById('drawerStock')?.value)),
+      arranged_qty: Math.round(parseMaskedNumber(document.getElementById('drawerArranged')?.value)),
+      unit_usd: parseMaskedNumber(document.getElementById('drawerUnitUsd')?.value),
+      ship_fx: parseMaskedNumber(document.getElementById('drawerShipFx')?.value) || 1350,
+      sold_price_usd: parseMaskedNumber(document.getElementById('drawerSoldPrice')?.value),
       owner: document.getElementById('drawerSales')?.value.trim() || '본사 일반재고',
       customer: document.getElementById('drawerCustomer')?.value.trim() || '-',
       real_customer: document.getElementById('drawerRealCustomer')?.value.trim() || '-',
@@ -1873,7 +1873,7 @@ window.saveDrawerItem = async function() {
       tax_date: document.getElementById('drawerTaxDate')?.value || null,
       due_date: document.getElementById('drawerDueDate')?.value || null,
       settled_date: document.getElementById('drawerSettledDate')?.value || null,
-      settled_fx: parseMaskedNumber(document.getElementById(\'drawerSettledFx\')?.value) || null,
+      settled_fx: parseMaskedNumber(document.getElementById('drawerSettledFx')?.value) || null,
       currency: document.getElementById('drawerCurrency')?.value || 'USD',
 
       memo: document.getElementById('drawerMemo')?.value.trim() || ''
