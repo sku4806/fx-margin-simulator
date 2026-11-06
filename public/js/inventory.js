@@ -174,33 +174,59 @@ export async function upsertInventoryItem(payload, editingItemId = null) {
     const updated = data && data[0] ? data[0] : { id: editingItemId, ...payload };
 
     // '출하완료' 상태로 저장 시 legacy_shipments에 자동 출하 이력 등록
-    if (payload.order_status === '출하완료') {
-      try {
-        const shipDate = payload.shipped_date || new Date().toISOString().split('T')[0];
-        const shipQty = payload.arranged_qty || payload.stock || 0;
-        const fx = Number(payload.ship_fx) || 1350;
-        const unitKrw = Math.round((Number(payload.sold_price_usd) || Number(payload.unit_usd) || 0) * fx);
-        const costKrw = Math.round((Number(payload.unit_usd) || 0) * fx);
-        const totalSales = unitKrw * shipQty;
+    // [시스템 연동] 출하완료 등록 / 상태 변경 시 출하 이력 자동 동기화 및 롤백
+    const currentStatus = payload.order_status || payload.orderStatus;
+    const itemId = editingItemId || (updated && updated.id);
 
-        await sbClient.from('legacy_shipments').insert([{
-          part_name: payload.part_name || updated.part_name,
-          maker: payload.maker || updated.maker || 'OTHERS',
-          qty: shipQty,
-          unit_price: unitKrw,
-          cost_price: costKrw,
-          total_sales_amount: totalSales,
-          po_no: payload.po_no || payload.tracking_no || 'MANUAL-SHIP',
-          order_date: shipDate,
-          status: 'SHIPPED',
-          last_synced_at: new Date().toISOString()
-        }]);
-        console.log("✅ [legacy_shipments] 출하 이력 자동 등록 완료");
-      } catch (shipErr) {
-        console.error("출하 이력 자동 연동 오류:", shipErr);
+    if (itemId) {
+      if (currentStatus === '출하완료') {
+        try {
+          const shipDate = payload.shipped_date || payload.shippedDate || new Date().toISOString().split('T')[0];
+          const shipQty = Number(payload.arranged_qty || payload.arrangedQty || payload.stock || 1);
+          const fx = Number(payload.ship_fx || payload.shipFx) || 1350;
+          const unitKrw = Math.round((Number(payload.sold_price_usd || payload.soldPriceUsd) || Number(payload.unit_usd || payload.unitUsd) || 0) * fx);
+          const costKrw = Math.round((Number(payload.unit_usd || payload.unitUsd) || 0) * fx);
+          const totalSales = unitKrw * shipQty;
+
+          const shipmentRecord = {
+            inventory_item_id: itemId,
+            part_name: payload.part_name || payload.partName || (updated && updated.part_name) || 'UNKNOWN',
+            maker: payload.maker || (updated && updated.maker) || 'OTHERS',
+            qty: shipQty,
+            unit_price: unitKrw,
+            cost_price: costKrw,
+            total_sales_amount: totalSales,
+            po_no: payload.po_no || payload.poNo || payload.tracking_no || payload.trackingNo || 'WEB-MANUAL',
+            order_date: shipDate,
+            status: 'SHIPPED',
+            last_synced_at: new Date().toISOString()
+          };
+
+          const { data: existing } = await sbClient
+            .from('legacy_shipments')
+            .select('id')
+            .eq('inventory_item_id', itemId)
+            .limit(1);
+
+          if (existing && existing.length > 0) {
+            await sbClient.from('legacy_shipments').update(shipmentRecord).eq('id', existing[0].id);
+          } else {
+            await sbClient.from('legacy_shipments').insert([shipmentRecord]);
+          }
+          console.log("✅ [legacy_shipments] 출하 이력 동기화 완료");
+        } catch (shipErr) {
+          console.error("출하 이력 동기화 에러:", shipErr);
+        }
+      } else {
+        // 출하완료가 아닌 상태(배정요청, 보유 등)로 변경 시 기존 생성된 출하 이력 자동 회수
+        try {
+          await sbClient.from('legacy_shipments').delete().eq('inventory_item_id', itemId);
+          console.log("ℹ️ [legacy_shipments] 상태 롤백 -> 출하 이력 자동 삭제 완료");
+        } catch (delErr) {
+          console.error("출하 이력 회수 실패:", delErr);
+        }
       }
     }
-
     return updated;
   } else {
     const { data, error } = await sbClient
