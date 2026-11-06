@@ -290,8 +290,6 @@ function formatNumberWithMask(rawValue, maxDecimals = 2) {
   }
   return parts[0];
 }
-    integerPart = '0';
-  }
 
   return decimalPart !== null ? `${integerPart}.${decimalPart}` : integerPart;
 }
