@@ -1,4 +1,60 @@
 
+// ========================================================
+// 📄 BSK 표준 견적서 모달 열기 및 데이터 매핑
+// ========================================================
+function openQuotationModal() {
+  const partName = document.getElementById("inputPartName")?.value.trim() || document.getElementById("drawerPartDisplay")?.innerText || "-";
+  const maker = document.getElementById("selectMaker")?.value || document.getElementById("drawerMfgDisplay")?.innerText || "-";
+  const customer = document.getElementById("inputCustomer")?.value.trim() || document.getElementById("drawerCustomer")?.value.trim() || "고객사";
+  const sales = document.getElementById("selectOwner")?.value || document.getElementById("drawerSales")?.value.trim() || "Nathan Kim";
+  const stock = parseMaskedNumber(document.getElementById("inputStock")?.value) || parseMaskedNumber(document.getElementById("drawerStock")?.value) || 1;
+
+  // 단가: 계산기의 대체원가 안전선 또는 실판매단가
+  let unitPriceText = document.getElementById("minSaleUnitReplaceUsd")?.innerText || "$0.0000";
+  let unitPriceKrw = Math.round(parseMaskedNumber(document.getElementById("minSaleUnitReplaceKrw")?.innerText.replace(/[^0-9]/g, ""))) || 0;
+
+  // 현재 날짜 및 견적 번호 생성 (QBK년월-일련번호)
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+  const refNo = `QBK${String(yyyy).slice(2)}${mm}-${dd}${Math.floor(10 + Math.random() * 90)}`;
+
+  // 모달 내부 필드 값 주입
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (el.tagName === "INPUT") el.value = val;
+      else el.innerText = val;
+    }
+  };
+
+  setEl("qpCustomer", customer !== "-" ? customer : "고객사");
+  setEl("qpDate", todayStr);
+  setEl("qpRefNo", refNo);
+  setEl("qpSales", (sales !== "-" && sales !== "본사 일반재고") ? sales : "Nathan Kim");
+  setEl("qpPartName", partName);
+  setEl("qpMaker", maker !== "__CUSTOM_MAKER__" ? maker : "기타");
+  setEl("qpQty", `${stock.toLocaleString()} EA`);
+
+  // 원화 환산 기준 금액 계산
+  const amountKrw = unitPriceKrw * stock;
+  const vatKrw = Math.round(amountKrw * 0.1);
+  const grandTotalKrw = amountKrw + vatKrw;
+
+  setEl("qpUnitPrice", `₩${unitPriceKrw.toLocaleString()} (${unitPriceText})`);
+  setEl("qpAmount", `₩${amountKrw.toLocaleString()}`);
+  setEl("qpSubTotal", `₩${amountKrw.toLocaleString()}`);
+  setEl("qpVat", `₩${vatKrw.toLocaleString()}`);
+  setEl("qpGrandTotal", `₩${grandTotalKrw.toLocaleString()}`);
+
+  document.getElementById("quotationModal")?.classList.remove("hidden");
+}
+
+window.openQuotationModal = openQuotationModal;
+
+
 // --- ⚡ 성능 최적화: 디바운스 (Debounce) 함수 ---
 function debounce(func, delay = 250) {
   let timer = null;
@@ -971,6 +1027,7 @@ function bindInputs() {
 
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
+  safeAddListener('openQuotationModalBtn', 'click', openQuotationModal);
 
   safeAddListener('toggleKpiBtn', 'click', () => {
     const bar = document.getElementById('kpiSummaryBar');
