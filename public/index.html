@@ -92,20 +92,23 @@
       </div>
     </header>
 
-    <!-- 2. 비즈니스 탭 스위처 바 -->
+    <!-- 2. 비즈니스 탭 스위처 바 (가로 1열 3단 탭) -->
     <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-1.5">
-      <div class="grid grid-cols-2 gap-1.5 w-full md:w-auto">
-        <button id="tabSales" class="py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors">
-          💼 영업 견적·재고
+      <div class="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto">
+        <button id="tabSales" class="py-2 px-3 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1">
+          <span>💼</span> 영업 견적·재고
         </button>
-        <button id="tabFulfillment" class="py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors">
-          📋 수주 및 출하 관리
+        <button id="tabFulfillment" class="py-2 px-3 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1">
+          <span>📋</span> 수주 및 출하 관리
         </button>
-        <button id="tabShipments" class="py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors flex items-center gap-1"><span>🚚 출하/수주 이력</span></button>
+        <button id="tabShipments" class="py-2 px-3 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1">
+          <span>🚚</span> 출하/수주 이력
+        </button>
       </div>
       <span id="csHeaderDesc" class="text-xs text-slate-400 font-medium hidden md:block px-2">영업 협의 수주 현황 및 실판매가를 확인합니다.</span>
     </div>
 
+    <div id="inventoryMainArea" class="space-y-3 sm:space-y-5">
     <!-- 3. 환율 마진 시뮬레이터 -->
     <div id="salesQuotationPanel" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
       <div class="flex flex-wrap items-center gap-2 p-3">
@@ -628,6 +631,11 @@
   
   
   </div>
+
+  </div>
+
+  <!-- 6. 출하/수주 이력 단독 뷰 섹션 -->
+    <div id="shipmentsSection" class="hidden"></div>
 
   <!-- 📜 모달 9: 전체 변경 이력 조회 모달 -->
   <div id="allAuditModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 hidden">
@@ -1403,7 +1411,7 @@
   </div>
 
     <!-- 출하/수주 이력 탭 섹션 -->
-    <div id="shipmentsSection" class="hidden"></div>
+    
     
 </body>
 </html>

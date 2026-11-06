@@ -731,33 +731,66 @@ function initDynamicFormTabs() {
 function bindTabSwitch() {
   const tabSales = document.getElementById('tabSales');
   const tabFulfillment = document.getElementById('tabFulfillment');
+  const tabShipments = document.getElementById('tabShipments');
+
+  const invMain = document.getElementById('inventoryMainArea');
   const salesPanel = document.getElementById('salesQuotationPanel');
   const formSection = document.getElementById('formSection');
+  const shipmentsSection = document.getElementById('shipmentsSection');
   const csHeaderDesc = document.getElementById('csHeaderDesc');
 
+  const activeStyle = "py-2 px-3 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1";
+  const inactiveStyle = "py-2 px-3 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1";
+
+  function setTabs(active) {
+    if (tabSales) tabSales.className = (active === 'sales') ? activeStyle : inactiveStyle;
+    if (tabFulfillment) tabFulfillment.className = (active === 'fulfillment') ? activeStyle : inactiveStyle;
+    if (tabShipments) tabShipments.className = (active === 'shipments') ? activeStyle : inactiveStyle;
+  }
+
+  // 1. [영업 견적·재고] 탭 클릭
   tabSales?.addEventListener('click', () => {
     activeTab = 'sales';
-    tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
-    if (tabFulfillment) tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
+    setTabs('sales');
 
-    salesPanel?.classList.remove('hidden');
-    formSection?.classList.add('hidden');
+    if (shipmentsSection) shipmentsSection.classList.add('hidden');
+    if (invMain) invMain.classList.remove('hidden');
+    if (salesPanel) salesPanel.classList.remove('hidden');
+    if (formSection) formSection.classList.add('hidden');
 
     if (csHeaderDesc) csHeaderDesc.innerText = "부품별 실시간 마진 계산 및 보유 재고 현황을 확인합니다.";
     applyFilters();
   });
 
+  // 2. [수주 및 출하 관리] 탭 클릭
   tabFulfillment?.addEventListener('click', () => {
     activeTab = 'fulfillment';
-    tabFulfillment.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors";
-    if (tabSales) tabSales.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors";
+    setTabs('fulfillment');
 
-    salesPanel?.classList.add('hidden');
-    formSection?.classList.remove('hidden');
+    if (shipmentsSection) shipmentsSection.classList.add('hidden');
+    if (invMain) invMain.classList.remove('hidden');
+    if (salesPanel) salesPanel.classList.add('hidden');
+    if (formSection) formSection.classList.remove('hidden');
 
     if (csHeaderDesc) csHeaderDesc.innerText = "수주 등록, 재고 배정, 출하 스케줄, 세금계산서 및 채권 결제 만기를 통합 관리합니다.";
     updateFormVisibility(isCsOrAdminUser());
     applyFilters();
+  });
+
+  // 3. [출하/수주 이력] 탭 클릭 (재고 화면 완전 숨김 & 단독 이력 그리드 표시)
+  tabShipments?.addEventListener('click', async () => {
+    activeTab = 'shipments';
+    setTabs('shipments');
+
+    if (invMain) invMain.classList.add('hidden'); // 기존 재고/견적 화면 완벽 숨김
+    if (shipmentsSection) {
+      shipmentsSection.classList.remove('hidden'); // 이력 섹션 단독 표시
+      await fetchShipments();
+      renderShipmentsView('shipmentsSection');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    if (csHeaderDesc) csHeaderDesc.innerText = "완료된 출하/수주 전체 실적 및 매출 통계를 확인합니다.";
   });
 }
 
@@ -2208,67 +2241,3 @@ window.saveDrawerItem = async function() {
 
 
 
-// 출하/수주 이력 탭 이벤트 연동 (단독 뷰 완전 전환)
-document.addEventListener('DOMContentLoaded', () => {
-  const tabSales = document.getElementById('tabSales');
-  const tabFulfillment = document.getElementById('tabFulfillment');
-  const tabShipments = document.getElementById('tabShipments');
-
-  const shipmentsSection = document.getElementById('shipmentsSection');
-
-  function updateTabStyles(activeTab) {
-    [tabSales, tabFulfillment, tabShipments].forEach(btn => {
-      if (!btn) return;
-      if (btn === activeTab) {
-        btn.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors flex items-center gap-1";
-      } else {
-        btn.className = "py-2 px-2 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors flex items-center gap-1";
-      }
-    });
-  }
-
-  // 기존 재고/견적 화면의 모든 메인 컨테이너 영역 일괄 제어
-  function setMainViewsVisible(visible) {
-    const mainChildren = document.querySelectorAll('main > div, #salesSection, #inventorySection, #fulfillmentSection, #mainContentArea');
-    mainChildren.forEach(el => {
-      if (el && el.id !== 'shipmentsSection' && el.id !== 'dynamicSubTabNav' && !el.closest('header')) {
-        if (visible) {
-          el.classList.remove('hidden');
-        } else {
-          el.classList.add('hidden');
-        }
-      }
-    });
-  }
-
-  if (tabShipments && shipmentsSection) {
-    // 1. [출하/수주 이력] 탭 클릭 시 -> 기존 재고 화면 완전 숨김 & 출하 이력만 단독 표시
-    tabShipments.addEventListener('click', async () => {
-      updateTabStyles(tabShipments);
-      setMainViewsVisible(false); // 재고 목록 숨김
-      shipmentsSection.classList.remove('hidden'); // 출하 그리드만 표시
-
-      const { fetchShipments, renderShipmentsView } = await import('./shipments.js');
-      await fetchShipments();
-      renderShipmentsView('shipmentsSection');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-
-    // 2. [영업 견적·재고] 탭 클릭 시 -> 출하 이력 숨김 & 재고 화면 복원
-    if (tabSales) {
-      tabSales.addEventListener('click', () => {
-        updateTabStyles(tabSales);
-        shipmentsSection.classList.add('hidden');
-        setMainViewsVisible(true);
-      });
-    }
-
-    // 3. [수주 및 출하 관리] 탭 클릭 시 -> 출하 이력 숨김
-    if (tabFulfillment) {
-      tabFulfillment.addEventListener('click', () => {
-        updateTabStyles(tabFulfillment);
-        shipmentsSection.classList.add('hidden');
-      });
-    }
-  }
-});
