@@ -11,20 +11,32 @@ function openQuotationModal() {
   }
 
   // 1. 부품명 / 제조사
-  const partName = (item && (item.partName || item.part_name)) || document.getElementById("inputPartName")?.value.trim() || document.getElementById("drawerPartDisplay")?.innerText || "XK-VOICE-SQ66";
-  const maker = (item && item.maker) || document.getElementById("selectMaker")?.value || document.getElementById("drawerMfgDisplay")?.innerText || "XMOS";
+  const partName = (item && (item.partName || item.part_name)) || document.getElementById("inputPartName")?.value.trim() || document.getElementById("drawerPartDisplay")?.innerText || "";
+  const maker = (item && item.maker) || document.getElementById("selectMaker")?.value || document.getElementById("drawerMfgDisplay")?.innerText || "";
   
-  // 2. 고객사 / 담당자
-  const rawCustomer = (item && item.customer && item.customer !== "-") ? item.customer : (document.getElementById("inputCustomer")?.value.trim() || "프라젠");
-  const customer = rawCustomer !== "-" ? rawCustomer : "프라젠";
-  const sales = (item && item.owner && item.owner !== "-" && item.owner !== "본사 일반재고") ? item.owner : (document.getElementById("selectOwner")?.value || "김경래");
+  // 2. 고객사 / 담당자 (기본 하드코딩 제거 -> 비어있으면 빈칸)
+  let customer = "";
+  if (item && item.customer && item.customer !== "-") {
+    customer = item.customer;
+  } else {
+    customer = document.getElementById("inputCustomer")?.value.trim() || "";
+    if (customer === "-") customer = "";
+  }
+
+  let sales = "";
+  if (item && item.owner && item.owner !== "-" && item.owner !== "본사 일반재고") {
+    sales = item.owner;
+  } else {
+    sales = document.getElementById("selectOwner")?.value || "";
+    if (sales === "본사 일반재고" || sales === "-") sales = "";
+  }
 
   // 3. 수량
-  let stock = 1;
-  if (item && item.stock) {
-    stock = Number(item.stock) || 1;
+  let stock = 0;
+  if (item && item.stock !== undefined && item.stock !== null) {
+    stock = Number(item.stock);
   } else {
-    stock = parseMaskedNumber(document.getElementById("inputStock")?.value) || parseMaskedNumber(document.getElementById("drawerStock")?.value) || 1;
+    stock = parseMaskedNumber(document.getElementById("inputStock")?.value) || parseMaskedNumber(document.getElementById("drawerStock")?.value) || 0;
   }
 
   // 4. 단가 및 금액 계산
@@ -38,7 +50,7 @@ function openQuotationModal() {
   } else {
     const rawKrwText = document.getElementById("minSaleUnitReplaceKrw")?.innerText || "";
     const match = rawKrwText.match(/₩([0-9,]+)/);
-    unitKrw = match ? parseInt(match[1].replace(/,/g, ""), 10) : 350000;
+    unitKrw = match ? parseInt(match[1].replace(/,/g, ""), 10) : 0;
   }
 
   // 오늘 날짜 및 REF 번호
@@ -57,26 +69,30 @@ function openQuotationModal() {
   };
 
   setEl("qpCustomer", customer);
+  setEl("qpAttnName", "");
+  setEl("qpAttnRank", "");
   setEl("qpDate", todayStr);
   setEl("qpRefNo", refNo);
-  setEl("qpSales", (sales && sales !== "본사 일반재고") ? sales : "김경래");
-  setEl("qpPartName", partName);
-  setEl("qpMaker", (maker && maker !== "__CUSTOM_MAKER__") ? maker : "XMOS");
-  setEl("qpQty", `${stock.toLocaleString()} EA`);
+  setEl("qpSales", sales);
+  setEl("qpPartName", partName || "-");
+  setEl("qpMaker", (maker && maker !== "__CUSTOM_MAKER__") ? maker : "-");
+  setEl("qpQty", stock > 0 ? `${stock.toLocaleString()} EA` : "-");
 
   const amountKrw = unitKrw * stock;
   const vatKrw = Math.round(amountKrw * 0.1);
   const grandTotalKrw = amountKrw + vatKrw;
 
-  setEl("qpUnitPrice", `₩${unitKrw.toLocaleString()}`);
-  setEl("qpAmount", `₩${amountKrw.toLocaleString()}`);
-  setEl("qpSubTotal", `₩${amountKrw.toLocaleString()}`);
-  setEl("qpVat", `₩${vatKrw.toLocaleString()}`);
-  setEl("qpGrandTotal", `₩${grandTotalKrw.toLocaleString()}`);
+  setEl("qpUnitPrice", unitKrw > 0 ? `₩${unitKrw.toLocaleString()}` : "₩0");
+  setEl("qpAmount", amountKrw > 0 ? `₩${amountKrw.toLocaleString()}` : "₩0");
+  setEl("qpSubTotal", amountKrw > 0 ? `₩${amountKrw.toLocaleString()}` : "₩0");
+  setEl("qpVat", vatKrw > 0 ? `₩${vatKrw.toLocaleString()}` : "₩0");
+  setEl("qpGrandTotal", grandTotalKrw > 0 ? `₩${grandTotalKrw.toLocaleString()}` : "₩0");
 
-  const m = document.getElementById("quotationModal"); if (m) m.style.display = "flex";
+  const m = document.getElementById("quotationModal");
+  if (m) m.style.display = "flex";
 }
 window.openQuotationModal = openQuotationModal;
+
 
 
 
