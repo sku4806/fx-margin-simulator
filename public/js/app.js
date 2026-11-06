@@ -5,15 +5,34 @@
 function openQuotationModal() {
   const partName = document.getElementById("inputPartName")?.value.trim() || document.getElementById("drawerPartDisplay")?.innerText || "-";
   const maker = document.getElementById("selectMaker")?.value || document.getElementById("drawerMfgDisplay")?.innerText || "-";
-  const customer = document.getElementById("inputCustomer")?.value.trim() || document.getElementById("drawerCustomer")?.value.trim() || "고객사";
-  const sales = document.getElementById("selectOwner")?.value || document.getElementById("drawerSales")?.value.trim() || "Nathan Kim";
-  const stock = parseMaskedNumber(document.getElementById("inputStock")?.value) || parseMaskedNumber(document.getElementById("drawerStock")?.value) || 1;
+  const customer = document.getElementById("inputCustomer")?.value.trim() || document.getElementById("drawerCustomer")?.value.trim() || "프라젠";
+  const sales = document.getElementById("selectOwner")?.value || document.getElementById("drawerSales")?.value.trim() || "김경래";
+  
+  // 수량
+  let stock = parseMaskedNumber(document.getElementById("inputStock")?.value);
+  if (!stock || stock <= 0) {
+    stock = parseMaskedNumber(document.getElementById("drawerStock")?.value) || 1;
+  }
 
-  // 단가: 계산기의 대체원가 안전선 또는 실판매단가
-  let unitPriceText = document.getElementById("minSaleUnitReplaceUsd")?.innerText || "$0.0000";
-  let unitPriceKrw = Math.round(parseMaskedNumber(document.getElementById("minSaleUnitReplaceKrw")?.innerText.replace(/[^0-9]/g, ""))) || 0;
+  // 실판매단가($) 또는 계산기 원화단가
+  let soldUsd = parseMaskedNumber(document.getElementById("inputSoldPrice")?.value);
+  let shipFx = parseMaskedNumber(document.getElementById("inputShipFx")?.value) || 1350;
 
-  // 현재 날짜 및 견적 번호 생성 (QBK년월-일련번호)
+  let unitKrw = 0;
+  if (soldUsd > 0) {
+    unitKrw = Math.round(soldUsd * shipFx);
+  } else {
+    // 계산기 원화 권장선 추출
+    const rawKrwText = document.getElementById("minSaleUnitReplaceKrw")?.innerText || "";
+    const match = rawKrwText.match(/₩([0-9,]+)/);
+    if (match) {
+      unitKrw = parseInt(match[1].replace(/,/g, ""), 10);
+    } else {
+      unitKrw = 350000;
+    }
+  }
+
+  // 오늘 날짜 및 REF 번호 (QBK년월-일련번호)
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, "0");
@@ -21,29 +40,26 @@ function openQuotationModal() {
   const todayStr = `${yyyy}-${mm}-${dd}`;
   const refNo = `QBK${String(yyyy).slice(2)}${mm}-${dd}${Math.floor(10 + Math.random() * 90)}`;
 
-  // 모달 내부 필드 값 주입
   const setEl = (id, val) => {
     const el = document.getElementById(id);
-    if (el) {
-      if (el.tagName === "INPUT") el.value = val;
-      else el.innerText = val;
-    }
+    if (!el) return;
+    if (el.tagName === "INPUT") el.value = val;
+    else el.innerText = val;
   };
 
-  setEl("qpCustomer", customer !== "-" ? customer : "고객사");
+  setEl("qpCustomer", (customer && customer !== "-") ? customer : "프라젠");
   setEl("qpDate", todayStr);
   setEl("qpRefNo", refNo);
-  setEl("qpSales", (sales !== "-" && sales !== "본사 일반재고") ? sales : "Nathan Kim");
-  setEl("qpPartName", partName);
-  setEl("qpMaker", maker !== "__CUSTOM_MAKER__" ? maker : "기타");
+  setEl("qpSales", (sales && sales !== "-" && sales !== "본사 일반재고") ? sales : "김경래");
+  setEl("qpPartName", partName !== "-" ? partName : "XK-VOICE-SQ66");
+  setEl("qpMaker", (maker && maker !== "__CUSTOM_MAKER__") ? maker : "XMOS");
   setEl("qpQty", `${stock.toLocaleString()} EA`);
 
-  // 원화 환산 기준 금액 계산
-  const amountKrw = unitPriceKrw * stock;
+  const amountKrw = unitKrw * stock;
   const vatKrw = Math.round(amountKrw * 0.1);
   const grandTotalKrw = amountKrw + vatKrw;
 
-  setEl("qpUnitPrice", `₩${unitPriceKrw.toLocaleString()} (${unitPriceText})`);
+  setEl("qpUnitPrice", `₩${unitKrw.toLocaleString()}`);
   setEl("qpAmount", `₩${amountKrw.toLocaleString()}`);
   setEl("qpSubTotal", `₩${amountKrw.toLocaleString()}`);
   setEl("qpVat", `₩${vatKrw.toLocaleString()}`);
@@ -51,8 +67,8 @@ function openQuotationModal() {
 
   document.getElementById("quotationModal")?.classList.remove("hidden");
 }
-
 window.openQuotationModal = openQuotationModal;
+
 
 
 // --- ⚡ 성능 최적화: 디바운스 (Debounce) 함수 ---
