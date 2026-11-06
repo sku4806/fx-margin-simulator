@@ -128,8 +128,7 @@ function openQuotationModal() {
   setEl("qpVat", vatKrw > 0 ? `₩${vatKrw.toLocaleString()}` : "₩0");
   setEl("qpGrandTotal", grandTotalKrw > 0 ? `₩${grandTotalKrw.toLocaleString()}` : "₩0");
 
-  const m = document.getElementById("quotationModal");
-  if (m) m.style.display = "flex";
+  const m = document.getElementById("quotationModal"); if (m) m.classList.add("active-modal");
 }
 window.openQuotationModal = openQuotationModal;
 

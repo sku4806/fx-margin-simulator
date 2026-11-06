@@ -1287,7 +1287,7 @@
           <div class="pt-6 text-[10.5px] space-y-5 text-black">
             <!-- 계좌 정보 (가로선 제거 및 원본 들여쓰기 배치) -->
             <div class="flex items-start">
-              <div class="w-36 font-bold">* ACCOUNT INFO :</div>
+              
               <div class="space-y-0.5 pl-6">
                 <div class="font-bold text-center w-52 text-[11px] pb-0.5">- 원화(₩) 계좌 -</div>
                 <div class="font-bold">KEB하나은행으로 송금부탁드립니다.</div>
@@ -1311,7 +1311,23 @@
 
 
   <!-- 📄 BSK 원본과 100% 동일한 A4 견적서 팝업 모달 -->
+  
+
+  
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- 📄 BSK 원본과 100% 동일한 A4 견적서 팝업 모달 -->
   <style>
+    #quotationModal {
+      display: none !important;
+    }
+    #quotationModal.active-modal {
+      display: flex !important;
+    }
     @media print {
       body * { visibility: hidden !important; }
       #quotationPrintArea, #quotationPrintArea * { visibility: visible !important; }
@@ -1336,9 +1352,9 @@
     .quote-input-error { background-color: #fee2e2 !important; border: 1px solid #ef4444 !important; }
   </style>
 
-  <div id="quotationModal" style="display: none;" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+  <div id="quotationModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 items-center justify-center p-2 sm:p-4">
     <div class="bg-white w-full max-w-4xl max-h-[96vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
-      <!-- 상단 바 -->
+      <!-- 상단 컨트롤러 -->
       <div class="p-3 bg-slate-900 text-white flex items-center justify-between no-print shrink-0">
         <div class="flex items-center gap-2">
           <span class="text-base">📄</span>
@@ -1348,7 +1364,7 @@
           <button type="button" onclick="executeQuotationPrint()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg shadow flex items-center gap-1.5 transition-colors">
             <span>🖨️</span> PDF 저장 / 인쇄
           </button>
-          <button type="button" onclick="document.getElementById('quotationModal').style.display = 'none'" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <button type="button" onclick="document.getElementById('quotationModal').classList.remove('active-modal')" class="text-slate-400 hover:text-white p-1 rounded-lg">
             ✕
           </button>
         </div>
@@ -1367,6 +1383,7 @@
       <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100 flex justify-center">
         <div id="quotationPrintArea" class="bg-white w-full max-w-[740px] p-6 sm:p-8 shadow-lg font-sans text-black text-[10.5px] leading-tight space-y-2.5 box-border">
           
+          <!-- 1. 회사 로고 및 주소 -->
           <div class="flex items-center justify-center gap-3 pb-0.5">
             <div class="w-12 h-12 flex items-center justify-center shrink-0">
               <img src="/BSK.jpg" alt="BSK" class="w-11 h-11 object-contain" onerror="this.onerror=null; this.src='https://www.bigshine.co.kr/img/common/logo.png';">
@@ -1379,12 +1396,14 @@
             </div>
           </div>
 
+          <!-- 2. QUOTATION 타이틀 -->
           <div class="flex justify-center my-1.5">
             <div class="border-[1.5px] border-black bg-white px-12 py-0.5 quote-box-shadow">
               <h1 class="text-xl font-serif italic font-black tracking-widest text-black">QUOTATION</h1>
             </div>
           </div>
 
+          <!-- 3. 수신/발신 메타 박스 -->
           <div class="quote-border-box p-2.5 text-[11px]">
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-1">
@@ -1426,6 +1445,7 @@
             </div>
           </div>
 
+          <!-- 4. 부품 명세 테이블 -->
           <div class="pt-0.5">
             <table class="w-full text-[10.5px] border-collapse">
               <thead>
@@ -1453,6 +1473,7 @@
             </table>
           </div>
 
+          <!-- 5. 합계 금액 -->
           <div class="border-t border-black pt-1 space-y-0.5">
             <div class="flex justify-end items-center text-[10.5px]">
               <span class="w-32 font-bold text-right pr-6">AMOUNT :</span>
@@ -1468,6 +1489,7 @@
             </div>
           </div>
 
+          <!-- 6. 거래 조건 -->
           <div class="pt-1.5 text-[9.5px] space-y-0.5">
             <div class="flex items-center"><span class="w-36 font-bold">* PAYMENT TERMS :</span><input type="text" id="qpPaymentTerms" class="flex-1 outline-none bg-transparent" value="선입금 (VAT 포함)"></div>
             <div class="flex items-center"><span class="w-36 font-bold">* INCO TERMS :</span><input type="text" id="qpIncoTerms" class="flex-1 outline-none bg-transparent" value="DOMESTIC"></div>
@@ -1478,6 +1500,7 @@
             <p class="pt-0.5 text-[9px] text-slate-700">We are pleased to offer you the parts on the terms and conditions described as above.</p>
           </div>
 
+          <!-- 7. 계좌 및 결재란 -->
           <div class="pt-4 text-[10.5px] space-y-4 text-black">
             <div class="flex items-start">
               <div class="w-36 font-bold">* ACCOUNT INFO :</div>
