@@ -74,7 +74,7 @@ function openQuotationModal() {
   setEl("qpVat", `₩${vatKrw.toLocaleString()}`);
   setEl("qpGrandTotal", `₩${grandTotalKrw.toLocaleString()}`);
 
-  document.getElementById("quotationModal")?.classList.remove("hidden");
+  const m = document.getElementById("quotationModal"); if (m) m.style.display = "flex";
 }
 window.openQuotationModal = openQuotationModal;
 
