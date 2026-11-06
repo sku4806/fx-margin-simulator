@@ -158,7 +158,7 @@
         <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-1.5 items-center">
           <div>
             <label class="text-[9px] text-slate-500 block mb-0.5">고객 희망단가($)</label>
-            <input type="number" id="inputTargetOffer" placeholder="예: 3.10" step="0.001" class="w-full p-1.5 border rounded-lg bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
+            <input type="text" id="inputTargetOffer" placeholder="예: 3.10" step="0.001" class="w-full p-1.5 border rounded-lg bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
           <div class="text-center sm:text-left">
             <span class="text-[9px] text-slate-500 block">예상 마진율</span>
@@ -304,7 +304,7 @@
 
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px]">수주/보유 수량 (EA)</label>
-              <input type="number" id="inputStock" value="" placeholder="수량 입력" step="100" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
+              <input type="text" id="inputStock" value="" placeholder="수량 입력" step="100" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
               <div id="spqFeedbackContainer" class="hidden mt-1"></div>
             </div>
 
@@ -327,17 +327,17 @@
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs font-medium">
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px]">선적 매입단가 ($/EA)</label>
-              <input type="number" id="inputUsd" value="" placeholder="단가 입력" step="0.001" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
+              <input type="text" id="inputUsd" value="" placeholder="단가 입력" step="0.001" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
             </div>
 
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px] font-bold text-indigo-900">협의 실판매단가 ($/EA)</label>
-              <input type="number" id="inputSoldPrice" placeholder="실납품단가" step="0.001" class="w-full p-2 border rounded-lg bg-white text-xs font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+              <input type="text" id="inputSoldPrice" placeholder="실납품단가" step="0.001" class="w-full p-2 border rounded-lg bg-white text-xs font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
 
             <div>
               <label class="text-slate-600 block mb-0.5 text-[11px]">선적 환율 (기준 KRW)</label>
-              <input type="number" id="inputShipFx" value="1350" step="1" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
+              <input type="text" id="inputShipFx" value="1350" step="1" class="w-full p-2 border rounded-lg bg-white text-xs font-semibold outline-none">
             </div>
 
             <div>
@@ -457,7 +457,7 @@
 
             <div class="col-span-2 lg:col-span-4">
               <label class="text-slate-600 block mb-0.5 text-[11px]">수금 완료 환율 (Settled FX Rate)</label>
-              <input type="number" id="inputSettledFx" placeholder="실제 입금 환율 입력 시 환차손익 자동 계산" step="1" class="w-full p-2 border rounded-lg bg-white text-xs font-bold outline-none">
+              <input type="text" id="inputSettledFx" placeholder="실제 입금 환율 입력 시 환차손익 자동 계산" step="1" class="w-full p-2 border rounded-lg bg-white text-xs font-bold outline-none">
               <div id="fxVarianceDisplay"></div>
             </div>
           </div>
@@ -1021,29 +1021,29 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">총 재고 수량 (EA)</label>
-            <input type="number" id="drawerStock" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-black text-slate-900 bg-slate-50 focus:bg-white outline-none">
+            <input type="text" id="drawerStock" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-black text-slate-900 bg-slate-50 focus:bg-white outline-none">
           </div>
           <div>
             <label class="block text-slate-600 font-bold mb-1">배정 수량 (EA)</label>
-            <input type="number" id="drawerArranged" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold text-amber-700 bg-slate-50 focus:bg-white outline-none">
+            <input type="text" id="drawerArranged" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold text-amber-700 bg-slate-50 focus:bg-white outline-none">
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">매입단가 ($)</label>
-            <input type="number" step="0.00000001" id="drawerUnitUsd" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold text-rose-600 bg-slate-50 focus:bg-white outline-none">
+            <input type="text" id="drawerUnitUsd" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold text-rose-600 bg-slate-50 focus:bg-white outline-none">
           </div>
           <div>
             <label class="block text-slate-600 font-bold mb-1">선적환율 (₩)</label>
-            <input type="number" id="drawerShipFx" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white outline-none">
+            <input type="text" id="drawerShipFx" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white outline-none">
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-slate-600 font-bold mb-1">실판매단가 ($)</label>
-            <input type="number" step="0.0001" id="drawerSoldPrice" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold text-indigo-700 bg-slate-50 focus:bg-white outline-none">
+            <input type="text" id="drawerSoldPrice" class="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold text-indigo-700 bg-slate-50 focus:bg-white outline-none">
           </div>
           <div>
             <label class="block text-slate-600 font-bold mb-1">담당 영업 (Sales)</label>
@@ -1158,7 +1158,7 @@
           </div>
           <div>
             <label class="block text-slate-600 font-bold mb-1">실수금 환율 (₩)</label>
-            <input type="number" id="drawerSettledFx" placeholder="정산 확정환율" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white outline-none">
+            <input type="text" id="drawerSettledFx" placeholder="정산 확정환율" class="w-full p-2 border border-slate-300 rounded-lg font-mono bg-slate-50 focus:bg-white outline-none">
           </div>
         </div>
 

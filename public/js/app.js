@@ -281,14 +281,15 @@ function safeAddListener(id, event, handler) {
 // ========================================================
 function formatNumberWithMask(rawValue, maxDecimals = 2) {
   if (rawValue === undefined || rawValue === null || rawValue === '') return '';
-  let clean = String(rawValue).replace(/[^0-9.]/g, '');
-  const parts = clean.split('.');
-  let integerPart = parts[0];
-  let decimalPart = parts.length > 1 ? parts[1].slice(0, maxDecimals) : null;
-
-  if (integerPart) {
-    integerPart = parseInt(integerPart, 10).toLocaleString();
-  } else if (clean.startsWith('.')) {
+  let str = String(rawValue).replace(/[^0-9.]/g, '');
+  if (!str) return '';
+  const parts = str.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (parts.length > 1) {
+    return parts[0] + '.' + parts[1].slice(0, maxDecimals);
+  }
+  return parts[0];
+}
     integerPart = '0';
   }
 
