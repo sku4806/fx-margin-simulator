@@ -54,8 +54,13 @@ function executeQuotationPrint() {
     return;
   }
 
-  // 모든 필수값이 정상이면 배너 숨기고 인쇄 실행
+  // 모든 필수값이 정상이면 배너 숨기고 인쇄 및 Supabase 자동 아카이빙 실행
   if (banner) banner.classList.add("hidden");
+  try {
+    if (typeof window.saveCurrentQuotationToSupabase === 'function') {
+      window.saveCurrentQuotationToSupabase();
+    }
+  } catch(e) {}
   window.print();
 }
 window.executeQuotationPrint = executeQuotationPrint;

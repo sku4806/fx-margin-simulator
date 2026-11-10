@@ -1,5 +1,6 @@
 // public/js/quotations.js
-// 레거시 세일즈 마스터 [Sales Daily Report - frmQuotationSQL] 견적 이력 뷰어 & 연동 모듈
+// 레거시 세일즈 마스터 [Sales Daily Report - frmQuotationSQL] 견적 이력 뷰어 & Supabase 연동 모듈
+import { sbClient } from './supabase.js';
 
 let cachedQuotations = [];
 let cachedMfgs = [];
@@ -18,7 +19,38 @@ function getDefaultDateRange() {
 }
 
 /**
- * 서버 API로부터 견적 목록 로드
+ * Supabase 레코드 필드명을 프론트엔드 표준 포맷으로 매핑
+ */
+function mapSupabaseToQuotation(q) {
+  return {
+    idx: q.legacy_idx || q.id,
+    quote_dt: q.quote_date,
+    quote_no: q.quote_no,
+    line_no: q.line_no,
+    cname: q.customer_name,
+    contact: q.contact,
+    mfg: q.maker,
+    part_no: q.part_name,
+    qty_str: q.qty_str,
+    qty_int: q.qty_int,
+    qunit: q.currency_unit,
+    qp: q.quote_price,
+    amount: q.amount,
+    payment: q.payment_terms,
+    sales: q.sales_rep,
+    delivery: q.delivery,
+    application: q.application,
+    remark: q.remark,
+    quot_type: q.quote_type,
+    address: q.customer_address,
+    tel: q.customer_tel,
+    fax: q.customer_fax,
+    email: q.customer_email
+  };
+}
+
+/**
+ * 서버/클라우드로부터 견적 목록 로드 (Supabase 우선 조회 ➔ 로컬 MS-SQL Fallback)
  */
 export async function fetchQuotations(params = {}) {
   const defaultDates = getDefaultDateRange();
@@ -27,6 +59,29 @@ export async function fetchQuotations(params = {}) {
   const mfg = params.mfg || '';
   const query = params.query || '';
 
+  // 1. Supabase Cloud 우선 조회 (Cloud-First)
+  if (sbClient) {
+    try {
+      let qb = sbClient.from('legacy_quotations').select('*');
+      if (start) qb = qb.gte('quote_date', start);
+      if (end) qb = qb.lte('quote_date', end);
+      if (mfg) qb = qb.eq('maker', mfg);
+      if (query) {
+        qb = qb.or(`part_name.ilike.%${query}%,customer_name.ilike.%${query}%,sales_rep.ilike.%${query}%,quote_no.ilike.%${query}%`);
+      }
+      qb = qb.order('quote_date', { ascending: false }).order('quote_no', { ascending: true }).order('line_no', { ascending: true });
+
+      const { data, error } = await qb.limit(500);
+      if (!error && data && data.length > 0) {
+        cachedQuotations = data.map(mapSupabaseToQuotation);
+        return cachedQuotations;
+      }
+    } catch (e) {
+      console.warn("Supabase 견적 조회 우회, 로컬 브릿지 시도:", e);
+    }
+  }
+
+  // 2. 로컬 MS-SQL 브릿지 Fallback (사내망 및 로컬 서버 환경)
   const urlParams = new URLSearchParams();
   if (start) urlParams.append('start_date', start);
   if (end) urlParams.append('end_date', end);
@@ -41,19 +96,37 @@ export async function fetchQuotations(params = {}) {
       return cachedQuotations;
     } else {
       console.warn("견적 목록 조회 경고:", data.message);
-      return [];
     }
   } catch (err) {
     console.error("견적 API 호출 실패:", err);
-    return [];
   }
+
+  return cachedQuotations;
 }
 
 /**
- * 서버 API로부터 제조사(MFG) 목록 로드
+ * 제조사(MFG) 목록 로드 (Supabase 우선 ➔ 로컬 MS-SQL Fallback)
  */
 export async function fetchQuotationMfgs() {
   if (cachedMfgs.length > 0) return cachedMfgs;
+
+  // 1. Supabase에서 고유 maker 조회
+  if (sbClient) {
+    try {
+      const { data, error } = await sbClient
+        .from('legacy_quotations')
+        .select('maker')
+        .not('maker', 'is', null)
+        .limit(1000);
+      if (!error && data && data.length > 0) {
+        const set = new Set(data.map(d => d.maker).filter(Boolean));
+        cachedMfgs = Array.from(set).sort();
+        if (cachedMfgs.length > 0) return cachedMfgs;
+      }
+    } catch(e) {}
+  }
+
+  // 2. 로컬 API 브릿지 Fallback
   try {
     const res = await fetch('/api/quotations/mfgs');
     const data = await res.json();
@@ -64,24 +137,41 @@ export async function fetchQuotationMfgs() {
   } catch (err) {
     console.warn("MFG 목록 조회 실패:", err);
   }
+
   return [];
 }
 
 /**
- * 견적 번호(QuoteNo)로 전체 상세 품목 조회 후 BSK 표준 견적서 모달 열기
+ * 견적 번호(QuoteNo)로 전체 상세 라인 조회 후 BSK 표준 견적서 모달 열기
  */
 export async function openLegacyQuotationModal(quoteNo, fallbackItem = null) {
   let items = [];
-  try {
-    if (quoteNo) {
+
+  // 1. Supabase에서 해당 quote_no의 모든 라인 조회
+  if (sbClient && quoteNo) {
+    try {
+      const { data, error } = await sbClient
+        .from('legacy_quotations')
+        .select('*')
+        .eq('quote_no', quoteNo)
+        .order('line_no', { ascending: true });
+      if (!error && data && data.length > 0) {
+        items = data.map(mapSupabaseToQuotation);
+      }
+    } catch(e) {}
+  }
+
+  // 2. 로컬 API 브릿지 Fallback
+  if (items.length === 0 && quoteNo) {
+    try {
       const res = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}`);
       const data = await res.json();
       if (data.status === 'success' && data.items && data.items.length > 0) {
         items = data.items;
       }
+    } catch (e) {
+      console.warn("견적 상세 조회 예외:", e);
     }
-  } catch (e) {
-    console.warn("견적 상세 조회 예외:", e);
   }
 
   if (items.length === 0 && fallbackItem) {
@@ -148,6 +238,59 @@ export async function openLegacyQuotationModal(quoteNo, fallbackItem = null) {
 }
 
 /**
+ * 웹 ERP에서 작성된 견적서를 Supabase legacy_quotations에 자동 저장/아카이빙
+ */
+export async function saveCurrentQuotationToSupabase() {
+  if (!sbClient) return;
+
+  try {
+    const cust = document.getElementById("qpCustomer")?.value.trim() || "";
+    const contact = document.getElementById("qpAttnFull")?.value.trim() || "";
+    const tel = document.getElementById("qpTel")?.value.trim() || "";
+    const fax = document.getElementById("qpFax")?.value.trim() || "";
+    const dateStr = document.getElementById("qpDate")?.value.trim() || new Date().toISOString().slice(0, 10);
+    const refNo = document.getElementById("qpRefNo")?.value.trim() || "";
+    const sales = document.getElementById("qpSales")?.value.trim() || "";
+
+    const items = window.quoteItemsData || [];
+    if (!refNo || items.length === 0) return;
+
+    const records = items.map((it, idx) => {
+      const qty = Number(it.qty) || 1;
+      const unitKrw = Number(it.unitKrw) || 0;
+      const amount = qty * unitKrw;
+      return {
+        quote_no: refNo,
+        quote_date: dateStr,
+        line_no: idx + 1,
+        customer_name: cust,
+        contact: contact,
+        maker: it.maker || "OTHERS",
+        part_name: it.partName || "-",
+        qty_str: `${qty.toLocaleString()}EA`,
+        qty_int: qty,
+        currency_unit: "₩",
+        quote_price: unitKrw,
+        amount: amount,
+        sales_rep: sales,
+        delivery: it.delivery || "2-3WKS",
+        customer_tel: tel,
+        customer_fax: fax,
+        last_synced_at: new Date().toISOString()
+      };
+    });
+
+    const { error } = await sbClient.from('legacy_quotations').insert(records);
+    if (!error) {
+      console.log(`✅ [legacy_quotations] 웹 발행 견적서 클라우드 자동 저장 완료: ${refNo} (${records.length}건)`);
+    }
+  } catch (err) {
+    console.warn("견적서 Supabase 자동 아카이빙 예외:", err);
+  }
+}
+window.saveCurrentQuotationToSupabase = saveCurrentQuotationToSupabase;
+
+/**
  * 견적 목록 전체 뷰 렌더링
  */
 export function renderQuotationsView(containerId = 'quotationsSection') {
@@ -182,11 +325,11 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
             <span class="text-lg">📋</span>
             <div>
               <h2 class="text-base sm:text-lg font-black tracking-wide uppercase font-sans text-white">QUOTATION LIST</h2>
-              <p class="text-[10px] text-lime-100 font-medium">사내 세일즈 마스터 MS-SQL (QuotationFile) 실시간 연동</p>
+              <p class="text-[10px] text-lime-100 font-medium">세일즈 마스터 MS-SQL 및 Supabase 클라우드 실시간 동기화</p>
             </div>
           </div>
 
-          <!-- 상단 필터 및 버튼군 (스크린샷 [DATE] [MFG] [검색] [REPORT] [REPORT_Resend] 완벽 일치) -->
+          <!-- 상단 필터 및 버튼군 -->
           <div class="flex flex-wrap items-center gap-2 text-xs">
             <!-- DATE 필터 -->
             <div class="flex items-center gap-1 bg-[#4d5e33] px-2 py-1 rounded-lg border border-lime-500/30">
@@ -252,7 +395,7 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
         </div>
       </div>
 
-      <!-- 3. 견적 데이터 테이블 (스크린샷 컬럼 및 디자인과 100% 동일) -->
+      <!-- 3. 견적 데이터 테이블 -->
       <div class="overflow-x-auto max-h-[68vh] overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
         <table class="w-full text-left text-xs border-collapse">
           <thead class="bg-[#f2f4ec] text-[#33401e] border-b border-slate-200 uppercase font-bold sticky top-0 z-10 shadow-xs text-[11px]">
@@ -291,7 +434,7 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
 }
 
 /**
- * 테이블 행 렌더링 (스크린샷 색상 및 컬럼 규격)
+ * 테이블 행 렌더링
  */
 function generateTableRows(items) {
   if (!items || items.length === 0) {
@@ -318,7 +461,6 @@ function generateTableRows(items) {
     const amountVal = Number(q.amount) || 0;
     const amountDisplay = amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    // 스크린샷과 유사한 미세한 교차 배경
     const bgClass = idx % 2 === 0 ? "bg-white" : "bg-amber-50/30";
 
     return `
@@ -381,7 +523,7 @@ function bindQuotationEvents() {
     renderQuotationsView('quotationsSection');
   });
 
-  // 2. 실시간 키워드 필터링 (엔터키 또는 인풋)
+  // 2. 실시간 키워드 필터링
   liveFilter?.addEventListener("input", (e) => {
     const term = e.target.value.toLowerCase().trim();
     const filtered = cachedQuotations.filter(q => 
@@ -439,7 +581,7 @@ function bindQuotationEvents() {
     }
   });
 
-  // 7. 상단 [REPORT] 버튼 클릭 (선택된 첫 번째 행 또는 체크된 건)
+  // 7. 상단 [REPORT] 버튼 클릭
   btnReport?.addEventListener("click", () => {
     if (selectedQuoteIndexes.size === 0) {
       if (cachedQuotations.length > 0) {

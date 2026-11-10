@@ -4,6 +4,7 @@
 import os
 import sys
 import datetime
+import argparse
 import pymssql
 from supabase import create_client
 
@@ -25,13 +26,12 @@ def load_env():
 load_env()
 KEY = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
 
-
 LEGACY_DB_CONFIG = {
-    'server': '192.168.0.105',
-    'port': 1433,
-    'user': 'linemsid',
-    'password': 'linepasswd',
-    'database': 'BigLinemaster',
+    'server': os.getenv('LEGACY_DB_HOST', '192.168.0.105'),
+    'port': int(os.getenv('LEGACY_DB_PORT', 1433)),
+    'user': os.getenv('LEGACY_DB_USER', 'linemsid'),
+    'password': os.getenv('LEGACY_DB_PASSWORD', 'linepasswd'),
+    'database': os.getenv('LEGACY_DB_NAME', 'BigLinemaster'),
     'charset': 'CP949',
     'tds_version': '7.0',
     'timeout': 15
@@ -47,23 +47,12 @@ def clean_val(v):
             return v.decode("utf-8", errors="ignore").strip()
     return str(v).strip()
 
-def main():
-    print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 재고/AMOUNT 기준 정밀 일치화 동기화 시작...")
-    
-    try:
-        sb = create_client(URL, KEY)
-    except Exception as e:
-        print(f"❌ Supabase 클라이언트 연결 실패: {e}")
-        return
-
-    try:
-        conn = pymssql.connect(**LEGACY_DB_CONFIG)
-        cur = conn.cursor(as_dict=True)
-    except Exception as e:
-        print(f"❌ 사내 MS-SQL 연결 실패: {e}")
-        return
-
-    # 미출고 가용 수량(NOTOUTQTY > 0) 재고 조회
+def sync_inventory(conn, sb):
+    """
+    1. 재고 데이터 동기화: DincomeFile (NOTOUTQTY > 0) -> Supabase inventory_items
+    """
+    print(f"\n📦 [1/2] 재고(DincomeFile) 데이터 동기화 시작...")
+    cur = conn.cursor(as_dict=True)
     query = """
         SELECT 
             IDX, INVOICENO, PARTNO, MFG, INDT, INQTY, NOTOUTQTY, 
@@ -74,7 +63,6 @@ def main():
     """
     cur.execute(query)
     rows = cur.fetchall()
-    conn.close()
 
     items = []
     ship_fx = 1350.0
@@ -84,21 +72,18 @@ def main():
         if not part:
             continue
         
-        # 레거시 BSK 재고관리 그리드의 '재고량' 및 'AMOUNT' 기준은 NOTOUTQTY
         remain_qty = int(r['NOTOUTQTY']) if r['NOTOUTQTY'] else 0
-        
         indt_str = r['INDT'].strftime('%Y-%m-%d') if r['INDT'] else '2026-01-01'
         owner_val = clean_val(r['RealSales']) or 'BSK'
         
-        # WOUP 원화 단가
         krw_cost = float(r['WOUP']) if r['WOUP'] else (float(r['Wup']) if r['Wup'] else 0.0)
         unit_usd = krw_cost / ship_fx if krw_cost > 0 else 0.0
 
         record = {
             "part_name": part,
             "maker": clean_val(r['MFG']) or "OTHERS",
-            "stock": remain_qty,            # 레거시 그리드와 동일하게 현재고(1,729,858 EA)로 지정
-            "arranged_qty": 0,              # 레거시의 ARRANGED_ 기본값과 일치
+            "stock": remain_qty,
+            "arranged_qty": 0,
             "unit_usd": unit_usd,
             "ship_fx": ship_fx,
             "owner": owner_val,
@@ -130,10 +115,146 @@ def main():
             sb.table("inventory_items").insert(chunk).execute()
             success_count += len(chunk)
         except Exception as e:
-            print(f"❌ 청크 삽입 에러 ({i}~{i+len(chunk)}): {e}")
+            print(f"❌ 재고 청크 삽입 에러 ({i}~{i+len(chunk)}): {e}")
 
     print(f"✅ [inventory_items] 총 {success_count}건 웹 ERP 반영 완료!")
-    print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 동기화 정상 종료.")
+    return success_count
+
+def sync_quotations(conn, sb, min_date='2020-01-01'):
+    """
+    2. 견적 데이터 동기화: QuotationFile + CustomerFile -> Supabase legacy_quotations
+    """
+    print(f"\n📋 [2/2] 견적(QuotationFile) 데이터 동기화 시작 (기준일자: {min_date or '전체'})...")
+    cur = conn.cursor(as_dict=True)
+
+    where_clause = f"WHERE q.QuoteDT >= '{min_date}'" if min_date else ""
+    sql = f"""
+        SELECT 
+            q.IDX as legacy_idx,
+            q.QuoteDT as quote_date,
+            q.QuoteNo as quote_no,
+            q.Quotline as line_no,
+            COALESCE(c.Cname, q.CNAME, '') as customer_name,
+            q.CONTACT as contact,
+            q.MFG as maker,
+            q.PartNo as part_name,
+            q.QTY_STR as qty_str,
+            q.QTY_INT as qty_int,
+            q.QUnit as currency_unit,
+            q.QP as quote_price,
+            q.Amount as amount,
+            q.Payment as payment_terms,
+            q.Sales as sales_rep,
+            q.Delivery as delivery,
+            q.Application as application,
+            q.REMARK as remark,
+            q.QUOT_TYPE as quote_type,
+            c.Address as customer_address,
+            c.TEL as customer_tel,
+            c.FAX as customer_fax,
+            c.Email as customer_email
+        FROM QuotationFile q
+        LEFT JOIN CustomerFile c ON q.CUSTID = c.CID
+        {where_clause}
+        ORDER BY q.QuoteDT DESC, q.QuoteNo ASC, q.Quotline ASC, q.IDX DESC
+    """
+    cur.execute(sql)
+    rows = cur.fetchall()
+
+    records = []
+    for r in rows:
+        part = clean_val(r['part_name'])
+        if not part:
+            continue
+        
+        quote_dt_str = r['quote_date'].strftime('%Y-%m-%d') if r['quote_date'] else None
+        
+        rec = {
+            "legacy_idx": r['legacy_idx'],
+            "quote_no": clean_val(r['quote_no']) or "QBK-LEGACY",
+            "quote_date": quote_dt_str,
+            "line_no": r['line_no'] if r['line_no'] is not None else 1,
+            "customer_name": clean_val(r['customer_name']),
+            "contact": clean_val(r['contact']),
+            "maker": clean_val(r['maker']) or "OTHERS",
+            "part_name": part,
+            "qty_str": clean_val(r['qty_str']),
+            "qty_int": r['qty_int'] if r['qty_int'] is not None else None,
+            "currency_unit": clean_val(r['currency_unit']),
+            "quote_price": float(r['quote_price']) if r['quote_price'] is not None else 0.0,
+            "amount": float(r['amount']) if r['amount'] is not None else 0.0,
+            "payment_terms": clean_val(r['payment_terms']),
+            "sales_rep": clean_val(r['sales_rep']),
+            "delivery": clean_val(r['delivery']),
+            "application": clean_val(r['application']),
+            "remark": clean_val(r['remark']),
+            "quote_type": clean_val(r['quote_type']),
+            "customer_address": clean_val(r['customer_address']),
+            "customer_tel": clean_val(r['customer_tel']),
+            "customer_fax": clean_val(r['customer_fax']),
+            "customer_email": clean_val(r['customer_email']),
+            "last_synced_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        }
+        records.append(rec)
+
+    print(f"[*] 레거시 유효 견적 {len(records)}건 변환 완료")
+
+    chunk_size = 100
+    success_count = 0
+    for i in range(0, len(records), chunk_size):
+        chunk = records[i:i + chunk_size]
+        try:
+            sb.table("legacy_quotations").upsert(chunk, on_conflict="legacy_idx").execute()
+            success_count += len(chunk)
+        except Exception as e:
+            # 테이블이 아직 생성되지 않은 경우 친절한 안내 출력
+            err_msg = str(e)
+            if "legacy_quotations" in err_msg or "PGRST205" in err_msg:
+                print(f"⚠️ Supabase에 'legacy_quotations' 테이블이 아직 생성되지 않았습니다.")
+                print(f"👉 안내된 DDL 스크립트를 Supabase SQL Editor에서 먼저 1회 실행해 주세요.")
+                return 0
+            else:
+                print(f"❌ 견적 청크 업서트 에러 ({i}~{i+len(chunk)}): {e}")
+
+    print(f"✅ [legacy_quotations] 총 {success_count}건 Supabase 동기화 완료!")
+    return success_count
+
+def main():
+    parser = argparse.ArgumentParser(description="사내 MS-SQL -> Supabase 클라우드 동기화 브릿지")
+    parser.add_argument("--only-inventory", action="store_true", help="재고(inventory_items)만 동기화")
+    parser.add_argument("--only-quotations", action="store_true", help="견적(legacy_quotations)만 동기화")
+    parser.add_argument("--full-quotations", action="store_true", help="견적 전체(1999년~현재) 동기화")
+    parser.add_argument("--since", default="2020-01-01", help="견적 동기화 시작일 (기본: 2020-01-01)")
+    args = parser.parse_args()
+
+    print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 사내 MS-SQL -> Supabase 데이터 동기화 시작...")
+    
+    try:
+        sb = create_client(URL, KEY)
+    except Exception as e:
+        print(f"❌ Supabase 클라이언트 연결 실패: {e}")
+        return
+
+    try:
+        conn = pymssql.connect(**LEGACY_DB_CONFIG)
+    except Exception as e:
+        print(f"❌ 사내 MS-SQL 연결 실패: {e}")
+        return
+
+    try:
+        if args.only_quotations:
+            min_date = None if args.full_quotations else args.since
+            sync_quotations(conn, sb, min_date=min_date)
+        elif args.only_inventory:
+            sync_inventory(conn, sb)
+        else:
+            sync_inventory(conn, sb)
+            min_date = None if args.full_quotations else args.since
+            sync_quotations(conn, sb, min_date=min_date)
+    finally:
+        conn.close()
+
+    print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 전체 동기화 정상 종료.")
 
 if __name__ == '__main__':
     main()
