@@ -1,4 +1,4 @@
-import { fetchShipments, renderShipmentsView } from './shipments.js';
+import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js';
 import { supabase, sbClient } from './supabase.js';
 import * as InventoryModule from './inventory.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
@@ -415,6 +415,7 @@ async function fetchInventoryItems() {
 }
 
 async function upsertInventoryItem(payload, id) {
+  let savedData = null;
   if (id) {
     const { data, error } = await supabase
       .from('inventory_items')
@@ -423,7 +424,7 @@ async function upsertInventoryItem(payload, id) {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    savedData = data;
   } else {
     const { data, error } = await supabase
       .from('inventory_items')
@@ -431,8 +432,18 @@ async function upsertInventoryItem(payload, id) {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    savedData = data;
   }
+
+  const targetId = id || savedData?.id;
+  if (targetId) {
+    try {
+      await syncShipmentLifecycle(targetId, payload);
+    } catch (shipErr) {
+      console.warn("출하 이력 동기화 예외:", shipErr);
+    }
+  }
+  return savedData;
 }
 
 async function deleteInventoryItem(id) {
@@ -441,6 +452,9 @@ async function deleteInventoryItem(id) {
     .delete()
     .eq('id', id);
   if (error) throw error;
+  try {
+    await supabase.from('legacy_shipments').delete().eq('inventory_item_id', String(id));
+  } catch(e) {}
   return true;
 }
 
@@ -1770,6 +1784,16 @@ document.getElementById('splitShipmentForm')?.addEventListener('submit', async (
       throw new Error("분할 신규 재고 생성 실패: " + insertError.message);
     }
 
+    // 🚚 분할 출하완료건 legacy_shipments 자동 동기화
+    const newSplitId = insertData && insertData[0] ? insertData[0].id : null;
+    if (newSplitId) {
+      try {
+        await syncShipmentLifecycle(newSplitId, newSplitRecord, orig);
+      } catch (shipErr) {
+        console.warn("분할 출하 이력 등록 예외:", shipErr);
+      }
+    }
+
     alert(`✅ 부분 출하 분할이 성공적으로 완료되었습니다!\n- 기존 잔여 수량: ${remainingStock.toLocaleString()} EA\n- 신규 분할 출하: ${splitQty.toLocaleString()} EA (출하완료)`);
     
     document.getElementById('splitShipmentModal')?.classList.add('hidden');
@@ -2121,6 +2145,13 @@ window.saveDrawerItem = async function() {
 
     const { error } = await client.from('inventory_items').update(payload).eq('id', id);
     if (error) throw error;
+
+    // 🚚 출하완료 시 legacy_shipments 자동 출하 이력 등록 / 상태 롤백 시 회수
+    try {
+      await syncShipmentLifecycle(id, payload, orig);
+    } catch (shipErr) {
+      console.warn("출하 이력 동기화 예외:", shipErr);
+    }
 
     // 감사 로그 기록
     try {

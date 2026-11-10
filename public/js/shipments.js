@@ -3,16 +3,125 @@ import { sbClient } from './supabase.js';
 
 let cachedShipments = [];
 
+// ========================================================
+// 🔄 출하완료(SHIPPED) 양방향 동기화 및 롤백 엔진
+// ========================================================
+export async function syncShipmentLifecycle(itemId, payload, origItem = null) {
+  if (!itemId || !sbClient) return;
+
+  const currentStatus = String(payload.order_status || payload.orderStatus || origItem?.order_status || '').trim();
+
+  if (currentStatus === '출하완료') {
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const shipDate = payload.shipped_date || payload.shippedDate || origItem?.shipped_date || origItem?.shippedDate || todayStr;
+      const shipQty = Number(payload.arranged_qty ?? payload.arrangedQty ?? payload.stock ?? origItem?.stock ?? 1);
+      const fx = Number(payload.ship_fx ?? payload.shipFx ?? origItem?.ship_fx ?? 1350) || 1350;
+
+      const soldUsd = Number(payload.sold_price_usd ?? payload.soldPriceUsd ?? origItem?.sold_price_usd ?? 0);
+      const unitUsd = Number(payload.unit_usd ?? payload.unitUsd ?? origItem?.unit_usd ?? 0);
+      const effectiveUnitUsd = soldUsd > 0 ? soldUsd : unitUsd;
+
+      const unitKrw = Math.round(effectiveUnitUsd * fx);
+      const costKrw = Math.round(unitUsd * fx);
+      const totalSales = unitKrw * shipQty;
+
+      const partName = payload.part_name || payload.partName || origItem?.part_name || origItem?.partName || 'UNKNOWN';
+      const maker = payload.maker || origItem?.maker || 'OTHERS';
+      const poNo = payload.po_no || payload.poNo || payload.tracking_no || payload.trackingNo || origItem?.po_no || origItem?.tracking_no || 'WEB-MANUAL';
+
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(itemId));
+
+      const shipmentRecord = {
+        inventory_item_id: isUuid ? String(itemId) : null,
+        part_name: partName,
+        maker: maker,
+        qty: shipQty,
+        unit_price: unitKrw,
+        cost_price: costKrw,
+        total_sales_amount: totalSales,
+        po_no: poNo,
+        order_date: shipDate,
+        status: 'SHIPPED',
+        last_synced_at: new Date().toISOString()
+      };
+
+      let existing = null;
+      if (isUuid) {
+        const { data } = await sbClient
+          .from('legacy_shipments')
+          .select('id')
+          .eq('inventory_item_id', String(itemId))
+          .limit(1);
+        existing = data;
+      }
+
+      if (existing && existing.length > 0) {
+        await sbClient.from('legacy_shipments').update(shipmentRecord).eq('id', existing[0].id);
+        console.log(`✅ [legacy_shipments] 출하 이력 업데이트 성공: ${partName} (${itemId})`);
+      } else {
+        await sbClient.from('legacy_shipments').insert([shipmentRecord]);
+        console.log(`✅ [legacy_shipments] 출하 이력 신규 등록 성공: ${partName} (${itemId})`);
+      }
+    } catch (shipErr) {
+      console.error("❌ [legacy_shipments] 출하 이력 동기화 에러:", shipErr);
+    }
+  } else {
+    // '출하완료'가 아닌 다른 상태로 변경/롤백 시, 기존 등록된 출하 이력 자동 회수 (삭제)
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(itemId));
+      if (isUuid) {
+        const { error: delErr } = await sbClient
+          .from('legacy_shipments')
+          .delete()
+          .eq('inventory_item_id', String(itemId));
+        if (!delErr) {
+          console.log(`ℹ️ [legacy_shipments] 상태 롤백(${currentStatus}) -> 출하 이력 자동 삭제 완료 (${itemId})`);
+        }
+      }
+    } catch (delErr) {
+      console.error("❌ [legacy_shipments] 출하 이력 회수 실패:", delErr);
+    }
+  }
+}
+
 export async function fetchShipments() {
   if (!sbClient) {
     console.error("Supabase client not initialized");
     return [];
   }
+
+  // 1. inventory_items에서 '출하완료' 상태인 품목들이 legacy_shipments에 누락되어 있는지 자가 복구 (Auto-Heal Sync)
+  try {
+    const { data: shippedItems } = await sbClient
+      .from('inventory_items')
+      .select('*')
+      .eq('order_status', '출하완료');
+
+    if (shippedItems && shippedItems.length > 0) {
+      const { data: existingShipments } = await sbClient
+        .from('legacy_shipments')
+        .select('inventory_item_id')
+        .not('inventory_item_id', 'is', null);
+
+      const existingIds = new Set((existingShipments || []).map(s => String(s.inventory_item_id)));
+
+      for (const item of shippedItems) {
+        if (!existingIds.has(String(item.id))) {
+          await syncShipmentLifecycle(item.id, item, item);
+        }
+      }
+    }
+  } catch (healErr) {
+    console.warn("출하완료 자동 보정 예외:", healErr);
+  }
+
+  // 2. 출하 이력 목록 로드 (출하일자 내림차순, 최신 동기화순)
   const { data, error } = await sbClient
     .from('legacy_shipments')
     .select('*')
     .order('order_date', { ascending: false })
-    .order('legacy_out_id', { ascending: false });
+    .order('last_synced_at', { ascending: false, nullsFirst: false });
 
   if (error) {
     console.error("출하 이력 로드 실패:", error);
