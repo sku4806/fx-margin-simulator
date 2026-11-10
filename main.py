@@ -1,11 +1,13 @@
 # main.py
 import time
+from typing import Optional
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import database as db
+import legacy_mssql
 
 app = FastAPI(title="FX Margin Simulator")
 db.init_db()
@@ -109,6 +111,43 @@ def simulate_margin(part_number: str, sale_discount_rate: float = 0.0):
         "is_under_margin": actual_margin_rate < target_margin,
         "is_replacement_deficit": sale_price < replacement_cost_krw
     }
+
+# --- MS-SQL 레거시 세일즈 마스터 [frmQuotationSQL] 견적 연동 API ---
+@app.get("/api/quotations")
+def list_quotations(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mfg: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 500
+):
+    try:
+        results = legacy_mssql.query_quotations(
+            start_date=start_date,
+            end_date=end_date,
+            mfg=mfg,
+            search_query=query,
+            limit=limit
+        )
+        return {"status": "success", "total": len(results), "quotations": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "quotations": []}
+
+@app.get("/api/quotations/mfgs")
+def list_quotation_mfgs():
+    try:
+        mfgs = legacy_mssql.get_quotation_mfgs()
+        return {"status": "success", "mfgs": mfgs}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "mfgs": []}
+
+@app.get("/api/quotations/{quote_no}")
+def get_quote_detail(quote_no: str):
+    try:
+        items = legacy_mssql.get_quotation_by_no(quote_no)
+        return {"status": "success", "quote_no": quote_no, "items": items}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "items": []}
 
 # 정적 파일 서빙 (UI 및 SPA 리소스 서빙)
 app.mount("/", StaticFiles(directory="public", html=True), name="public")
