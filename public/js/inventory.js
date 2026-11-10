@@ -567,7 +567,7 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
   renderInventoryHeaders(activeTab);
 
   if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${activeTab === 'sales' ? 8 : 9}" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
     return;
   }
 

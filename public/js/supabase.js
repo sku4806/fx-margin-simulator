@@ -53,3 +53,7 @@ export async function fetchInventoryItems() {
 }
 
 export const supabase = sbClient;
+if (typeof window !== 'undefined' && sbClient) {
+  window.sbClient = sbClient;
+  window.supabaseClient = sbClient;
+}

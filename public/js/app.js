@@ -1,4 +1,23 @@
 import { fetchShipments, renderShipmentsView } from './shipments.js';
+import { supabase, sbClient } from './supabase.js';
+import * as InventoryModule from './inventory.js';
+import { initAuth, isCsOrAdminUser } from './modules/auth.js';
+window.isCsOrAdminUser = isCsOrAdminUser;
+import { initManualViewer } from './modules/manual.js';
+import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
+import {
+  evaluatePackaging,
+  fetchPackagingStandards,
+  getStandardSpq,
+  getAllStandards,
+  savePackagingStandard
+} from './modules/packaging.js';
+import { openTrackingModal } from './modules/courier.js';
+import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
+import { recordAuditLog, renderAuditHistory, fetchAuditLogs } from './modules/audit.js';
+window.recordAuditLog = recordAuditLog;
+window.fetchAuditLogs = fetchAuditLogs;
+import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 
 // ========================================================
 // 🛡️ 견적서 필수 입력값 검증 및 인쇄 실행
@@ -269,122 +288,6 @@ function debounce(func, delay = 250) {
   };
 }
 
-// --- 행 선택 강조 및 저장 후 즉시 스크롤/점멸 추적 (인라인 스타일 보장) ---
-window._lastSavedItemId = null;
-
-window.highlightActiveRow = function(itemId) {
-  // 이전 선택 행들 인라인 스타일 초기화
-  document.querySelectorAll('tr[id^="row-item-"]').forEach(tr => {
-    tr.style.backgroundColor = '';
-    tr.style.borderLeft = '';
-  });
-  if (!itemId) return;
-
-  const tr = document.getElementById(`row-item-${itemId}`) || document.querySelector(`tr[data-item-id="${itemId}"]`);
-  if (tr) {
-    tr.style.backgroundColor = '#dbeafe'; // 부드러운 블루
-    tr.style.borderLeft = '6px solid #4f46e5'; // 진한 인디고 바
-  }
-};
-
-window.flashSavedRow = function(itemId) {
-  if (!itemId) return;
-  window._lastSavedItemId = itemId;
-
-  // DOM 렌더링 완료 감지 루프
-  let count = 0;
-  const timer = setInterval(() => {
-    count++;
-    const tr = document.getElementById(`row-item-${itemId}`) || document.querySelector(`tr[data-item-id="${itemId}"]`);
-    if (tr) {
-      clearInterval(timer);
-
-      // 1. 해당 행으로 스크롤 부드럽게 이동
-      tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      // 2. 브라우저 네이티브 애니메이션으로 노란색 번쩍임 실행
-      tr.animate([
-        { backgroundColor: '#fef08a', borderLeft: '6px solid #eab308' },
-        { backgroundColor: '#fef9c3', borderLeft: '6px solid #ca8a04' },
-        { backgroundColor: '#dbeafe', borderLeft: '6px solid #4f46e5' }
-      ], {
-        duration: 2500,
-        fill: 'forwards'
-      });
-    }
-    if (count > 30) clearInterval(timer);
-  }, 100);
-};
-// 분할 모달 열기 함수 (전역 바인딩 및 원본 객체 보장)
-window.openSplitModal = function(itemOrId) {
-  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
-    ? window.isCsOrAdminUser() 
-    : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
-
-  if (!canEdit) {
-    alert("부분 출하 분할 기능은 CS 및 관리자 권한만 가능합니다.");
-    return;
-  }
-  let item = null;
-  if (typeof itemOrId === 'object' && itemOrId !== null) {
-    item = itemOrId;
-  } else if (typeof cachedItems !== 'undefined' && Array.isArray(cachedItems)) {
-    item = cachedItems.find(it => String(it.id) === String(itemOrId));
-  } else if (typeof inventoryItems !== 'undefined' && Array.isArray(inventoryItems)) {
-    item = inventoryItems.find(it => String(it.id) === String(itemOrId));
-  }
-
-  if (!item) {
-    alert("분할할 원본 부품 정보를 찾을 수 없습니다. 다시 시도해 주세요.");
-    return;
-  }
-
-  window._currentSplitItem = item;
-
-  const modal = document.getElementById('splitShipmentModal');
-  const title = document.getElementById('splitModalTitle');
-  const maxStockText = document.getElementById('splitMaxStockText');
-  const qtyInput = document.getElementById('splitQtyInput');
-  const customerInput = document.getElementById('splitCustomerInput');
-  const priceInput = document.getElementById('splitPriceInput');
-  const repInput = document.getElementById('splitRepInput');
-
-  const stockVal = Number(item.stock) || 0;
-  const partName = item.partName || item.part_name || '-';
-
-  if (title) title.innerText = `부분 출하 분할 (${partName})`;
-  if (maxStockText) maxStockText.innerText = `현재 보유 재고: ${stockVal.toLocaleString()} EA (최대 ${Math.max(0, stockVal - 1).toLocaleString()} EA 분할 가능)`;
-  if (qtyInput) {
-    qtyInput.max = Math.max(0, stockVal - 1);
-    qtyInput.value = '';
-  }
-  if (customerInput) customerInput.value = (item.customer && item.customer !== '-') ? item.customer : '';
-  if (priceInput) priceInput.value = item.soldPriceUsd || item.sold_price_usd || item.unitUsd || item.unit_usd || '';
-  if (repInput) repInput.value = item.owner || '본사 일반재고';
-
-  modal?.classList.remove('hidden');
-};
-
-import { supabase } from './supabase.js';
-import * as InventoryModule from './inventory.js';
-import { initAuth, isCsOrAdminUser } from './modules/auth.js';
-window.isCsOrAdminUser = isCsOrAdminUser;
-import { initManualViewer } from './modules/manual.js';
-import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
-import {
-  evaluatePackaging,
-  fetchPackagingStandards,
-  getStandardSpq,
-  getAllStandards,
-  savePackagingStandard
-} from './modules/packaging.js';
-import { openTrackingModal } from './modules/courier.js';
-import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
-import { recordAuditLog, renderAuditHistory, fetchAuditLogs } from './modules/audit.js';
-window.recordAuditLog = recordAuditLog;
-window.fetchAuditLogs = fetchAuditLogs;
-import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
-
 let cachedItems = [];
 let rawFxRate = 1380.0;
 let appliedFxRate = 1380.0;
@@ -628,12 +531,7 @@ export async function bootstrap() {
 
   initAuth(async (session, canEdit) => {
     updateFormVisibility(canEdit);
-    if (session) {
-      await refreshInventory();
-    } else {
-      cachedItems = [];
-      callRenderInventoryList([]);
-    }
+    await refreshInventory();
   });
 
   runEngine();
@@ -1722,28 +1620,34 @@ window.loadFormFromItem = loadFormFromItem;
 window.handleDeleteItem = handleDeleteItem;
 window.openTrackingModal = openTrackingModal;
 
-bootstrap();
+function handleOpenSplitModal(itemOrId) {
+  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
+    ? window.isCsOrAdminUser() 
+    : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
 
-window.handleOpenSplitModal = handleOpenSplitModal;
-
-function handleOpenSplitModal(id) {
-  if (!isCsOrAdminUser()) {
-    alert("출하 분할 기능은 CS 및 관리자 권한만 가능합니다.");
+  if (!canEdit) {
+    alert("부분 출하 분할 기능은 CS 및 관리자 권한만 가능합니다.");
     return;
   }
-  const item = getCachedItem(id);
+  let item = null;
+  if (typeof itemOrId === 'object' && itemOrId !== null) {
+    item = itemOrId;
+  } else {
+    item = getCachedItem(itemOrId);
+  }
   if (!item) {
     alert("선택된 부품 정보를 찾을 수 없습니다.");
     return;
   }
   targetSplitId = item.id;
+  window._currentSplitItem = item;
 
   const part = item.partName || item.part_name || '-';
   const dc = item.dateCode || item.date_code || '-';
   const stock = Number(item.stock) || 0;
   const owner = item.owner || '-';
-  const cust = item.customer !== '-' ? item.customer : '';
-  const price = item.soldPriceUsd || item.unitUsd || 0;
+  const cust = (item.customer && item.customer !== '-') ? item.customer : '';
+  const price = item.soldPriceUsd || item.sold_price_usd || item.unitUsd || item.unit_usd || 0;
 
   const titleEl = document.getElementById('splitModalTitle');
   if (titleEl) titleEl.innerText = `[${part}] 출하 분할 (D/C: ${dc})`;
@@ -1773,6 +1677,10 @@ function handleOpenSplitModal(id) {
     alert(`[분할 모달 알림] 현재 ${part} (재고 ${stock} EA)의 분할 대상이 설정되었습니다.`);
   }
 }
+
+window.handleOpenSplitModal = handleOpenSplitModal;
+window.openSplitModal = handleOpenSplitModal;
+window.handleSplitModalOpen = handleOpenSplitModal;
 
 
 // 부분 출하 분할 실행 핸들러 (신규 분할건 DB 생성 보장)
@@ -2237,6 +2145,11 @@ window.saveDrawerItem = async function() {
     if (btn) { btn.disabled = false; btn.innerText = "전체 변경사항 저장"; }
   }
 };
+
+// ========================================================
+// 🚀 앱 부트스트랩 최초 실행 (모든 함수 및 모듈 바인딩 완료 후 실행)
+// ========================================================
+bootstrap();
 
 
 
