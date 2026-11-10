@@ -1,6 +1,7 @@
 import os
 import json
 import time
+from typing import Optional
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -9,6 +10,21 @@ app = FastAPI(title="FX Margin Simulator API")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, "products.json")
+
+# .env 로드
+def load_env():
+    env_file = os.path.join(os.path.dirname(BASE_DIR), ".env")
+    if os.path.exists(env_file):
+        with open(env_file, "r", encoding="utf-8") as ef:
+            for line in ef:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip())
+load_env()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://qheijtepveajdrqerxef.supabase.co")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
 
 # 인메모리 환율 캐시 (5분 유지)
 CACHED_FX = {"rate": 1380.0, "updated_at": 0}
@@ -92,3 +108,131 @@ def simulate(part_number: str, sale_discount_rate: float = 0.0):
         "is_under_margin": actual_margin_rate < target_margin,
         "is_replacement_deficit": sale_price < replacement_cost_krw
     }
+
+# ========================================================
+# 📋 Vercel Serverless Supabase 견적 이력 API (Service Key 권한 우회)
+# ========================================================
+@app.get("/api/quotations")
+def list_quotations(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mfg: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 500
+):
+    try:
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            "Content-Type": "application/json"
+        }
+        params = [
+            ("select", "*"),
+            ("order", "quote_date.desc,quote_no.asc,line_no.asc"),
+            ("limit", str(limit))
+        ]
+        if start_date:
+            params.append(("quote_date", f"gte.{start_date}"))
+        if end_date:
+            params.append(("quote_date", f"lte.{end_date}"))
+        if mfg and mfg.strip():
+            params.append(("maker", f"eq.{mfg.strip()}"))
+        if query and query.strip():
+            term = query.strip()
+            params.append(("or", f"(part_name.ilike.%{term}%,customer_name.ilike.%{term}%,sales_rep.ilike.%{term}%,quote_no.ilike.%{term}%)"))
+
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_quotations", headers=headers, params=params, timeout=10)
+        if res.status_code == 200:
+            rows = res.json()
+            # 프론트엔드 포맷으로 정규화
+            formatted = []
+            for q in rows:
+                formatted.append({
+                    "idx": q.get("legacy_idx") or q.get("id"),
+                    "quote_dt": q.get("quote_date"),
+                    "quote_no": q.get("quote_no"),
+                    "line_no": q.get("line_no"),
+                    "cname": q.get("customer_name"),
+                    "contact": q.get("contact"),
+                    "mfg": q.get("maker"),
+                    "part_no": q.get("part_name"),
+                    "qty_str": q.get("qty_str"),
+                    "qty_int": q.get("qty_int"),
+                    "qunit": q.get("currency_unit"),
+                    "qp": q.get("quote_price"),
+                    "amount": q.get("amount"),
+                    "payment": q.get("payment_terms"),
+                    "sales": q.get("sales_rep"),
+                    "delivery": q.get("delivery"),
+                    "application": q.get("application"),
+                    "remark": q.get("remark"),
+                    "quot_type": q.get("quote_type"),
+                    "address": q.get("customer_address"),
+                    "tel": q.get("customer_tel"),
+                    "fax": q.get("customer_fax"),
+                    "email": q.get("customer_email")
+                })
+            return {"status": "success", "total": len(formatted), "quotations": formatted}
+        else:
+            return {"status": "error", "message": f"Supabase error: {res.text}", "quotations": []}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "quotations": []}
+
+@app.get("/api/quotations/mfgs")
+def list_quotation_mfgs():
+    try:
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+        }
+        params = {"select": "maker", "limit": "1000"}
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_quotations", headers=headers, params=params, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            mfgs = sorted(list({d.get("maker") for d in data if d.get("maker")}))
+            return {"status": "success", "mfgs": mfgs}
+    except Exception:
+        pass
+    return {"status": "success", "mfgs": ["ISSI", "Giantec", "GigaDevice", "CCSS", "SMI", "XMOS", "OTHERS"]}
+
+@app.get("/api/quotations/{quote_no}")
+def get_quote_detail(quote_no: str):
+    try:
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+        }
+        params = {"quote_no": f"eq.{quote_no}", "order": "line_no.asc"}
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_quotations", headers=headers, params=params, timeout=10)
+        if res.status_code == 200:
+            rows = res.json()
+            formatted = []
+            for q in rows:
+                formatted.append({
+                    "idx": q.get("legacy_idx") or q.get("id"),
+                    "quote_dt": q.get("quote_date"),
+                    "quote_no": q.get("quote_no"),
+                    "line_no": q.get("line_no"),
+                    "cname": q.get("customer_name"),
+                    "contact": q.get("contact"),
+                    "mfg": q.get("maker"),
+                    "part_no": q.get("part_name"),
+                    "qty_str": q.get("qty_str"),
+                    "qty_int": q.get("qty_int"),
+                    "qunit": q.get("currency_unit"),
+                    "qp": q.get("quote_price"),
+                    "amount": q.get("amount"),
+                    "payment": q.get("payment_terms"),
+                    "sales": q.get("sales_rep"),
+                    "delivery": q.get("delivery"),
+                    "application": q.get("application"),
+                    "remark": q.get("remark"),
+                    "quot_type": q.get("quote_type"),
+                    "address": q.get("customer_address"),
+                    "tel": q.get("customer_tel"),
+                    "fax": q.get("customer_fax"),
+                    "email": q.get("customer_email")
+                })
+            return {"status": "success", "quote_no": quote_no, "items": formatted}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "items": []}
