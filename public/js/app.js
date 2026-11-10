@@ -723,6 +723,12 @@ function bindTabSwitch() {
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) {
       quotationsSection.classList.remove('hidden');
+      quotationsSection.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+          <div class="inline-block animate-spin text-3xl">⏳</div>
+          <div class="font-bold text-sm text-slate-700">세일즈 마스터 MS-SQL 견적 이력을 불러오는 중입니다...</div>
+        </div>
+      `;
       await fetchQuotationMfgs();
       await fetchQuotations();
       renderQuotationsView('quotationsSection');
