@@ -6,6 +6,9 @@ let cachedUnpaid = [];
 let cachedSummary = null;
 let cachedSalesReps = [];
 let activeAgingFilter = 'all';
+let activeSalesRep = 'ALL';
+let activeSearchTerm = '';
+let activeSortBy = 'due_date_asc';
 let unpaidPage = 1;
 let unpaidPageSize = 50;
 let lastFilteredUnpaid = [];
@@ -195,17 +198,24 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  lastFilteredUnpaid = cachedUnpaid || [];
+  if (cachedUnpaid && cachedUnpaid.length > 0) {
+    const reps = Array.from(new Set(cachedUnpaid.map(d => (d.sales || '').trim()).filter(Boolean))).sort();
+    if (reps.length > 0) cachedSalesReps = reps;
+  }
+
+  // 에이징 구간별 실시간 건수 계산
+  const cntAll = cachedUnpaid.length;
+  const cntUpcoming = cachedUnpaid.filter(u => u.overdue_days <= 0).length;
+  const cnt1_30 = cachedUnpaid.filter(u => u.overdue_days >= 1 && u.overdue_days < 30).length;
+  const cnt30_45 = cachedUnpaid.filter(u => u.overdue_days >= 30 && u.overdue_days < 45).length;
+  const cnt45_60 = cachedUnpaid.filter(u => u.overdue_days >= 45 && u.overdue_days < 60).length;
+  const cnt60Plus = cachedUnpaid.filter(u => u.overdue_days >= 60).length;
+
+  // 필터 적용
+  applyLocalUnpaidFilters();
   unpaidPage = 1;
 
-  const sum = cachedSummary || {
-    total_count: cachedUnpaid.length,
-    total_amount: cachedUnpaid.reduce((a, b) => a + (b.amount_vat || 0), 0),
-    overdue_amount: cachedUnpaid.filter(u => u.overdue_days > 0).reduce((a, b) => a + (b.amount_vat || 0), 0),
-    upcoming_amount: cachedUnpaid.filter(u => u.overdue_days <= 0).reduce((a, b) => a + (b.amount_vat || 0), 0),
-    top_customers: []
-  };
-
+  const sum = cachedSummary || computeSummaryFromItems(cachedUnpaid);
   const topCust = sum.top_customers && sum.top_customers.length > 0 ? sum.top_customers[0] : null;
 
   container.innerHTML = `
@@ -280,7 +290,7 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
           </div>
           <div class="mt-1 truncate">
             <div class="text-sm font-black text-indigo-950 truncate" title="${topCust ? topCust.customer_name : '-'}">${topCust ? topCust.customer_name : '-'}</div>
-            <div class="text-xs font-bold text-indigo-800 font-mono mt-0.5">₩${topCust ? Math.round(topCust.total_amount).toLocaleString() : '0'}</div>
+            <div class="text-xs font-bold text-indigo-800 font-mono mt-0.5">₩${topCust ? Math.round(topCust.total_unpaid || topCust.total_amount || 0).toLocaleString() : '0'}</div>
           </div>
         </div>
       </div>
@@ -293,37 +303,38 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
           </span>
           <button type="button" data-aging="all" 
                   class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === 'all' ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}">
-            전체 (${sum.total_count})
+            전체 (${cntAll})
           </button>
           <button type="button" data-aging="upcoming" 
                   class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === 'upcoming' ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs' : 'bg-emerald-50/70 text-emerald-800 border-emerald-200 hover:bg-emerald-100'}">
-            결제예정 (D-Day 잔여)
+            결제예정 (${cntUpcoming})
           </button>
           <button type="button" data-aging="1_30" 
                   class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '1_30' ? 'bg-amber-500 text-white border-amber-600 shadow-xs' : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'}">
-            +1 ~ 29일 연체 (주의)
+            +1 ~ 29일 연체 (${cnt1_30})
           </button>
           <button type="button" data-aging="30_45" 
                   class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '30_45' ? 'bg-orange-500 text-white border-orange-600 shadow-xs' : 'bg-orange-50 text-orange-900 border-orange-200 hover:bg-orange-100'}">
-            30 ~ 44일 연체 (경고)
+            30 ~ 44일 연체 (${cnt30_45})
           </button>
           <button type="button" data-aging="45_60" 
                   class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '45_60' ? 'bg-rose-500 text-white border-rose-600 shadow-xs' : 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100'}">
-            45 ~ 59일 연체 (심각)
+            45 ~ 59일 연체 (${cnt45_60})
           </button>
           <button type="button" data-aging="60_plus" 
                   class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '60_plus' ? 'bg-red-700 text-white border-red-800 shadow-xs' : 'bg-red-100 text-red-950 border-red-300 hover:bg-red-200'}">
-            ★ 60일 이상 (고위험 채권)
+            ★ 60일 이상 (${cnt60Plus})
           </button>
         </div>
 
-        <!-- Top 5 고객사 빠른 필터 칩 -->
+        <!-- Top 5 고객사 빠른 필터 칩 (클릭 시 즉시 필터링) -->
         <div class="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-600">
           <span class="font-bold text-slate-500">주요 미수처:</span>
           ${(sum.top_customers || []).slice(0, 3).map(c => `
-            <span class="bg-white border border-slate-300 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-800 truncate max-w-[120px]" title="${c.customer_name}">
+            <button type="button" onclick="window.filterUnpaidByCustomer('${c.customer_name}')" 
+                    class="bg-white border border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/70 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-800 truncate max-w-[120px] transition-colors cursor-pointer" title="${c.customer_name} 클릭하여 필터">
               ${c.customer_name}
-            </span>
+            </button>
           `).join('')}
         </div>
       </div>
@@ -332,7 +343,7 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
       <div class="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
         <!-- 검색창 -->
         <div class="md:col-span-2 relative">
-          <input type="text" id="unpaidLiveFilter" placeholder="고객사명, 품번(Part#), PO번호, 담당자, 영업담당 검색..." 
+          <input type="text" id="unpaidLiveFilter" value="${activeSearchTerm}" placeholder="고객사명, 품번(Part#), PO번호, 담당자, 영업담당 검색..." 
                  class="w-full pl-7 pr-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-600 outline-none">
           <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
         </div>
@@ -341,8 +352,8 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
         <div class="flex items-center gap-1 text-xs">
           <span class="text-slate-500 font-bold whitespace-nowrap text-[11px]">담당:</span>
           <select id="unpaidSalesRepSelect" class="w-full bg-white text-slate-800 text-[11px] px-2 py-1.5 rounded-lg border border-slate-300 font-semibold outline-none cursor-pointer">
-            <option value="ALL">(전체 영업사원)</option>
-            ${cachedSalesReps.map(rep => `<option value="${rep}">${rep}</option>`).join('')}
+            <option value="ALL" ${activeSalesRep === 'ALL' ? 'selected' : ''}>(전체 영업사원)</option>
+            ${cachedSalesReps.map(rep => `<option value="${rep}" ${activeSalesRep === rep ? 'selected' : ''}>${rep}</option>`).join('')}
           </select>
         </div>
 
@@ -350,10 +361,10 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
         <div class="flex items-center gap-1 text-xs">
           <span class="text-slate-500 font-bold whitespace-nowrap text-[11px]">정렬:</span>
           <select id="unpaidSortSelect" class="w-full bg-white text-slate-800 text-[11px] px-2 py-1.5 rounded-lg border border-slate-300 font-semibold outline-none cursor-pointer">
-            <option value="due_date_asc" selected>결제예정일 빠른순</option>
-            <option value="overdue_desc">연체일수 높은순</option>
-            <option value="amount_desc">미수금액 큰순</option>
-            <option value="out_date_desc">출하일자 최근순</option>
+            <option value="due_date_asc" ${activeSortBy === 'due_date_asc' ? 'selected' : ''}>결제예정일 빠른순</option>
+            <option value="overdue_desc" ${activeSortBy === 'overdue_desc' ? 'selected' : ''}>연체일수 높은순</option>
+            <option value="amount_desc" ${activeSortBy === 'amount_desc' ? 'selected' : ''}>미수금액 큰순</option>
+            <option value="out_date_desc" ${activeSortBy === 'out_date_desc' ? 'selected' : ''}>출하일자 최근순</option>
           </select>
         </div>
       </div>
@@ -392,6 +403,9 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
   // 페이지 렌더링
   updateUnpaidCurrentPage();
 
+  // 페이지 렌더링
+  updateUnpaidCurrentPage();
+
   // 이벤트 바인딩
   bindUnpaidEvents();
 }
@@ -423,7 +437,21 @@ function updateUnpaidCurrentPage() {
  */
 function generateUnpaidTableRows(items, offset = 0) {
   if (!items || items.length === 0) {
-    return `<tr><td colspan="13" class="text-center py-12 text-slate-400 font-medium">조회된 미수금 내역이 없습니다.</td></tr>`;
+    let reason = "조회 조건에 일치하는 미수금 내역이 없습니다.";
+    if (activeAgingFilter === '30_45' || activeAgingFilter === '45_60') {
+      reason = "현재 해당 연체 구간(30 ~ 59일)의 미수 채권은 0건으로 없습니다. (정상 관리 중)";
+    }
+    return `
+      <tr>
+        <td colspan="13" class="text-center py-12 text-slate-500">
+          <div class="flex flex-col items-center justify-center gap-1.5">
+            <span class="text-2xl">📋</span>
+            <p class="font-bold text-sm text-slate-700">${reason}</p>
+            <p class="text-xs text-slate-400">상단의 다른 미수일 구분 또는 영업담당자를 선택해 보세요.</p>
+          </div>
+        </td>
+      </tr>
+    `;
   }
 
   return items.map((u, idx) => {
@@ -553,6 +581,18 @@ window.setUnpaidPageSize = function(size) {
 };
 
 /**
+ * 고객사 칩 클릭 시 즉시 필터링
+ */
+window.filterUnpaidByCustomer = function(customerName) {
+  activeSearchTerm = customerName.toLowerCase().trim();
+  const input = document.getElementById("unpaidLiveFilter");
+  if (input) input.value = customerName;
+  applyLocalUnpaidFilters();
+  unpaidPage = 1;
+  updateUnpaidCurrentPage();
+};
+
+/**
  * 이벤트 바인딩
  */
 function bindUnpaidEvents() {
@@ -562,37 +602,64 @@ function bindUnpaidEvents() {
   const btnExcel = document.getElementById("btnUnpaidExcelExport");
   const agingBtns = document.querySelectorAll("#unpaidAgingFilters .aging-btn");
 
-  // 1. Aging 필터 버튼 클릭
+  // 1. Aging 필터 버튼 클릭 (전체 화면 재렌더링 대신 로컬 즉시 필터링 및 탭 스타일 직접 전환)
   agingBtns.forEach(btn => {
     btn.addEventListener("click", () => {
       const aging = btn.getAttribute("data-aging");
       activeAgingFilter = aging;
+
+      // 버튼 활성 스타일 인라인 토글 (전체 HTML 리셋 방지)
+      agingBtns.forEach(b => {
+        const a = b.getAttribute("data-aging");
+        const isActive = (a === activeAgingFilter);
+        b.className = `aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${
+          isActive 
+            ? (a === 'all' ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs'
+              : a === 'upcoming' ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+              : a === '1_30' ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+              : a === '30_45' ? 'bg-orange-500 text-white border-orange-600 shadow-xs'
+              : a === '45_60' ? 'bg-rose-500 text-white border-rose-600 shadow-xs'
+              : 'bg-red-700 text-white border-red-800 shadow-xs')
+            : (a === 'all' ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              : a === 'upcoming' ? 'bg-emerald-50/70 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+              : a === '1_30' ? 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+              : a === '30_45' ? 'bg-orange-50 text-orange-900 border-orange-200 hover:bg-orange-100'
+              : a === '45_60' ? 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100'
+              : 'bg-red-100 text-red-950 border-red-300 hover:bg-red-200')
+        }`;
+      });
+
       applyLocalUnpaidFilters();
-      renderUnpaidView('unpaidSection');
+      unpaidPage = 1;
+      updateUnpaidCurrentPage();
     });
   });
 
   // 2. 실시간 검색창 디바운스
-  const handleLiveFilter = debounce(() => {
+  const handleLiveFilter = debounce((term) => {
+    activeSearchTerm = term;
     applyLocalUnpaidFilters();
     unpaidPage = 1;
     updateUnpaidCurrentPage();
   }, 200);
 
-  liveFilter?.addEventListener("input", handleLiveFilter);
+  liveFilter?.addEventListener("input", (e) => {
+    handleLiveFilter(e.target.value.toLowerCase().trim());
+  });
 
-  // 3. 영업사원 드롭다운 변경
-  salesSelect?.addEventListener("change", async (e) => {
-    const rep = e.target.value;
-    await fetchUnpaidList({ sales_rep: rep, aging: activeAgingFilter });
+  // 3. 영업사원 드롭다운 변경 (로컬 즉시 필터링으로 선택 상태 유지)
+  salesSelect?.addEventListener("change", (e) => {
+    activeSalesRep = e.target.value;
     applyLocalUnpaidFilters();
-    renderUnpaidView('unpaidSection');
+    unpaidPage = 1;
+    updateUnpaidCurrentPage();
   });
 
   // 4. 정렬 드롭다운 변경
   sortSelect?.addEventListener("change", (e) => {
-    const sortBy = e.target.value;
-    sortUnpaidList(sortBy);
+    activeSortBy = e.target.value;
+    applyLocalUnpaidFilters();
+    unpaidPage = 1;
     updateUnpaidCurrentPage();
   });
 
@@ -603,18 +670,22 @@ function bindUnpaidEvents() {
 }
 
 function applyLocalUnpaidFilters() {
-  const term = document.getElementById("unpaidLiveFilter")?.value.toLowerCase().trim() || "";
+  const term = activeSearchTerm;
 
   lastFilteredUnpaid = cachedUnpaid.filter(u => {
-    // Aging 필터
+    // 1. Aging 필터
     if (activeAgingFilter === 'upcoming' && u.overdue_days > 0) return false;
-    if (activeAgingFilter === 'overdue' && u.overdue_days <= 0) return false;
     if (activeAgingFilter === '1_30' && (u.overdue_days <= 0 || u.overdue_days >= 30)) return false;
     if (activeAgingFilter === '30_45' && (u.overdue_days < 30 || u.overdue_days >= 45)) return false;
     if (activeAgingFilter === '45_60' && (u.overdue_days < 45 || u.overdue_days >= 60)) return false;
     if (activeAgingFilter === '60_plus' && u.overdue_days < 60) return false;
 
-    // 검색어 필터
+    // 2. 영업사원 필터
+    if (activeSalesRep && activeSalesRep !== 'ALL') {
+      if ((u.sales || '').trim() !== activeSalesRep.trim()) return false;
+    }
+
+    // 3. 검색어 필터
     if (term) {
       const match = (u.cname && u.cname.toLowerCase().includes(term)) ||
                     (u.part_no && u.part_no.toLowerCase().includes(term)) ||
@@ -627,6 +698,9 @@ function applyLocalUnpaidFilters() {
 
     return true;
   });
+
+  // 정렬 반영
+  sortUnpaidList(activeSortBy);
 }
 
 function sortUnpaidList(sortBy) {
