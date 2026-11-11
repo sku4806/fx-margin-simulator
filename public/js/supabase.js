@@ -41,17 +41,6 @@ export async function deleteInventoryItem(id) {
   return true;
 }
 
-export async function fetchInventoryItems() {
-  if (!sbClient) return [];
-  const { data, error } = await sbClient
-    .from('inventory_items')
-    .select('*')
-    .range(0, 9999)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data || [];
-}
-
 export const supabase = sbClient;
 if (typeof window !== 'undefined' && sbClient) {
   window.sbClient = sbClient;

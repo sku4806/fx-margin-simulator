@@ -1,5 +1,6 @@
 // public/js/shipments.js
 import { sbClient } from './supabase.js';
+import { openInvoiceModal, openPackingListModal } from './trade-documents.js';
 
 let cachedShipments = [];
 let shipmentPage = 1;
@@ -128,6 +129,7 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
               <th class="py-2.5 px-3 text-right whitespace-nowrap w-[14%]">총 매출액(₩)</th>
               <th class="py-2.5 px-3 text-left w-[12%]">PO 번호</th>
               <th class="py-2.5 px-3 text-center whitespace-nowrap w-[6%]">상태</th>
+              <th class="py-2.5 px-3 text-center whitespace-nowrap w-[14%] no-print">문서 출력</th>
             </tr>
           </thead>
           <tbody id="shipmentTableBody" class="divide-y divide-slate-100 font-medium bg-white text-slate-700">
@@ -256,6 +258,11 @@ window.goToShipmentPage = function(page) {
   updateShipmentCurrentPage();
 };
 
+window.getShipmentByIndex = function(idx) {
+  const paged = getPagedShipments();
+  return paged[idx] || null;
+};
+
 window.setShipmentPageSize = function(size) {
   shipmentPageSize = (size === 'ALL') ? 'ALL' : parseInt(size, 10);
   shipmentPage = 1;
@@ -346,9 +353,9 @@ export async function syncShipmentLifecycle(itemId, payload, origItem = null) {
 
 function generateTableRows(items) {
   if (!items || items.length === 0) {
-    return `<tr><td colspan="8" class="text-center py-8 text-slate-400">조회된 출하/수주 이력이 없습니다.</td></tr>`;
+    return `<tr><td colspan="9" class="text-center py-8 text-slate-400">조회된 출하/수주 이력이 없습니다.</td></tr>`;
   }
-  return items.map(item => `
+  return items.map((item, idx) => `
     <tr class="hover:bg-indigo-50/70 transition-colors border-b border-slate-100 text-[11px]">
       <td class="py-2 px-3 text-center font-mono text-slate-500 whitespace-nowrap">${item.order_date || '-'}</td>
       <td class="py-2 px-3 font-bold text-slate-900">${item.part_name}</td>
@@ -361,6 +368,18 @@ function generateTableRows(items) {
         <span class="inline-block px-2 py-0.5 text-[9px] font-bold rounded-full ${item.status === 'SHIPPED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">
           ${item.status === 'SHIPPED' ? '출하완료' : '진행중'}
         </span>
+      </td>
+      <td class="py-2 px-3 text-center whitespace-nowrap no-print" onclick="event.stopPropagation()">
+        <div class="inline-flex items-center gap-1">
+          <button type="button" onclick="window.openTradeInvoice && window.openTradeInvoice(window.getShipmentByIndex(${idx}))" 
+                  class="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold transition-colors cursor-pointer" title="공식 거래명세서 출력">
+            📄 명세서
+          </button>
+          <button type="button" onclick="window.openTradePacking && window.openTradePacking(window.getShipmentByIndex(${idx}))" 
+                  class="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition-colors cursor-pointer" title="공식 패킹리스트 출력">
+            📦 패킹
+          </button>
+        </div>
       </td>
     </tr>
   `).join('');

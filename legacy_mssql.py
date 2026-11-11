@@ -405,3 +405,287 @@ def query_unpaid_list(
         print(f"[ERROR] query_unpaid_list 에러: {e}")
         return []
 
+# ========================================================
+# 🏢 거래처 및 담당자 마스터 (CustomerFile & ContactFile) 모듈
+# ========================================================
+def query_customers(search_query: Optional[str] = None, limit: int = 30) -> List[Dict[str, Any]]:
+    """거래처 마스터 및 담당자 자동완성 검색"""
+    conditions = []
+    params = []
+
+    if search_query and search_query.strip():
+        term = f"%{search_query.strip()}%"
+        conditions.append("(c.Kname LIKE %s OR c.Cname LIKE %s OR ct.KCONTACT LIKE %s)")
+        params.extend([term, term, term])
+
+    where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    sql = f"""
+        SELECT TOP ({limit})
+            c.CID as cid,
+            LTRIM(RTRIM(c.Kname)) as kname,
+            LTRIM(RTRIM(c.Cname)) as cname,
+            LTRIM(RTRIM(c.TEL)) as tel,
+            LTRIM(RTRIM(c.FAX)) as fax,
+            LTRIM(RTRIM(c.Address)) as address,
+            LTRIM(RTRIM(c.Email)) as email,
+            LTRIM(RTRIM(c.SALES)) as sales_rep,
+            ct.KCONTACT as contact_name,
+            ct.CTITLE as contact_title,
+            ct.CHP as contact_mobile,
+            ct.CTEL as contact_tel,
+            ct.CEMAIL as contact_email
+        FROM CustomerFile c
+        LEFT JOIN (
+            SELECT CID, KCONTACT, CTITLE, CHP, CTEL, CEMAIL,
+                   ROW_NUMBER() OVER(PARTITION BY CID ORDER BY IDX ASC) as rn
+            FROM ContactFile
+        ) ct ON c.CID = ct.CID AND ct.rn = 1
+        {where_clause}
+        ORDER BY c.Kname ASC
+    """
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+
+        results = []
+        for r in rows:
+            kname = clean_val(r["kname"])
+            cname = clean_val(r["cname"])
+            contact = clean_val(r["contact_name"])
+            title = clean_val(r["contact_title"])
+            contact_display = f"{contact} {title}".strip() if contact else ""
+
+            results.append({
+                "cid": int(r["cid"]),
+                "kname": kname,
+                "cname": cname,
+                "display_name": kname or cname,
+                "tel": clean_val(r["tel"]) or clean_val(r["contact_tel"]),
+                "fax": clean_val(r["fax"]),
+                "address": clean_val(r["address"]),
+                "email": clean_val(r["email"]) or clean_val(r["contact_email"]),
+                "sales_rep": clean_val(r["sales_rep"]),
+                "contact_name": contact,
+                "contact_title": title,
+                "contact_display": contact_display,
+                "mobile": clean_val(r["contact_mobile"])
+            })
+        return results
+    except Exception as e:
+        print(f"[ERROR] query_customers 에러: {e}")
+        return []
+
+# ========================================================
+# 📊 매출 장부 및 다차원 실적 분석 (FrmSalesBKBL & FrmSalesGraph)
+# ========================================================
+def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
+    """월별 수주/매출(Book & Bill), Top 고객사, 제조사 비중, 영업사원 실적 집계"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+
+        start_date = f"{int(year)-1}-11-01"
+        end_date = f"{year}-12-31"
+
+        # 1. 월별 Book & Bill 추이
+        cur.execute("""
+            SELECT 
+                LEFT(CONVERT(VARCHAR, COALESCE(A.OUTDT, A.SDT), 23), 7) as yyyy_mm,
+                SUM(CASE WHEN A.RESULT='OUT' THEN A.OutAmt ELSE 0 END) as billing_krw,
+                SUM(CASE WHEN A.RESULT='PO' THEN A.OutAmt ELSE 0 END) as booking_krw,
+                SUM(CASE WHEN A.RESULT='OUT' THEN COALESCE(A.MGN, 0) ELSE 0 END) as margin_krw,
+                COUNT(CASE WHEN A.RESULT='OUT' THEN 1 END) as bill_cnt,
+                COUNT(CASE WHEN A.RESULT='PO' THEN 1 END) as book_cnt
+            FROM DReportFile A
+            WHERE COALESCE(A.OUTDT, A.SDT) >= %s AND COALESCE(A.OUTDT, A.SDT) <= %s
+            GROUP BY LEFT(CONVERT(VARCHAR, COALESCE(A.OUTDT, A.SDT), 23), 7)
+            ORDER BY yyyy_mm ASC
+        """, (start_date, end_date))
+        monthly_raw = cur.fetchall()
+
+        monthly_data = []
+        total_billing_ytd = 0.0
+        total_booking_ytd = 0.0
+        total_margin_ytd = 0.0
+
+        for r in monthly_raw:
+            bill = float(r["billing_krw"] or 0.0)
+            book = float(r["booking_krw"] or 0.0)
+            mgn = float(r["margin_krw"] or 0.0)
+            mgn_rate = (mgn / bill * 100) if bill > 0 else 0.0
+            ym = clean_val(r["yyyy_mm"])
+            if ym.startswith(year):
+                total_billing_ytd += bill
+                total_booking_ytd += book
+                total_margin_ytd += mgn
+            monthly_data.append({
+                "month": ym,
+                "billing": bill,
+                "booking": book,
+                "margin": mgn,
+                "margin_rate": round(mgn_rate, 1),
+                "bill_count": int(r["bill_cnt"] or 0),
+                "book_count": int(r["book_cnt"] or 0)
+            })
+
+        # 2. Top 10 고객사
+        cur.execute("""
+            SELECT TOP 10
+                COALESCE(B.KNAME, B.CNAME, '기타') as customer_name,
+                SUM(A.OutAmt) as total_billing,
+                COUNT(*) as order_count
+            FROM DReportFile A
+            INNER JOIN CUSTOMERFILE B ON A.CUSTID = B.CID
+            WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s
+            GROUP BY COALESCE(B.KNAME, B.CNAME, '기타')
+            ORDER BY total_billing DESC
+        """, (f"{year}-01-01",))
+        top_cust_raw = cur.fetchall()
+        top_customers = [
+            {
+                "customer_name": clean_val(r["customer_name"]),
+                "billing": float(r["total_billing"] or 0.0),
+                "order_count": int(r["order_count"] or 0)
+            } for r in top_cust_raw
+        ]
+
+        # 3. Top 제조사 (Maker)
+        cur.execute("""
+            SELECT TOP 8
+                LTRIM(RTRIM(A.Mfg)) as maker,
+                SUM(A.OutAmt) as total_billing,
+                COUNT(*) as item_count
+            FROM DReportFile A
+            WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.Mfg IS NOT NULL AND LTRIM(RTRIM(A.Mfg)) <> ''
+            GROUP BY LTRIM(RTRIM(A.Mfg))
+            ORDER BY total_billing DESC
+        """, (f"{year}-01-01",))
+        top_maker_raw = cur.fetchall()
+        top_makers = [
+            {
+                "maker": clean_val(r["maker"]),
+                "billing": float(r["total_billing"] or 0.0),
+                "item_count": int(r["item_count"] or 0)
+            } for r in top_maker_raw
+        ]
+
+        # 4. 영업 담당자별 실적
+        cur.execute("""
+            SELECT 
+                LTRIM(RTRIM(A.Sales)) as sales_rep,
+                SUM(A.OutAmt) as total_billing,
+                SUM(COALESCE(A.MGN, 0)) as total_margin,
+                COUNT(*) as shipment_count
+            FROM DReportFile A
+            WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.Sales IS NOT NULL AND LTRIM(RTRIM(A.Sales)) <> ''
+            GROUP BY LTRIM(RTRIM(A.Sales))
+            ORDER BY total_billing DESC
+        """, (f"{year}-01-01",))
+        sales_raw = cur.fetchall()
+        sales_reps = [
+            {
+                "sales_rep": clean_val(r["sales_rep"]),
+                "billing": float(r["total_billing"] or 0.0),
+                "margin": float(r["total_margin"] or 0.0),
+                "margin_rate": round((float(r["total_margin"] or 0.0) / float(r["total_billing"] or 1.0)) * 100, 1),
+                "shipment_count": int(r["shipment_count"] or 0)
+            } for r in sales_raw
+        ]
+
+        conn.close()
+
+        overall_margin_rate = (total_margin_ytd / total_billing_ytd * 100) if total_billing_ytd > 0 else 0.0
+
+        return {
+            "year": year,
+            "total_billing_ytd": total_billing_ytd,
+            "total_booking_ytd": total_booking_ytd,
+            "total_margin_ytd": total_margin_ytd,
+            "overall_margin_rate": round(overall_margin_rate, 1),
+            "monthly": monthly_data,
+            "top_customers": top_customers,
+            "top_makers": top_makers,
+            "sales_reps": sales_reps
+        }
+    except Exception as e:
+        print(f"[ERROR] get_sales_analytics 에러: {e}")
+        return {
+            "year": year,
+            "total_billing_ytd": 0.0,
+            "total_booking_ytd": 0.0,
+            "total_margin_ytd": 0.0,
+            "overall_margin_rate": 0.0,
+            "monthly": [],
+            "top_customers": [],
+            "top_makers": [],
+            "sales_reps": []
+        }
+
+# ========================================================
+# 📝 영업 메모 및 활동 일지 (T_SalesReport_Memo) 모듈
+# ========================================================
+def query_sales_memos(sales_rep: Optional[str] = None, limit: int = 40) -> List[Dict[str, Any]]:
+    """영업 담당자별 활동 일지 및 방문 메모 조회"""
+    conditions = []
+    params = []
+    if sales_rep and sales_rep != 'ALL':
+        conditions.append("LTRIM(RTRIM(SALES)) = %s")
+        params.append(sales_rep.strip())
+
+    where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    sql = f"""
+        SELECT TOP ({limit})
+            LTRIM(RTRIM(SALES)) as sales_rep,
+            INPUT_DT as input_date,
+            UPDATE_DT as update_date,
+            MEMO as memo
+        FROM T_SalesReport_Memo
+        {where_clause}
+        ORDER BY INPUT_DT DESC
+    """
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+
+        results = []
+        for r in rows:
+            results.append({
+                "sales_rep": clean_val(r["sales_rep"]),
+                "input_date": clean_val(r["input_date"]),
+                "update_date": clean_val(r["update_date"]),
+                "memo": clean_val(r["memo"])
+            })
+        return results
+    except Exception as e:
+        print(f"[ERROR] query_sales_memos 에러: {e}")
+        return []
+
+def insert_sales_memo(sales_rep: str, memo: str, input_date: Optional[str] = None) -> bool:
+    """신규 영업 활동 메모 등록"""
+    today_str = input_date or datetime.date.today().strftime("%Y-%m-%d")
+    sql = """
+        INSERT INTO T_SalesReport_Memo (SALES, INPUT_DT, UPDATE_DT, MEMO)
+        VALUES (%s, %s, %s, %s)
+    """
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(sql, (sales_rep, today_str, today_str, memo))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[ERROR] insert_sales_memo 에러: {e}")
+        return False
+
+
+
+

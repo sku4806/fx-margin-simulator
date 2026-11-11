@@ -115,6 +115,9 @@
         <button id="tabUnpaid" class="py-2 px-3 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1">
           <span>💰</span> 미수금·결제예정 관리
         </button>
+        <button id="tabAnalytics" class="py-2 px-3 sm:px-4 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1">
+          <span>📊</span> 매출·수주 실적 분석
+        </button>
       </div>
       <span id="csHeaderDesc" class="text-xs text-slate-400 font-medium hidden md:block px-2">영업 협의 수주 현황 및 실판매가를 확인합니다.</span>
     </div>
@@ -650,6 +653,9 @@
 
   <!-- 8. 레거시 세일즈 마스터 [frmUnpaidCustList] 미수금 및 결제예정 관리 섹션 (max-w-6xl) -->
   <div id="unpaidSection" class="hidden space-y-3 sm:space-y-4"></div>
+
+  <!-- 9. 레거시 세일즈 마스터 [FrmSalesBKBL & FrmSalesGraph] 매출 장부 & 다차원 실적 분석 섹션 (max-w-6xl) -->
+  <div id="analyticsSection" class="hidden space-y-3 sm:space-y-4"></div>
 
   </div>
 
@@ -1412,9 +1418,15 @@
                 <div class="font-mono font-medium">계좌번호 : 374-890003-50704 (144-22-01385-8)</div>
               </div>
             </div>
-            <div class="pt-1 text-[10px] space-y-0.5 pl-2">
-              <div>* Authorized by</div>
-              <div class="font-mono">CC : D.I.Lee</div>
+            <div class="pt-1 text-[10px] space-y-0.5 pl-2 flex items-center justify-between">
+              <div>
+                <div class="font-bold text-slate-900">* Authorized by</div>
+                <div class="font-mono font-bold text-slate-800">BIGSHINE KOREA CO., LTD.</div>
+                <div class="font-mono text-[11px] text-slate-700">Representative : D.I.Lee (이동인)</div>
+              </div>
+              <div class="relative w-20 h-16 flex items-center justify-center mr-4">
+                <img src="/BSK.jpg" alt="BSK 직인" class="w-16 h-16 object-contain opacity-95 drop-shadow-xs" title="주식회사 빅샤인코리아 법인 직인">
+              </div>
             </div>
           </div>
 
@@ -1425,6 +1437,6 @@
 
     <!-- 스크립트 로드 (모든 모달 및 드로어 DOM 생성 후) -->
     <script src="/js/mask.js"></script>
-    <script type="module" src="/js/app.js?v=20261111_1020"></script>
+    <script type="module" src="/js/app.js?v=20261111_1100"></script>
 </body>
 </html>

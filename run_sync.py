@@ -303,11 +303,89 @@ def sync_unpaid(conn, sb, min_date='2010-01-01'):
     print(f"✅ [legacy_unpaid] 총 {success_count}건 클라우드 동기화 완료!")
     return success_count
 
+def sync_customers(conn, sb):
+    """
+    4. 거래처 및 담당자 마스터 동기화: CustomerFile + ContactFile -> Supabase legacy_customers
+    """
+    print(f"\n🏢 [4/4] 거래처 마스터(CustomerFile) 데이터 동기화 시작...")
+    cur = conn.cursor(as_dict=True)
+    sql = """
+        SELECT 
+            c.CID as cid,
+            LTRIM(RTRIM(c.Kname)) as kname,
+            LTRIM(RTRIM(c.Cname)) as cname,
+            LTRIM(RTRIM(c.TEL)) as tel,
+            LTRIM(RTRIM(c.FAX)) as fax,
+            LTRIM(RTRIM(c.Address)) as address,
+            LTRIM(RTRIM(c.Email)) as email,
+            LTRIM(RTRIM(c.SALES)) as sales_rep,
+            ct.KCONTACT as contact_name,
+            ct.CTITLE as contact_title,
+            ct.CHP as contact_mobile,
+            ct.CTEL as contact_tel,
+            ct.CEMAIL as contact_email
+        FROM CustomerFile c
+        LEFT JOIN (
+            SELECT CID, KCONTACT, CTITLE, CHP, CTEL, CEMAIL,
+                   ROW_NUMBER() OVER(PARTITION BY CID ORDER BY IDX ASC) as rn
+            FROM ContactFile
+        ) ct ON c.CID = ct.CID AND ct.rn = 1
+        ORDER BY c.CID ASC
+    """
+    cur.execute(sql)
+    rows = cur.fetchall()
+
+    records = []
+    for r in rows:
+        cid = r['cid']
+        kname = clean_val(r['kname'])
+        cname = clean_val(r['cname'])
+        if not kname and not cname:
+            continue
+        records.append({
+            "cid": int(cid),
+            "kname": kname,
+            "cname": cname,
+            "tel": clean_val(r['tel']) or clean_val(r['contact_tel']),
+            "fax": clean_val(r['fax']),
+            "address": clean_val(r['address']),
+            "email": clean_val(r['email']) or clean_val(r['contact_email']),
+            "sales_rep": clean_val(r['sales_rep']),
+            "contact_name": clean_val(r['contact_name']),
+            "contact_title": clean_val(r['contact_title']),
+            "contact_tel": clean_val(r['contact_tel']),
+            "contact_mobile": clean_val(r['contact_mobile']),
+            "contact_email": clean_val(r['contact_email']),
+            "last_synced_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        })
+
+    print(f"[*] 거래처 유효 데이터 {len(records)}건 변환 완료")
+
+    chunk_size = 100
+    success_count = 0
+    for i in range(0, len(records), chunk_size):
+        chunk = records[i:i + chunk_size]
+        try:
+            sb.table("legacy_customers").upsert(chunk, on_conflict="cid").execute()
+            success_count += len(chunk)
+        except Exception as e:
+            err_msg = str(e)
+            if "legacy_customers" in err_msg or "PGRST205" in err_msg:
+                print(f"⚠️ Supabase에 'legacy_customers' 테이블이 아직 생성되지 않았습니다.")
+                print(f"   Supabase 대시보드 SQL Editor에서 DDL 스크립트를 먼저 실행해 주세요.")
+                break
+            else:
+                print(f"❌ 거래처 청크 삽입 알림 ({i}~{i+len(chunk)}): {e}")
+
+    print(f"✅ [legacy_customers] 총 {success_count}건 클라우드 동기화 완료!")
+    return success_count
+
 def main():
     parser = argparse.ArgumentParser(description="사내 MS-SQL -> Supabase 클라우드 동기화 브릿지")
     parser.add_argument("--only-inventory", action="store_true", help="재고(inventory_items)만 동기화")
     parser.add_argument("--only-quotations", action="store_true", help="견적(legacy_quotations)만 동기화")
     parser.add_argument("--only-unpaid", action="store_true", help="미수금(legacy_unpaid)만 동기화")
+    parser.add_argument("--only-customers", action="store_true", help="거래처(legacy_customers)만 동기화")
     parser.add_argument("--full-quotations", action="store_true", help="견적 전체(1999년~현재) 동기화")
     parser.add_argument("--since", default="2020-01-01", help="견적 동기화 시작일 (기본: 2020-01-01)")
     args = parser.parse_args()
@@ -335,11 +413,14 @@ def main():
         elif args.only_unpaid:
             min_date = "2010-01-01" if args.since == "2020-01-01" else args.since
             sync_unpaid(conn, sb, min_date=min_date)
+        elif args.only_customers:
+            sync_customers(conn, sb)
         else:
             sync_inventory(conn, sb)
             min_date = None if args.full_quotations else args.since
             sync_quotations(conn, sb, min_date=min_date)
             sync_unpaid(conn, sb, min_date="2010-01-01")
+            sync_customers(conn, sb)
     finally:
         conn.close()
 

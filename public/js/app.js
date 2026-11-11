@@ -1,6 +1,7 @@
 import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
 import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261111_1020';
+import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js';
 import { supabase, sbClient } from './supabase.js';
 import * as InventoryModule from './inventory.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
@@ -20,6 +21,10 @@ import { recordAuditLog, renderAuditHistory, fetchAuditLogs } from './modules/au
 window.recordAuditLog = recordAuditLog;
 window.fetchAuditLogs = fetchAuditLogs;
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
+import { attachCustomerAutocomplete } from './customer-autocomplete.js';
+import { openInvoiceModal, openPackingListModal } from './trade-documents.js';
+window.openTradeInvoice = openInvoiceModal;
+window.openTradePacking = openPackingListModal;
 
 // ========================================================
 // 🛡️ 견적서 필수 입력값 검증 및 인쇄 실행
@@ -321,106 +326,10 @@ function getCachedItem(id) {
 }
 
 async function fetchInventoryItems() {
-  const client = (typeof supabase !== 'undefined' && supabase?.from)
-    ? supabase
-    : (window.supabase?.from ? window.supabase : null);
-
-  if (!client) {
-    throw new Error("Supabase client is not ready");
+  if (typeof InventoryModule.fetchInventoryItems === 'function') {
+    return await InventoryModule.fetchInventoryItems();
   }
-
-  // Supabase의 단일 쿼리 1,000건 제한을 우회하여 전건(1,500건 이상) 청크 로드
-  let allData = [];
-  const pageSize = 1000;
-  let from = 0;
-  let hasMore = true;
-
-  while (hasMore) {
-    const to = from + pageSize - 1;
-    const { data, error } = await client
-      .from('inventory_items')
-      .select('*')
-      .range(from, to)
-      .order('entry_date', { ascending: false, nullsFirst: false });
-
-    if (error) throw error;
-
-    if (data && data.length > 0) {
-      allData = allData.concat(data);
-      if (data.length < pageSize) {
-        hasMore = false;
-      } else {
-        from += pageSize;
-      }
-    } else {
-      hasMore = false;
-    }
-  }
-
-  const data = allData;
-
-  const mappedItems = (data || []).map(r => ({
-    id: r.id,
-    maker: r.maker || '-',
-    partName: r.part_name || r.partName || '-',
-    part_name: r.part_name || r.partName || '-',
-    dateCode: r.date_code || r.dateCode || '-',
-    date_code: r.date_code || r.dateCode || '-',
-    owner: r.owner || '-',
-    customer: r.customer || '-',
-    realCustomer: r.real_customer || r.realCustomer || '-',
-    real_customer: r.real_customer || r.realCustomer || '-',
-    poNo: r.po_no || r.poNo || '',
-    po_no: r.po_no || r.poNo || '',
-    application: r.application || '',
-    bizType: r.biz_type || r.bizType || 'DOMESTIC',
-    biz_type: r.biz_type || r.bizType || 'DOMESTIC',
-    taxDate: r.tax_date || r.taxDate || null,
-    tax_date: r.tax_date || r.taxDate || null,
-    soldPriceUsd: (r.sold_price_usd !== null && r.sold_price_usd !== undefined) ? Number(r.sold_price_usd) : 0,
-    sold_price_usd: (r.sold_price_usd !== null && r.sold_price_usd !== undefined) ? Number(r.sold_price_usd) : 0,
-    orderStatus: r.order_status || r.orderStatus || '배정요청',
-    order_status: r.order_status || r.orderStatus || '배정요청',
-    paymentTerms: r.payment_terms || r.paymentTerms || 'Net 30',
-    payment_terms: r.payment_terms || r.paymentTerms || 'Net 30',
-    paymentStatus: r.payment_status || r.paymentStatus || '미수',
-    payment_status: r.payment_status || r.paymentStatus || '미수',
-    currency: r.currency || 'USD',
-    invoiceNo: r.invoice_no || r.invoiceNo || '',
-    invoice_no: r.invoice_no || r.invoiceNo || '',
-    trackingNo: r.tracking_no || r.trackingNo || '',
-    tracking_no: r.tracking_no || r.trackingNo || '',
-    dueDate: r.due_date || r.dueDate || null,
-    due_date: r.due_date || r.dueDate || null,
-    shippedDate: r.shipped_date || r.shippedDate || null,
-    shipped_date: r.shipped_date || r.shippedDate || null,
-    settledDate: r.settled_date || r.settledDate || null,
-    settled_date: r.settled_date || r.settledDate || null,
-    settledFx: Number(r.settled_fx || r.settledFx) || 0,
-    settled_fx: Number(r.settled_fx || r.settledFx) || 0,
-    entryDate: r.entry_date || r.entryDate || '',
-    entry_date: r.entry_date || r.entryDate || '',
-    memo: r.memo || '',
-    unitUsd: Number(r.unit_usd !== undefined ? r.unit_usd : r.unitUsd) || 0,
-    unit_usd: Number(r.unit_usd !== undefined ? r.unit_usd : r.unitUsd) || 0,
-    shipFx: Number(r.ship_fx !== undefined ? r.ship_fx : r.shipFx) || 1350,
-    ship_fx: Number(r.ship_fx !== undefined ? r.ship_fx : r.shipFx) || 1350,
-    stock: parseInt(r.stock) || 0,
-    arrangedQty: parseInt(r.arranged_qty !== undefined ? r.arranged_qty : r.arrangedQty) || 0,
-    arranged_qty: parseInt(r.arranged_qty !== undefined ? r.arranged_qty : r.arrangedQty) || 0,
-    spq: r.spq ? parseInt(r.spq) : null,
-    isSpa: Boolean(r.is_spa || r.isSpa),
-    is_spa: Boolean(r.is_spa || r.isSpa),
-    approvedDebitUsd: Number(r.approved_debit_usd || r.approvedDebitUsd) || 0,
-    approved_debit_usd: Number(r.approved_debit_usd || r.approvedDebitUsd) || 0,
-    created_at: r.created_at
-  }));
-
-  return mappedItems.sort((a, b) => {
-    const dateA = a.entryDate && a.entryDate !== '-' ? new Date(a.entryDate).getTime() : 0;
-    const dateB = b.entryDate && b.entryDate !== '-' ? new Date(b.entryDate).getTime() : 0;
-    return dateB - dateA;
-  });
+  return [];
 }
 
 async function upsertInventoryItem(payload, id) {
@@ -551,6 +460,7 @@ export async function bootstrap() {
   setupInputMasks();
   bindModals();
   initManualViewer();
+  initCustomerMasterAutocomplete();
 
   initAuth(async (session, canEdit) => {
     updateFormVisibility(canEdit);
@@ -561,6 +471,61 @@ export async function bootstrap() {
   initDynamicFormTabs();
   if (activeTab === 'sales') {
     document.getElementById('formSection')?.classList.add('hidden');
+  }
+}
+
+function initCustomerMasterAutocomplete() {
+  // 1. 견적서 모달 (TO: 업체명 입력 시 자동완성)
+  const qpCust = document.getElementById('qpCustomer');
+  if (qpCust) {
+    attachCustomerAutocomplete(qpCust, (cust) => {
+      if (cust.contact_display) {
+        const attnEl = document.getElementById('qpAttnFull');
+        if (attnEl) attnEl.value = `${cust.contact_display} 님`;
+      }
+      if (cust.tel) {
+        const telEl = document.getElementById('qpTel');
+        if (telEl) telEl.value = cust.tel;
+      }
+      if (cust.fax) {
+        const faxEl = document.getElementById('qpFax');
+        if (faxEl) faxEl.value = cust.fax;
+      }
+      if (cust.sales_rep) {
+        const salesEl = document.getElementById('qpSales');
+        if (salesEl) salesEl.value = cust.sales_rep;
+      }
+    });
+  }
+
+  // 2. 재고 상세/수정 드로어 (계약처)
+  const drawerCust = document.getElementById('drawerCustomer');
+  if (drawerCust) {
+    attachCustomerAutocomplete(drawerCust, (cust) => {
+      if (cust.sales_rep) {
+        const ownerEl = document.getElementById('drawerOwner');
+        if (ownerEl) {
+          const opt = Array.from(ownerEl.options).find(o => o.value.toLowerCase().includes(cust.sales_rep.toLowerCase()));
+          if (opt) ownerEl.value = opt.value;
+        }
+      }
+    });
+  }
+
+  // 3. 재고 상세/수정 드로어 (실납품처)
+  const drawerRealCust = document.getElementById('drawerRealCustomer');
+  if (drawerRealCust) {
+    attachCustomerAutocomplete(drawerRealCust);
+  }
+
+  // 4. 신규 재고 등록 모달 (계약처 & 실납품처)
+  const inputCust = document.getElementById('inputCustomer');
+  if (inputCust) {
+    attachCustomerAutocomplete(inputCust);
+  }
+  const inputRealCust = document.getElementById('inputRealCustomer');
+  if (inputRealCust) {
+    attachCustomerAutocomplete(inputRealCust);
   }
 }
 
@@ -655,6 +620,7 @@ function bindTabSwitch() {
   const tabShipments = document.getElementById('tabShipments');
   const tabQuotations = document.getElementById('tabQuotations');
   const tabUnpaid = document.getElementById('tabUnpaid');
+  const tabAnalytics = document.getElementById('tabAnalytics');
 
   const invMain = document.getElementById('inventoryMainArea');
   const salesPanel = document.getElementById('salesQuotationPanel');
@@ -662,6 +628,7 @@ function bindTabSwitch() {
   const shipmentsSection = document.getElementById('shipmentsSection');
   const quotationsSection = document.getElementById('quotationsSection');
   const unpaidSection = document.getElementById('unpaidSection');
+  const analyticsSection = document.getElementById('analyticsSection');
   const csHeaderDesc = document.getElementById('csHeaderDesc');
 
   const activeStyle = "py-2 px-3 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1";
@@ -673,6 +640,7 @@ function bindTabSwitch() {
     if (tabShipments) tabShipments.className = (active === 'shipments') ? activeStyle : inactiveStyle;
     if (tabQuotations) tabQuotations.className = (active === 'quotations') ? activeStyle : inactiveStyle;
     if (tabUnpaid) tabUnpaid.className = (active === 'unpaid') ? activeStyle : inactiveStyle;
+    if (tabAnalytics) tabAnalytics.className = (active === 'analytics') ? activeStyle : inactiveStyle;
   }
 
   // 1. [영업 견적·재고] 탭 클릭
@@ -683,6 +651,7 @@ function bindTabSwitch() {
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
+    if (analyticsSection) analyticsSection.classList.add('hidden');
     if (invMain) invMain.classList.remove('hidden');
     if (salesPanel) salesPanel.classList.remove('hidden');
     if (formSection) formSection.classList.add('hidden');
@@ -699,6 +668,7 @@ function bindTabSwitch() {
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
+    if (analyticsSection) analyticsSection.classList.add('hidden');
     if (invMain) invMain.classList.remove('hidden');
     if (salesPanel) salesPanel.classList.add('hidden');
     if (formSection) formSection.classList.remove('hidden');
@@ -716,6 +686,7 @@ function bindTabSwitch() {
     if (invMain) invMain.classList.add('hidden'); // 기존 재고/견적 화면 완벽 숨김
     if (quotationsSection) quotationsSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
+    if (analyticsSection) analyticsSection.classList.add('hidden');
     if (shipmentsSection) {
       shipmentsSection.classList.remove('hidden'); // 이력 섹션 단독 표시
       await fetchShipments();
@@ -734,6 +705,7 @@ function bindTabSwitch() {
     if (invMain) invMain.classList.add('hidden');
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
+    if (analyticsSection) analyticsSection.classList.add('hidden');
     if (quotationsSection) {
       quotationsSection.classList.remove('hidden');
       quotationsSection.innerHTML = `
@@ -759,6 +731,7 @@ function bindTabSwitch() {
     if (invMain) invMain.classList.add('hidden');
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (analyticsSection) analyticsSection.classList.add('hidden');
     if (unpaidSection) {
       unpaidSection.classList.remove('hidden');
       unpaidSection.innerHTML = `
@@ -777,6 +750,25 @@ function bindTabSwitch() {
     }
 
     if (csHeaderDesc) csHeaderDesc.innerText = "세일즈 마스터 연동 미수금 현황 및 결제예정일 에이징(Aging)을 관리합니다.";
+  });
+
+  // 6. [매출 장부 & 실적 분석 (Book & Bill)] 탭 클릭 (FrmSalesBKBL & FrmSalesGraph)
+  tabAnalytics?.addEventListener('click', async () => {
+    activeTab = 'analytics';
+    setTabs('analytics');
+
+    if (invMain) invMain.classList.add('hidden');
+    if (shipmentsSection) shipmentsSection.classList.add('hidden');
+    if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (unpaidSection) unpaidSection.classList.add('hidden');
+    if (analyticsSection) {
+      analyticsSection.classList.remove('hidden');
+      await fetchSalesAnalytics();
+      renderAnalyticsView('analyticsSection');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    if (csHeaderDesc) csHeaderDesc.innerText = "세일즈 마스터 연동 월별 수주(Booking) vs 매출(Billing) 및 다차원 실적 분석을 관리합니다.";
   });
 }
 

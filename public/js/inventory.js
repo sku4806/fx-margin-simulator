@@ -89,46 +89,89 @@ let cachedItems = [];
 
 export async function fetchInventoryItems() {
   if (!sbClient) return [];
-  const { data, error } = await sbClient
-    .from('inventory_items')
-    .select('*')
-    .range(0, 9999)
-    .order('entry_date', { ascending: false });
+  
+  // Supabase의 단일 쿼리 1,000건 제한을 우회하여 전건(1,600건 이상) 청크 로드
+  let allData = [];
+  const chunkSize = 1000;
+  let from = 0;
+  let hasMore = true;
 
-  if (error) throw error;
+  while (hasMore) {
+    const to = from + chunkSize - 1;
+    const { data, error } = await sbClient
+      .from('inventory_items')
+      .select('*')
+      .range(from, to)
+      .order('entry_date', { ascending: false, nullsFirst: false });
 
-  cachedItems = (data || []).map(item => ({
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      if (data.length < chunkSize) {
+        hasMore = false;
+      } else {
+        from += chunkSize;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  cachedItems = allData.map(item => ({
     id: item.id,
     maker: item.maker || '-',
     partName: item.part_name || '-',
+    part_name: item.part_name || '-',
     dateCode: item.date_code || '-',
+    date_code: item.date_code || '-',
     stock: parseInt(item.stock) || 0,
     arrangedQty: parseInt(item.arranged_qty) || 0,
+    arranged_qty: parseInt(item.arranged_qty) || 0,
     spq: parseInt(item.spq) || null,
     unitUsd: parseFloat(item.unit_usd) || 0,
+    unit_usd: parseFloat(item.unit_usd) || 0,
     shipFx: parseFloat(item.ship_fx) || 1350,
+    ship_fx: parseFloat(item.ship_fx) || 1350,
     soldPriceUsd: parseFloat(item.sold_price_usd) || 0,
+    sold_price_usd: parseFloat(item.sold_price_usd) || 0,
     entryDate: item.entry_date || '-',
+    entry_date: item.entry_date || '-',
     owner: item.owner || '본사 일반재고',
     customer: (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-',
     realCustomer: item.real_customer || '-',
+    real_customer: item.real_customer || '-',
     poNo: item.po_no || '',
+    po_no: item.po_no || '',
     application: item.application || '',
     bizType: item.biz_type || 'DOMESTIC',
+    biz_type: item.biz_type || 'DOMESTIC',
     orderStatus: item.order_status || '배정요청',
+    order_status: item.order_status || '배정요청',
     paymentTerms: item.payment_terms || 'Net 30',
+    payment_terms: item.payment_terms || 'Net 30',
     currency: item.currency || 'USD',
     invoiceNo: item.invoice_no || '',
+    invoice_no: item.invoice_no || '',
     taxDate: item.tax_date || '',
+    tax_date: item.tax_date || '',
     trackingNo: item.tracking_no || '',
+    tracking_no: item.tracking_no || '',
     paymentStatus: item.payment_status || '미수',
+    payment_status: item.payment_status || '미수',
     dueDate: item.due_date || '',
+    due_date: item.due_date || '',
     shippedDate: item.shipped_date || '',
+    shipped_date: item.shipped_date || '',
     settledDate: item.settled_date || '',
+    settled_date: item.settled_date || '',
     settledFx: parseFloat(item.settled_fx) || null,
+    settled_fx: parseFloat(item.settled_fx) || null,
     margin: parseFloat(item.margin) || 20,
     isSpa: item.is_spa || false,
+    is_spa: item.is_spa || false,
     approvedDebitUsd: parseFloat(item.approved_debit_usd) || 0,
+    approved_debit_usd: parseFloat(item.approved_debit_usd) || 0,
     memo: item.memo || ''
   }));
 
