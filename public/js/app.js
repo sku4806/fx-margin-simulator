@@ -767,10 +767,10 @@ function bindTabSwitch() {
           <div class="font-bold text-sm text-slate-700">미수금 및 결제예정일 데이터를 불러오는 중입니다...</div>
         </div>
       `;
+      await fetchUnpaidList({ min_date: '2010-01-01' });
       await Promise.all([
         fetchUnpaidSummary('2010-01-01'),
-        fetchUnpaidSalesReps(),
-        fetchUnpaidList({ min_date: '2010-01-01' })
+        fetchUnpaidSalesReps()
       ]);
       renderUnpaidView('unpaidSection');
       window.scrollTo({ top: 0, behavior: 'smooth' });

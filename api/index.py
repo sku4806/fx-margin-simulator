@@ -240,6 +240,8 @@ def get_quote_detail(quote_no: str):
 # ========================================================
 # 💰 미수금 및 결제예정일 관리 (FrmUnpaidCustList) API
 # ========================================================
+is_vercel = os.environ.get("VERCEL") == "1" or os.environ.get("VERCEL_ENV") is not None
+
 @app.get("/api/unpaid")
 def list_unpaid(
     sales_rep: Optional[str] = None,
@@ -251,23 +253,24 @@ def list_unpaid(
     sort: Optional[str] = "due_date_asc",
     limit: int = 1500
 ):
-    # 1. 로컬 MS-SQL 우선 조회 (사내망 환경)
-    try:
-        import legacy_mssql
-        rows = legacy_mssql.query_unpaid_list(
-            sales_rep=sales_rep,
-            customer=customer,
-            mfg=mfg,
-            aging_filter=aging,
-            search_query=query,
-            min_out_date=min_date,
-            sort_by=sort,
-            limit=limit
-        )
-        if rows:
-            return {"status": "success", "total": len(rows), "items": rows}
-    except Exception:
-        pass
+    # 1. 로컬 환경에서만 MS-SQL 조회 시도 (Vercel 환경에서는 내부망 접근 불가하므로 즉시 건너뜀)
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            rows = legacy_mssql.query_unpaid_list(
+                sales_rep=sales_rep,
+                customer=customer,
+                mfg=mfg,
+                aging_filter=aging,
+                search_query=query,
+                min_out_date=min_date,
+                sort_by=sort,
+                limit=limit
+            )
+            if rows:
+                return {"status": "success", "total": len(rows), "items": rows}
+        except Exception:
+            pass
 
     # 2. Supabase Cloud Fallback (외부망 및 Vercel 배포 환경)
     try:
@@ -283,13 +286,19 @@ def list_unpaid(
             params.append(("out_date", f"gte.{min_date}"))
         if sales_rep and sales_rep != 'ALL':
             params.append(("sales_rep", f"eq.{sales_rep.strip()}"))
+        if customer:
+            params.append(("customer_name", f"ilike.%{customer.strip()}%"))
         if mfg:
             params.append(("maker", f"eq.{mfg.strip()}"))
+        if aging and aging != 'all':
+            aging_map = {'upcoming': 0, 'overdue_1_29': 1, 'overdue_30_44': 2, 'overdue_45_59': 3, 'overdue_60_plus': 4}
+            if aging in aging_map:
+                params.append(("color_code", f"eq.{aging_map[aging]}"))
         if query:
             term = query.strip()
             params.append(("or", f"(part_name.ilike.%{term}%,customer_name.ilike.%{term}%,sales_rep.ilike.%{term}%,po_no.ilike.%{term}%)"))
 
-        res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_unpaid", headers=headers, params=params, timeout=10)
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_unpaid", headers=headers, params=params, timeout=5)
         if res.status_code == 200:
             rows = res.json()
             formatted = []
@@ -318,18 +327,69 @@ def list_unpaid(
 
 @app.get("/api/unpaid/summary")
 def unpaid_summary(min_date: Optional[str] = "2010-01-01"):
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            return {"status": "success", "summary": legacy_mssql.get_unpaid_summary(min_out_date=min_date)}
+        except Exception:
+            pass
+
+    # Supabase 클라우드 동적 요약 계산
     try:
-        import legacy_mssql
-        return {"status": "success", "summary": legacy_mssql.get_unpaid_summary(min_out_date=min_date)}
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+        }
+        params = [("select", "customer_name,amount_vat,overdue_days"), ("limit", "2000")]
+        if min_date:
+            params.append(("out_date", f"gte.{min_date}"))
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_unpaid", headers=headers, params=params, timeout=5)
+        if res.status_code == 200:
+            rows = res.json()
+            total_cnt = len(rows)
+            total_amt = sum(float(r.get("amount_vat") or 0) for r in rows)
+            overdue_amt = sum(float(r.get("amount_vat") or 0) for r in rows if (r.get("overdue_days") or 0) > 0)
+            upcoming_amt = sum(float(r.get("amount_vat") or 0) for r in rows if (r.get("overdue_days") or 0) <= 0)
+            cust_map = {}
+            for r in rows:
+                c = r.get("customer_name") or "기타"
+                cust_map[c] = cust_map.get(c, 0) + float(r.get("amount_vat") or 0)
+            top_cust = sorted([{"customer_name": k, "total_unpaid": v} for k, v in cust_map.items()], key=lambda x: x["total_unpaid"], reverse=True)[:5]
+            return {
+                "status": "success",
+                "summary": {
+                    "total_count": total_cnt,
+                    "total_amount": total_amt,
+                    "overdue_amount": overdue_amt,
+                    "upcoming_amount": upcoming_amt,
+                    "top_customers": top_cust
+                }
+            }
     except Exception:
         pass
     return {"status": "success", "summary": {}}
 
 @app.get("/api/unpaid/sales-reps")
 def unpaid_sales_reps():
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            return {"status": "success", "sales_reps": legacy_mssql.get_unpaid_sales_reps()}
+        except Exception:
+            pass
+
     try:
-        import legacy_mssql
-        return {"status": "success", "sales_reps": legacy_mssql.get_unpaid_sales_reps()}
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+        }
+        params = [("select", "sales_rep"), ("limit", "1000")]
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_unpaid", headers=headers, params=params, timeout=5)
+        if res.status_code == 200:
+            rows = res.json()
+            reps = sorted(list(set(r.get("sales_rep") for r in rows if r.get("sales_rep"))))
+            if reps:
+                return {"status": "success", "sales_reps": reps}
     except Exception:
         pass
     return {"status": "success", "sales_reps": ["ALLEN", "STEVE", "WILLIAM", "PAUL", "JOEY", "DUSTIN"]}

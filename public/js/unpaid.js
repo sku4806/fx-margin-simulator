@@ -1,5 +1,6 @@
 // public/js/unpaid.js
 // 레거시 세일즈 마스터 [FrmUnpaidCustList] 미수금 및 결제예정일 관리 대시보드 모듈
+import { sbClient } from './supabase.js';
 
 let cachedUnpaid = [];
 let cachedSummary = null;
@@ -9,6 +10,14 @@ let unpaidPage = 1;
 let unpaidPageSize = 50;
 let lastFilteredUnpaid = [];
 
+const AGING_COLOR_MAP = {
+  'upcoming': 0,
+  'overdue_1_29': 1,
+  'overdue_30_44': 2,
+  'overdue_45_59': 3,
+  'overdue_60_plus': 4
+};
+
 function debounce(fn, delay = 200) {
   let timer = null;
   return function(...args) {
@@ -17,10 +26,82 @@ function debounce(fn, delay = 200) {
   };
 }
 
+function mapSupabaseToUnpaid(r) {
+  return {
+    idx: r.legacy_idx || r.id,
+    cname: r.customer_name,
+    out_dt: r.out_date,
+    po_no: r.po_no,
+    part_no: r.part_name,
+    mfg: r.maker,
+    qty: r.qty || 0,
+    amount_vat: Number(r.amount_vat) || 0.0,
+    overdue_days: Number(r.overdue_days) || 0,
+    pay_status: r.pay_status || "미결제",
+    contact: r.contact,
+    due_date: r.due_date,
+    sales: r.sales_rep,
+    color_code: Number(r.color_code) || 0
+  };
+}
+
+function computeSummaryFromItems(items) {
+  const totalCount = items.length;
+  const totalAmount = items.reduce((a, b) => a + (b.amount_vat || 0), 0);
+  const overdueAmount = items.filter(u => u.overdue_days > 0).reduce((a, b) => a + (b.amount_vat || 0), 0);
+  const upcomingAmount = items.filter(u => u.overdue_days <= 0).reduce((a, b) => a + (b.amount_vat || 0), 0);
+
+  const custMap = {};
+  items.forEach(it => {
+    const c = it.cname || "기타";
+    custMap[c] = (custMap[c] || 0) + (it.amount_vat || 0);
+  });
+  const topCustomers = Object.entries(custMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([customer_name, total_unpaid]) => ({ customer_name, total_unpaid }));
+
+  return {
+    total_count: totalCount,
+    total_amount: totalAmount,
+    overdue_amount: overdueAmount,
+    upcoming_amount: upcomingAmount,
+    top_customers: topCustomers
+  };
+}
+
 /**
- * 미수금 목록 비동기 패치 (API 브릿지)
+ * 미수금 목록 비동기 패치 (Supabase Cloud-First -> API Fallback)
  */
 export async function fetchUnpaidList(params = {}) {
+  // 1. Supabase Cloud 우선 조회 (Cloud-First)
+  if (sbClient) {
+    try {
+      let qb = sbClient.from('legacy_unpaid').select('*');
+      if (params.min_date) qb = qb.gte('out_date', params.min_date);
+      if (params.sales_rep && params.sales_rep !== 'ALL') qb = qb.eq('sales_rep', params.sales_rep);
+      if (params.customer) qb = qb.ilike('customer_name', `%${params.customer}%`);
+      if (params.aging && params.aging !== 'all') {
+        const cCode = AGING_COLOR_MAP[params.aging];
+        if (cCode !== undefined) qb = qb.eq('color_code', cCode);
+      }
+      if (params.query) {
+        const term = params.query;
+        qb = qb.or(`part_name.ilike.%${term}%,customer_name.ilike.%${term}%,sales_rep.ilike.%${term}%,po_no.ilike.%${term}%`);
+      }
+      qb = qb.order('due_date', { ascending: true });
+
+      const { data, error } = await qb.limit(1500);
+      if (!error && data && data.length > 0) {
+        cachedUnpaid = data.map(mapSupabaseToUnpaid);
+        return cachedUnpaid;
+      }
+    } catch (e) {
+      console.warn("Supabase 미수금 조회 우회, API 시도:", e);
+    }
+  }
+
+  // 2. 로컬 API 브릿지 Fallback
   const urlParams = new URLSearchParams();
   if (params.sales_rep && params.sales_rep !== 'ALL') urlParams.append('sales_rep', params.sales_rep);
   if (params.customer) urlParams.append('customer', params.customer);
@@ -47,10 +128,28 @@ export async function fetchUnpaidList(params = {}) {
  * 미수금 통계 및 Top 고객사 서머리 패치
  */
 export async function fetchUnpaidSummary(minDate = '2010-01-01') {
+  // 1. 이미 캐시된 목록이 있으면 즉시 연산 (지연 0ms)
+  if (cachedUnpaid && cachedUnpaid.length > 0) {
+    cachedSummary = computeSummaryFromItems(cachedUnpaid);
+    return cachedSummary;
+  }
+
+  // 2. Supabase Cloud 직접 연산
+  if (sbClient) {
+    try {
+      const { data, error } = await sbClient.from('legacy_unpaid').select('*').gte('out_date', minDate);
+      if (!error && data && data.length > 0) {
+        cachedSummary = computeSummaryFromItems(data.map(mapSupabaseToUnpaid));
+        return cachedSummary;
+      }
+    } catch (e) {}
+  }
+
+  // 3. 로컬 API Fallback
   try {
     const res = await fetch(`/api/unpaid/summary?min_date=${minDate}`);
     const data = await res.json();
-    if (data.status === 'success') {
+    if (data.status === 'success' && data.summary && data.summary.total_count !== undefined) {
       cachedSummary = data.summary;
       return cachedSummary;
     }
@@ -65,10 +164,21 @@ export async function fetchUnpaidSummary(minDate = '2010-01-01') {
  */
 export async function fetchUnpaidSalesReps() {
   if (cachedSalesReps.length > 0) return cachedSalesReps;
+
+  if (sbClient) {
+    try {
+      const { data, error } = await sbClient.from('legacy_unpaid').select('sales_rep').not('sales_rep', 'is', null);
+      if (!error && data && data.length > 0) {
+        cachedSalesReps = Array.from(new Set(data.map(d => d.sales_rep).filter(Boolean))).sort();
+        if (cachedSalesReps.length > 0) return cachedSalesReps;
+      }
+    } catch(e) {}
+  }
+
   try {
     const res = await fetch('/api/unpaid/sales-reps');
     const data = await res.json();
-    if (data.status === 'success') {
+    if (data.status === 'success' && data.sales_reps) {
       cachedSalesReps = data.sales_reps || [];
       return cachedSalesReps;
     }

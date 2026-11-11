@@ -292,7 +292,13 @@ def sync_unpaid(conn, sb, min_date='2010-01-01'):
             sb.table("legacy_unpaid").upsert(chunk, on_conflict="legacy_idx").execute()
             success_count += len(chunk)
         except Exception as e:
-            print(f"❌ 미수금 청크 삽입 알림 ({i}~{i+len(chunk)}): {e}")
+            err_msg = str(e)
+            if "legacy_unpaid" in err_msg or "PGRST205" in err_msg:
+                print(f"⚠️ Supabase에 'legacy_unpaid' 테이블이 아직 생성되지 않았습니다.")
+                print(f"   Supabase 대시보드 SQL Editor에서 DDL 스크립트를 먼저 실행해 주세요.")
+                break
+            else:
+                print(f"❌ 미수금 청크 삽입 알림 ({i}~{i+len(chunk)}): {e}")
 
     print(f"✅ [legacy_unpaid] 총 {success_count}건 클라우드 동기화 완료!")
     return success_count
@@ -327,12 +333,13 @@ def main():
         elif args.only_inventory:
             sync_inventory(conn, sb)
         elif args.only_unpaid:
-            sync_unpaid(conn, sb, min_date=args.since)
+            min_date = "2010-01-01" if args.since == "2020-01-01" else args.since
+            sync_unpaid(conn, sb, min_date=min_date)
         else:
             sync_inventory(conn, sb)
             min_date = None if args.full_quotations else args.since
             sync_quotations(conn, sb, min_date=min_date)
-            sync_unpaid(conn, sb, min_date=args.since)
+            sync_unpaid(conn, sb, min_date="2010-01-01")
     finally:
         conn.close()
 
