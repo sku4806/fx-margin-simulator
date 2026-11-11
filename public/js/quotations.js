@@ -10,6 +10,13 @@ let quotePage = 1;
 let quotePageSize = 50;
 let lastFilteredQuotes = [];
 
+// 상태 보존용 전역 변수
+const initDates = getDefaultDateRange();
+let currentStartDate = initDates.start;
+let currentEndDate = initDates.end;
+let currentMfg = '';
+let currentPreset = '2M';
+
 function debounce(fn, delay = 200) {
   let timer = null;
   return function(...args) {
@@ -65,11 +72,14 @@ function mapSupabaseToQuotation(q) {
  * 서버/클라우드로부터 견적 목록 로드 (Supabase 우선 조회 ➔ 로컬 MS-SQL Fallback)
  */
 export async function fetchQuotations(params = {}) {
-  const defaultDates = getDefaultDateRange();
-  const start = params.startDate !== undefined ? params.startDate : defaultDates.start;
-  const end = params.endDate !== undefined ? params.endDate : defaultDates.end;
-  const mfg = params.mfg || '';
+  const start = params.startDate !== undefined ? params.startDate : currentStartDate;
+  const end = params.endDate !== undefined ? params.endDate : currentEndDate;
+  const mfg = params.mfg !== undefined ? params.mfg : currentMfg;
   const query = params.query || '';
+
+  currentStartDate = start;
+  currentEndDate = end;
+  currentMfg = mfg;
 
   // 1. Supabase Cloud 우선 조회 (Cloud-First)
   if (sbClient) {
@@ -302,6 +312,50 @@ export async function saveCurrentQuotationToSupabase() {
 }
 window.saveCurrentQuotationToSupabase = saveCurrentQuotationToSupabase;
 
+// 퀵 날짜 프리셋 핸들러
+export function setQuoteDatePreset(preset) {
+  const now = new Date();
+  const end = now.toISOString().slice(0, 10);
+  let start = '';
+
+  if (preset === '1M') {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    start = d.toISOString().slice(0, 10);
+  } else if (preset === '3M') {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 3);
+    start = d.toISOString().slice(0, 10);
+  } else if (preset === '6M') {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 6);
+    start = d.toISOString().slice(0, 10);
+  } else if (preset === '1Y') {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    start = d.toISOString().slice(0, 10);
+  } else if (preset === 'ALL') {
+    start = '2000-01-01';
+  } else {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 2);
+    start = d.toISOString().slice(0, 10);
+  }
+
+  currentPreset = preset;
+  currentStartDate = start;
+  currentEndDate = end;
+
+  const inputStart = document.getElementById('quoteStartDate');
+  const inputEnd = document.getElementById('quoteEndDate');
+  if (inputStart) inputStart.value = start;
+  if (inputEnd) inputEnd.value = end;
+
+  const btnSearch = document.getElementById('btnSearchQuotes');
+  if (btnSearch) btnSearch.click();
+}
+window.setQuoteDatePreset = setQuoteDatePreset;
+
 /**
  * 견적 목록 전체 뷰 렌더링
  */
@@ -309,7 +363,6 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  const defaultDates = getDefaultDateRange();
   selectedQuoteIndexes.clear();
   lastFilteredQuotes = cachedQuotations || [];
   quotePage = 1;
@@ -345,13 +398,27 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
 
           <!-- 상단 필터 및 버튼군 -->
           <div class="flex flex-wrap items-center gap-2 text-xs">
+            <!-- 퀵 날짜 프리셋 버튼군 -->
+            <div class="flex items-center gap-0.5 bg-[#44542c] p-0.5 rounded-lg border border-lime-500/30">
+              <button type="button" onclick="window.setQuoteDatePreset('1M')" 
+                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '1M' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">1개월</button>
+              <button type="button" onclick="window.setQuoteDatePreset('3M')" 
+                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '3M' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">3개월</button>
+              <button type="button" onclick="window.setQuoteDatePreset('6M')" 
+                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '6M' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">6개월</button>
+              <button type="button" onclick="window.setQuoteDatePreset('1Y')" 
+                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '1Y' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">1년</button>
+              <button type="button" onclick="window.setQuoteDatePreset('ALL')" 
+                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === 'ALL' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">전체</button>
+            </div>
+
             <!-- DATE 필터 -->
             <div class="flex items-center gap-1 bg-[#4d5e33] px-2 py-1 rounded-lg border border-lime-500/30">
               <span class="text-[10px] font-bold text-lime-200 tracking-wider">DATE:</span>
-              <input type="date" id="quoteStartDate" value="${defaultDates.start}" 
+              <input type="date" id="quoteStartDate" value="${currentStartDate}" 
                      class="bg-white text-slate-800 text-[11px] px-1.5 py-0.5 rounded border border-slate-300 font-mono outline-none">
               <span class="text-lime-200 text-[10px]">~</span>
-              <input type="date" id="quoteEndDate" value="${defaultDates.end}" 
+              <input type="date" id="quoteEndDate" value="${currentEndDate}" 
                      class="bg-white text-slate-800 text-[11px] px-1.5 py-0.5 rounded border border-slate-300 font-mono outline-none">
             </div>
 
@@ -359,28 +426,28 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
             <div class="flex items-center gap-1 bg-[#4d5e33] px-2 py-1 rounded-lg border border-lime-500/30">
               <span class="text-[10px] font-bold text-lime-200 tracking-wider">MFG:</span>
               <select id="quoteMfgSelect" class="bg-white text-slate-800 text-[11px] px-2 py-0.5 rounded border border-slate-300 outline-none max-w-[120px]">
-                <option value="">(전체 MFG)</option>
-                ${cachedMfgs.map(m => `<option value="${m}">${m}</option>`).join('')}
+                <option value="" ${currentMfg === '' ? 'selected' : ''}>(전체 MFG)</option>
+                ${cachedMfgs.map(m => `<option value="${m}" ${currentMfg === m ? 'selected' : ''}>${m}</option>`).join('')}
               </select>
             </div>
 
             <!-- 검색 버튼 -->
-            <button id="btnSearchQuotes" class="px-3 py-1.5 bg-white text-[#3f4f26] font-black text-xs rounded-lg hover:bg-lime-50 shadow-sm transition-colors flex items-center gap-1">
+            <button id="btnSearchQuotes" class="px-3 py-1.5 bg-white text-[#3f4f26] font-black text-xs rounded-lg hover:bg-lime-50 shadow-sm transition-colors flex items-center gap-1 cursor-pointer">
               <span>🔍</span> 검색
             </button>
 
             <!-- REPORT (선택 건 견적서 출력) -->
-            <button id="btnQuoteReport" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1">
+            <button id="btnQuoteReport" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer">
               <span>📄</span> REPORT
             </button>
 
             <!-- REPORT_Resend -->
-            <button id="btnQuoteResend" class="px-2.5 py-1.5 bg-[#44542c] hover:bg-[#384623] text-lime-100 font-bold text-xs rounded-lg border border-lime-500/40 shadow-sm transition-colors">
+            <button id="btnQuoteResend" class="px-2.5 py-1.5 bg-[#44542c] hover:bg-[#384623] text-lime-100 font-bold text-xs rounded-lg border border-lime-500/40 shadow-sm transition-colors cursor-pointer">
               REPORT_Resend
             </button>
 
             <!-- 엑셀 다운로드 -->
-            <button id="btnQuoteExcelExport" class="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1">
+            <button id="btnQuoteExcelExport" class="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer">
               <span>📥</span> Excel
             </button>
           </div>
@@ -557,7 +624,28 @@ window.setQuotePageSize = function(size) {
  */
 function generateTableRows(items, offset = 0) {
   if (!items || items.length === 0) {
-    return `<tr><td colspan="16" class="text-center py-12 text-slate-400 font-medium">조회된 견적 이력이 없습니다.</td></tr>`;
+    const rangeText = (currentStartDate && currentEndDate) ? `${currentStartDate} ~ ${currentEndDate}` : '전체 기간';
+    return `
+      <tr>
+        <td colspan="16" class="text-center py-12 text-slate-500">
+          <div class="flex flex-col items-center justify-center gap-2">
+            <span class="text-3xl">🔍</span>
+            <p class="font-bold text-sm text-slate-700">해당 조건에 일치하는 견적 이력이 없습니다.</p>
+            <p class="text-xs text-slate-400">조회 기간(<span class="font-mono text-slate-600 font-semibold">${rangeText}</span>) 내 등록된 견적이 없습니다.</p>
+            <div class="flex items-center gap-2 mt-2">
+              <button type="button" onclick="window.setQuoteDatePreset('1Y')" 
+                      class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer">
+                📅 최근 1년 조회
+              </button>
+              <button type="button" onclick="window.setQuoteDatePreset('ALL')" 
+                      class="px-3 py-1.5 bg-[#5b6f3c] hover:bg-[#4d5e33] text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer">
+                🌐 과거 전체(1999년~현재) 조회하기
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
   }
 
   return items.map((q, idx) => {
@@ -636,11 +724,28 @@ function bindQuotationEvents() {
     const mfg = selectMfg?.value || '';
     const query = liveFilter?.value || '';
 
+    currentStartDate = startDate;
+    currentEndDate = endDate;
+    currentMfg = mfg;
+
     btnSearch.disabled = true;
-    btnSearch.innerText = "조회중...";
+    btnSearch.innerHTML = `<span>⏳</span> 조회중...`;
 
     await fetchQuotations({ startDate, endDate, mfg, query });
     renderQuotationsView('quotationsSection');
+  });
+
+  // 1-1. MFG 변경 시 즉시 재조회
+  selectMfg?.addEventListener("change", () => {
+    btnSearch?.click();
+  });
+
+  // 1-2. 날짜 입력창에서 Enter 키 누를 시 즉시 재조회
+  inputStart?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") btnSearch?.click();
+  });
+  inputEnd?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") btnSearch?.click();
   });
 
   // 2. 실시간 키워드 필터링 (200ms 디바운스 적용으로 버벅임 방지)
