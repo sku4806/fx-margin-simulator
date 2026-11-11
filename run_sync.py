@@ -24,7 +24,7 @@ def load_env():
                     os.environ.setdefault(k.strip(), v.strip())
 
 load_env()
-KEY = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+KEY = os.getenv("SUPABASE_SERVICE_KEY", "").strip() or os.getenv("SUPABASE_KEY", "").strip()
 
 LEGACY_DB_CONFIG = {
     'server': os.getenv('LEGACY_DB_HOST', '192.168.0.105'),
