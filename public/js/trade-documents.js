@@ -311,5 +311,248 @@ export function openPackingListModal(item) {
   };
 }
 
+/**
+ * 📄 거래처별 미수금 잔액 확인서 / 청구서 (Statement of Account) A4 규격 모달
+ */
+export function openStatementOfAccountModal(customerName, items = []) {
+  let targetItems = items;
+  if (!targetItems || targetItems.length === 0) {
+    if (window.currentUnpaidList && customerName) {
+      targetItems = window.currentUnpaidList.filter(u => 
+        (u.cname || u.customer_name || '').trim().toLowerCase() === customerName.trim().toLowerCase()
+      );
+    }
+  }
+
+  if (!targetItems || targetItems.length === 0) {
+    alert(`'${customerName || '선택한 거래처'}'의 미수금 내역이 없습니다.`);
+    return;
+  }
+
+  const modalId = 'statementOfAccountModal';
+  let modal = document.getElementById(modalId);
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = modalId;
+    modal.className = 'fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[99999] flex items-center justify-center p-2 sm:p-4 overflow-y-auto';
+    modal.onclick = (e) => {
+      if (e.target === modal) modal.classList.add('hidden');
+    };
+    document.body.appendChild(modal);
+  }
+
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}년 ${String(today.getMonth() + 1).padStart(2, '0')}월 ${String(today.getDate()).padStart(2, '0')}일`;
+  const docNo = `SOA-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${targetItems[0].idx || '01'}`;
+
+  const firstItem = targetItems[0];
+  const cname = customerName || firstItem.cname || firstItem.customer_name || '거래처';
+  const cAddress = firstItem.customer_address || '-';
+  const cTel = firstItem.customer_tel || '-';
+  const cContact = firstItem.contact || '-';
+
+  // 합계 계산
+  let totalSupply = 0;
+  let totalVat = 0;
+  let totalAmount = 0;
+  let totalQty = 0;
+
+  const rowsHtml = targetItems.map((item, idx) => {
+    const qty = Number(item.qty || 1);
+    const amountVat = Number(item.amount_vat || item.amountVat || 0);
+    const supply = item.supply_amount ? Number(item.supply_amount) : Math.round(amountVat / 1.1);
+    const vat = Math.round(amountVat - supply);
+    const unitPrice = item.unit_price ? Number(item.unit_price) : Math.round(supply / qty);
+
+    totalSupply += supply;
+    totalVat += vat;
+    totalAmount += amountVat;
+    totalQty += qty;
+
+    const overdueDays = Number(item.overdue_days || 0);
+    let overdueLabel = '결제예정';
+    let overdueClass = 'text-blue-700 font-semibold';
+    if (overdueDays > 0) {
+      overdueLabel = `+${overdueDays}일 연체`;
+      overdueClass = 'text-rose-700 font-bold';
+    } else if (overdueDays < 0) {
+      overdueLabel = `D${overdueDays}일`;
+    }
+
+    return `
+      <tr class="border-b border-slate-300 text-[10px] sm:text-[11px] hover:bg-slate-50">
+        <td class="py-1 px-1.5 text-center text-slate-500 font-mono">${idx + 1}</td>
+        <td class="py-1 px-1.5 text-center font-mono text-slate-700 whitespace-nowrap">${item.out_dt || item.out_date || '-'}</td>
+        <td class="py-1 px-2 font-mono text-slate-800 truncate max-w-[100px]" title="${item.po_no || '-'}">${item.po_no || '-'}</td>
+        <td class="py-1 px-2 font-bold text-slate-900 truncate max-w-[170px]" title="${item.part_no || '-'}">${item.part_no || '-'}</td>
+        <td class="py-1 px-1.5 text-slate-700">${item.mfg || item.maker || '-'}</td>
+        <td class="py-1 px-1.5 text-right font-bold text-slate-900 whitespace-nowrap">${qty.toLocaleString()}</td>
+        <td class="py-1 px-2 text-right font-mono text-slate-700 whitespace-nowrap">₩${Math.round(unitPrice).toLocaleString()}</td>
+        <td class="py-1 px-2 text-right font-mono text-slate-800 whitespace-nowrap">₩${Math.round(supply).toLocaleString()}</td>
+        <td class="py-1 px-2 text-right font-mono font-bold text-indigo-900 whitespace-nowrap">₩${Math.round(amountVat).toLocaleString()}</td>
+        <td class="py-1 px-1.5 text-center font-mono whitespace-nowrap">${item.due_date || '-'}</td>
+        <td class="py-1 px-1.5 text-center whitespace-nowrap ${overdueClass}">${overdueLabel}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const koreanAmount = numberToKorean(totalAmount);
+
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-300 p-4 sm:p-8 flex flex-col space-y-4 my-auto print:p-0 print:border-none print:shadow-none" onclick="event.stopPropagation()">
+      
+      <!-- 상단 컨트롤러 (화면 표시 전용) -->
+      <div class="flex items-center justify-between border-b pb-3 no-print">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📄</span>
+          <span class="font-bold text-slate-800 text-sm">거래처별 미수금 잔액 확인서 / 청구서 (A4 규격)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="window.print()" class="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-lg shadow-sm flex items-center gap-1 cursor-pointer">
+            <span>🖨️</span> 인쇄 / PDF 저장
+          </button>
+          <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg cursor-pointer">
+            닫기 ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- A4 인쇄 본문 영역 -->
+      <div class="text-black font-sans space-y-3.5 print:space-y-2.5">
+        
+        <!-- 문서 타이틀 & 문서번호 -->
+        <div class="text-center relative border-b-2 border-slate-900 pb-2">
+          <div class="text-[10px] text-slate-500 font-mono absolute left-0 top-0 text-left">
+            문서번호: ${docNo}<br>
+            발급일자: ${dateStr}
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-black tracking-widest text-slate-950">미 수 금  잔 액  확 인 서</h1>
+          <div class="text-[11px] font-bold text-slate-600 tracking-wider mt-0.5">( 청 구 서 / STATEMENT OF ACCOUNT )</div>
+        </div>
+
+        <!-- 인사말 및 기준일자 -->
+        <div class="text-xs text-slate-800 leading-relaxed font-medium">
+          귀사의 무궁한 발전을 기원합니다.<br>
+          당사와 귀사 간의 거래에 따른 <strong>${dateStr}</strong> 현재 미수금 잔액을 아래와 같이 청구하오니 확인 후 결제 기한 내 입금하여 주시기 바랍니다.
+        </div>
+
+        <!-- 공급자 & 공급받는자 2단 정보 테이블 -->
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <!-- 공급자 (빅샤인코리아) -->
+          <div class="border border-slate-800 rounded-sm p-2.5 flex flex-col justify-between relative bg-slate-50/30">
+            <div class="font-black text-slate-900 border-b border-slate-400 pb-1 mb-1 text-[11px] flex items-center justify-between">
+              <span>[공급자 (청구인)]</span>
+              <span class="text-[10px] font-normal text-slate-500">Bigshine Korea Co., Ltd.</span>
+            </div>
+            <div class="space-y-1 text-[11px]">
+              <div class="flex items-center"><span class="w-16 shrink-0 text-slate-500 font-bold">등록번호:</span><span class="font-black font-mono">214-87-54877</span></div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center"><span class="w-16 shrink-0 text-slate-500 font-bold">상&nbsp;&nbsp;&nbsp;&nbsp;호:</span><span class="font-bold">(주)빅샤인코리아</span></div>
+                <div class="flex items-center relative pr-10">
+                  <span class="text-slate-500 font-bold mr-1 whitespace-nowrap">대 표 자:</span>
+                  <span class="font-black text-slate-900 whitespace-nowrap">이동일</span>
+                  <img src="/BSK.jpg" alt="직인" class="w-9 h-9 object-contain absolute -right-1 -top-1.5 opacity-90 pointer-events-none">
+                </div>
+              </div>
+              <div class="flex"><span class="w-16 shrink-0 text-slate-500 font-bold">주&nbsp;&nbsp;&nbsp;&nbsp;소:</span><span class="leading-tight">서울특별시 서초구 방배로 125, 3층 (방배동, 정원빌딩)</span></div>
+              <div class="flex items-center"><span class="w-16 shrink-0 text-slate-500 font-bold">업태/종목:</span><span>도매 및 소매업 / 전자부품, 무역</span></div>
+              <div class="flex items-center"><span class="w-16 shrink-0 text-slate-500 font-bold">전화/팩스:</span><span class="font-mono">02-588-6447 / 02-588-6448</span></div>
+            </div>
+          </div>
+
+          <!-- 공급받는자 (고객사) -->
+          <div class="border border-slate-800 rounded-sm p-2.5 flex flex-col justify-between bg-slate-50/30">
+            <div class="font-black text-slate-900 border-b border-slate-400 pb-1 mb-1 text-[11px]">
+              [공급받는자 (수신)]
+            </div>
+            <div class="space-y-1 text-[11px]">
+              <div class="flex items-center"><span class="w-16 shrink-0 text-slate-500 font-bold">고 객 사:</span><span class="font-black text-sm text-indigo-950">${cname}</span></div>
+              <div class="flex"><span class="w-16 shrink-0 text-slate-500 font-bold">사업장주소:</span><span class="truncate max-w-[240px] leading-tight">${cAddress}</span></div>
+              <div class="flex items-center"><span class="w-16 shrink-0 text-slate-500 font-bold">전화번호:</span><span class="font-mono">${cTel}</span></div>
+              <div class="flex items-center"><span class="w-16 shrink-0 text-slate-500 font-bold">담 당 자:</span><span>${cContact} 귀하</span></div>
+              <div class="flex items-center"><span class="w-16 shrink-0 text-slate-500 font-bold">기준일자:</span><span class="font-mono text-slate-700">${dateStr} 현재</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 총 청구 금액 배너 -->
+        <div class="border-2 border-slate-900 bg-slate-100 px-3.5 py-2.5 rounded-sm flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="font-black text-slate-900 text-xs sm:text-sm whitespace-nowrap">총 청구 금액 :</span>
+            <span class="text-sm sm:text-base font-black text-rose-700 underline underline-offset-4 font-mono whitespace-nowrap">
+              일금 ${koreanAmount} 원정 ( ₩${totalAmount.toLocaleString()} )
+            </span>
+            <span class="text-[10px] text-slate-600 font-bold whitespace-nowrap">(VAT 포함)</span>
+          </div>
+          <div class="text-right text-[10.5px] font-mono text-slate-700 whitespace-nowrap">
+            공급가액: <strong>₩${totalSupply.toLocaleString()}</strong> | 세액: <strong>₩${totalVat.toLocaleString()}</strong>
+          </div>
+        </div>
+
+        <!-- 미수금 상세 명세 내역 테이블 -->
+        <div class="border border-slate-800 rounded-sm overflow-hidden">
+          <table class="w-full text-left border-collapse">
+            <thead class="bg-slate-200 text-slate-900 font-bold text-[10px] sm:text-[11px] border-b border-slate-800">
+              <tr>
+                <th class="py-1 px-1.5 text-center w-8">#</th>
+                <th class="py-1 px-1.5 text-center w-20">출하일자</th>
+                <th class="py-1 px-2 text-left w-24">발주번호</th>
+                <th class="py-1 px-2 text-left min-w-[150px]">품번 (Part Number)</th>
+                <th class="py-1 px-1.5 text-left w-16">제조사</th>
+                <th class="py-1 px-1.5 text-right w-16">수량</th>
+                <th class="py-1 px-2 text-right w-20">공급단가</th>
+                <th class="py-1 px-2 text-right w-24">공급가액</th>
+                <th class="py-1 px-2 text-right w-24">합계(VAT포함)</th>
+                <th class="py-1 px-1.5 text-center w-20">결제예정일</th>
+                <th class="py-1 px-1.5 text-center w-18">연체상태</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-300">
+              ${rowsHtml}
+            </tbody>
+            <tfoot class="bg-slate-100 font-black text-[11px] border-t-2 border-slate-800">
+              <tr>
+                <td colspan="5" class="py-1.5 px-3 text-center">합 계 (Total ${targetItems.length}건)</td>
+                <td class="py-1.5 px-1.5 text-right font-mono">${totalQty.toLocaleString()}</td>
+                <td class="py-1.5 px-2 text-right">-</td>
+                <td class="py-1.5 px-2 text-right font-mono">₩${totalSupply.toLocaleString()}</td>
+                <td class="py-1.5 px-2 text-right font-mono text-rose-700">₩${totalAmount.toLocaleString()}</td>
+                <td colspan="2" class="py-1.5 px-2 text-center text-[10px] text-slate-600">부가세 포함 금액</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- 🏦 입금 계좌 안내 및 주의사항 (중요 박스) -->
+        <div class="border-2 border-blue-900 bg-blue-50/60 p-3 rounded-sm flex items-center justify-between text-xs">
+          <div class="space-y-1">
+            <div class="font-black text-blue-950 flex items-center gap-1.5 text-xs">
+              <span>🏦</span> <span>입금 계좌 안내 (결제 대금 수령 계좌)</span>
+            </div>
+            <div class="flex items-center gap-3 text-sm font-mono mt-0.5">
+              <span class="font-bold text-slate-800">은행명: <strong>KEB하나은행</strong></span>
+              <span class="font-bold text-blue-900">계좌번호: <strong class="text-base text-blue-800 underline">374-890003-50704</strong></span>
+              <span class="font-bold text-slate-800">예금주: <strong>(주)빅샤인코리아</strong></span>
+            </div>
+            <div class="text-[10px] text-slate-600 mt-1">
+              ※ 송금 시 입금자명을 귀사명으로 입력하여 주시기 바랍니다. 내역 관련 문의는 02-588-6447로 연락 바랍니다.
+            </div>
+          </div>
+          <div class="text-right text-xs pr-4">
+            <div class="font-black text-slate-900 text-sm">(주)빅샤인코리아</div>
+            <div class="text-[11px] text-slate-600">대표이사 이동일 (직인생략)</div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+}
+
 window.openTradeInvoice = openInvoiceModal;
 window.openTradePacking = openPackingListModal;
+window.openStatementOfAccount = openStatementOfAccountModal;
+

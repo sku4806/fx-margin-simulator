@@ -21,9 +21,17 @@ window.recordAuditLog = recordAuditLog;
 window.fetchAuditLogs = fetchAuditLogs;
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { attachCustomerAutocomplete } from './customer-autocomplete.js';
-import { openInvoiceModal, openPackingListModal } from './trade-documents.js';
+import { openInvoiceModal, openPackingListModal, openStatementOfAccountModal } from './trade-documents.js';
 window.openTradeInvoice = openInvoiceModal;
 window.openTradePacking = openPackingListModal;
+window.openStatementOfAccount = openStatementOfAccountModal;
+
+import { openPurchaseOrdersModal, fetchPurchaseOrdersSummary } from './purchase-orders.js';
+window.openPurchaseOrdersModal = openPurchaseOrdersModal;
+window.fetchPurchaseOrdersSummary = fetchPurchaseOrdersSummary;
+
+import { openPriceHistoryModal } from './price-history.js';
+window.openPriceHistoryModal = openPriceHistoryModal;
 
 // ========================================================
 // 🛡️ 견적서 필수 입력값 검증 및 인쇄 실행
@@ -452,6 +460,12 @@ export async function bootstrap() {
     renderPackagingTable();
   } catch (e) {
     console.warn("포장기준 로드 예외 무시", e);
+  }
+
+  try {
+    await fetchPurchaseOrdersSummary();
+  } catch (e) {
+    console.warn("PO 요약 로드 예외 무시", e);
   }
 
   bindTabSwitch();

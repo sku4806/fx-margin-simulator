@@ -351,11 +351,17 @@ def query_unpaid_list(
         SELECT TOP ({limit})
             A.IDX as legacy_idx,
             B.KNAME as customer_name,
+            B.CNAME as customer_cname,
+            B.Address as customer_address,
+            B.TEL as customer_tel,
             A.OUTDT as out_date,
             A.PONO as po_no,
             A.PARTNO as part_no,
             A.MFG as maker,
             A.QTY as qty,
+            A.OUTUP as unit_price,
+            A.OUTAMT as supply_amount,
+            A.TAX as tax_yn,
             CAST(A.OUTAMT * 1.1 AS MONEY) as amount_vat,
             DATEDIFF(DAY, A.PAY_PLAN_DT, GETDATE()) as overdue_days,
             A.PAY as pay_status,
@@ -387,11 +393,17 @@ def query_unpaid_list(
             results.append({
                 "idx": r["legacy_idx"],
                 "cname": clean_val(r["customer_name"]),
+                "customer_cname": clean_val(r.get("customer_cname")),
+                "customer_address": clean_val(r.get("customer_address")),
+                "customer_tel": clean_val(r.get("customer_tel")),
                 "out_dt": clean_val(r["out_date"]),
                 "po_no": clean_val(r["po_no"]),
                 "part_no": clean_val(r["part_no"]),
                 "mfg": clean_val(r["maker"]),
                 "qty": int(r["qty"]) if r["qty"] else 0,
+                "unit_price": float(r["unit_price"]) if r.get("unit_price") is not None else 0.0,
+                "supply_amount": float(r["supply_amount"]) if r.get("supply_amount") is not None else 0.0,
+                "tax_yn": clean_val(r.get("tax_yn")),
                 "amount_vat": float(r["amount_vat"]) if r["amount_vat"] else 0.0,
                 "overdue_days": int(r["overdue_days"]) if r["overdue_days"] is not None else 0,
                 "pay_status": clean_val(r["pay_status"]),
@@ -724,6 +736,425 @@ def insert_sales_memo(sales_rep: str, memo: str, input_date: Optional[str] = Non
     except Exception as e:
         print(f"[ERROR] insert_sales_memo 에러: {e}")
         return False
+
+# ========================================================
+# 🚢 발주(PO) 및 입고 예정(ETA) 조회 모듈 (DPOFile 연동)
+# ========================================================
+def query_purchase_orders(
+    part_no: Optional[str] = None,
+    po_no: Optional[str] = None,
+    maker: Optional[str] = None,
+    status: Optional[str] = None,
+    sales_rep: Optional[str] = None,
+    search_query: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 150
+) -> List[Dict[str, Any]]:
+    """발주 및 입고예정(PO/ETA) 상세 조회"""
+    conditions = []
+    params = []
+
+    if status and status.strip() and status != 'ALL':
+        conditions.append("LTRIM(RTRIM(d.Result)) = %s")
+        params.append(status.strip())
+    if part_no and part_no.strip():
+        conditions.append("d.Partno LIKE %s")
+        params.append(f"%{part_no.strip()}%")
+    if po_no and po_no.strip():
+        conditions.append("d.PONO LIKE %s")
+        params.append(f"%{po_no.strip()}%")
+    if maker and maker.strip():
+        conditions.append("LTRIM(RTRIM(d.Mfg)) = %s")
+        params.append(maker.strip())
+    if sales_rep and sales_rep.strip() and sales_rep != 'ALL':
+        conditions.append("LTRIM(RTRIM(d.Sales)) = %s")
+        params.append(sales_rep.strip())
+    if start_date:
+        conditions.append("d.PODT >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("d.PODT <= %s")
+        params.append(f"{end_date} 23:59:59")
+    if search_query and search_query.strip():
+        term = f"%{search_query.strip()}%"
+        conditions.append("(d.Partno LIKE %s OR d.PONO LIKE %s OR d.Mfg LIKE %s OR c.Kname LIKE %s OR d.RealCust LIKE %s OR d.Sales LIKE %s OR d.Remark LIKE %s)")
+        params.extend([term, term, term, term, term, term, term])
+
+    where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    sql = f"""
+        SELECT TOP ({limit})
+            d.idx,
+            d.PODT as po_dt,
+            d.PONO as po_no,
+            d.Partno as part_no,
+            d.Mfg as maker,
+            d.Qty as qty,
+            d.UP as unit_price,
+            d.Amount as amount,
+            d.SL_UNIT as currency,
+            d.SL_UP as foreign_up,
+            d.SL_AMT as foreign_amount,
+            d.CRD as eta_date,
+            d.Result as status,
+            d.Sales as sales_rep,
+            d.Remark as remark,
+            d.RealCust as real_cust,
+            d.END_CUST as end_cust,
+            d.PAY_TERMS as pay_terms,
+            d.INRATE as inrate,
+            c.Kname as supplier_name,
+            c.Cname as supplier_cname
+        FROM DPOFile d
+        LEFT JOIN CustomerFile c ON d.Custid = c.CID
+        {where_clause}
+        ORDER BY d.PODT DESC, d.idx DESC
+    """
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+
+        results = []
+        for r in rows:
+            st = clean_val(r["status"])
+            results.append({
+                "idx": r["idx"],
+                "po_dt": clean_val(r["po_dt"]),
+                "po_no": clean_val(r["po_no"]),
+                "part_no": clean_val(r["part_no"]),
+                "maker": clean_val(r["maker"]),
+                "qty": int(r["qty"]) if r["qty"] is not None else 0,
+                "unit_price": float(r["unit_price"]) if r["unit_price"] is not None else 0.0,
+                "amount": float(r["amount"]) if r["amount"] is not None else 0.0,
+                "currency": clean_val(r.get("currency")) or "KRW",
+                "foreign_up": float(r["foreign_up"]) if r.get("foreign_up") is not None else 0.0,
+                "foreign_amount": float(r["foreign_amount"]) if r.get("foreign_amount") is not None else 0.0,
+                "eta_date": clean_val(r.get("eta_date")),
+                "status": st,
+                "status_label": "입고대기(예정)" if st == "PO" else ("입고완료" if st == "IN" else ("취소" if st == "CNL" else st)),
+                "sales_rep": clean_val(r["sales_rep"]),
+                "supplier_name": clean_val(r.get("supplier_name")),
+                "supplier_cname": clean_val(r.get("supplier_cname")),
+                "real_cust": clean_val(r.get("real_cust")),
+                "end_cust": clean_val(r.get("end_cust")),
+                "remark": clean_val(r.get("remark")),
+                "pay_terms": clean_val(r.get("pay_terms")),
+                "inrate": float(r["inrate"]) if r.get("inrate") is not None else 0.0
+            })
+        return results
+    except Exception as e:
+        print(f"[ERROR] query_purchase_orders 에러: {e}")
+        return []
+
+def get_purchase_orders_summary() -> Dict[str, Any]:
+    """발주/입고예정 종합 요약 지표"""
+    sql = """
+        SELECT 
+            COUNT(*) as total_count,
+            SUM(CASE WHEN LTRIM(RTRIM(Result)) = 'PO' THEN 1 ELSE 0 END) as pending_count,
+            SUM(CASE WHEN LTRIM(RTRIM(Result)) = 'PO' THEN Qty ELSE 0 END) as pending_qty,
+            SUM(CASE WHEN LTRIM(RTRIM(Result)) = 'IN' THEN 1 ELSE 0 END) as arrived_count,
+            SUM(CASE WHEN LTRIM(RTRIM(Result)) = 'CNL' THEN 1 ELSE 0 END) as cnl_count
+        FROM DPOFile
+    """
+    sql_recent = """
+        SELECT TOP 10
+            d.idx,
+            d.PODT as po_dt,
+            d.PONO as po_no,
+            d.Partno as part_no,
+            d.Mfg as maker,
+            d.Qty as qty,
+            d.UP as unit_price,
+            d.CRD as eta_date,
+            d.Sales as sales_rep,
+            d.RealCust as real_cust,
+            c.Kname as supplier_name
+        FROM DPOFile d
+        LEFT JOIN CustomerFile c ON d.Custid = c.CID
+        WHERE LTRIM(RTRIM(d.Result)) = 'PO'
+        ORDER BY d.PODT DESC, d.idx DESC
+    """
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        cur.execute(sql)
+        row = cur.fetchone() or {}
+
+        cur.execute(sql_recent)
+        recent_rows = cur.fetchall() or []
+        conn.close()
+
+        recent = []
+        for r in recent_rows:
+            recent.append({
+                "idx": r["idx"],
+                "po_dt": clean_val(r["po_dt"]),
+                "po_no": clean_val(r["po_no"]),
+                "part_no": clean_val(r["part_no"]),
+                "maker": clean_val(r["maker"]),
+                "qty": int(r["qty"]) if r["qty"] is not None else 0,
+                "unit_price": float(r["unit_price"]) if r["unit_price"] is not None else 0.0,
+                "eta_date": clean_val(r.get("eta_date")),
+                "sales_rep": clean_val(r["sales_rep"]),
+                "real_cust": clean_val(r.get("real_cust")),
+                "supplier_name": clean_val(r.get("supplier_name"))
+            })
+
+        return {
+            "total_count": int(row.get("total_count") or 0),
+            "pending_count": int(row.get("pending_count") or 0),
+            "pending_qty": int(row.get("pending_qty") or 0),
+            "arrived_count": int(row.get("arrived_count") or 0),
+            "cnl_count": int(row.get("cnl_count") or 0),
+            "recent_pending_orders": recent
+        }
+    except Exception as e:
+        print(f"[ERROR] get_purchase_orders_summary 에러: {e}")
+        return {
+            "total_count": 0,
+            "pending_count": 0,
+            "pending_qty": 0,
+            "arrived_count": 0,
+            "cnl_count": 0,
+            "recent_pending_orders": []
+        }
+
+# ========================================================
+# 📈 품목별 과거 매입·판매·견적 단가 이력 조회 모듈
+# ========================================================
+def get_part_price_history(part_no: str) -> Dict[str, Any]:
+    """품목별 매입(DincomeFile), 판매(DReportFile), 견적(QuotationFile), 발주(DPOFile) 통합 단가 이력 추적"""
+    p_clean = part_no.strip() if part_no else ""
+    if not p_clean:
+        return {"part_no": "", "summary": {}, "purchases": [], "sales": [], "quotations": [], "purchase_orders": []}
+
+    p_term = f"%{p_clean}%"
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+
+        # 1. 매입 이력 (DincomeFile)
+        cur.execute("""
+            SELECT TOP 50
+                IDX as idx,
+                INDT as in_date,
+                INVOICENO as invoice_no,
+                PARTNO as part_no,
+                MFG as maker,
+                INQTY as qty,
+                Slup as sl_up,
+                SlAmt as sl_amt,
+                InRate as in_rate,
+                Wup as w_up,
+                WAmt as w_amt,
+                Remark as remark
+            FROM DincomeFile
+            WHERE PARTNO LIKE %s
+            ORDER BY INDT DESC, IDX DESC
+        """, (p_term,))
+        income_rows = cur.fetchall() or []
+
+        # 2. 판매 및 마진 이력 (DReportFile + CustomerFile)
+        cur.execute("""
+            SELECT TOP 50
+                r.IDX as idx,
+                r.OUTDT as out_date,
+                r.Partno as part_no,
+                r.Mfg as maker,
+                r.Qty as qty,
+                r.InUP as in_up,
+                r.OutUP as out_up,
+                r.OutAmt as out_amt,
+                r.MGN as mgn,
+                r.US_MGN as us_mgn,
+                r.Sales as sales_rep,
+                c.Kname as customer_name,
+                c.Cname as customer_cname,
+                r.Remark as remark
+            FROM DReportFile r
+            LEFT JOIN CustomerFile c ON r.Custid = c.CID
+            WHERE r.Partno LIKE %s
+            ORDER BY r.OUTDT DESC, r.IDX DESC
+        """, (p_term,))
+        report_rows = cur.fetchall() or []
+
+        # 3. 견적 이력 (QuotationFile)
+        cur.execute("""
+            SELECT TOP 50
+                IDX as idx,
+                QuoteDT as quote_date,
+                QuoteNo as quote_no,
+                MFG as maker,
+                CNAME as customer_name,
+                Sales as sales_rep,
+                PartNo as part_no,
+                QTY_INT as qty,
+                QUnit as qunit,
+                QP as qp,
+                Amount as amount,
+                REMARK as remark
+            FROM QuotationFile
+            WHERE PartNo LIKE %s
+            ORDER BY QuoteDT DESC, IDX DESC
+        """, (p_term,))
+        quote_rows = cur.fetchall() or []
+
+        # 4. 발주 이력 (DPOFile)
+        cur.execute("""
+            SELECT TOP 30
+                d.idx,
+                d.PODT as po_date,
+                d.PONO as po_no,
+                d.Partno as part_no,
+                d.Mfg as maker,
+                d.Qty as qty,
+                d.UP as unit_price,
+                d.Amount as amount,
+                d.SL_UNIT as currency,
+                d.CRD as eta_date,
+                d.Result as status,
+                d.Sales as sales_rep,
+                d.Remark as remark,
+                d.RealCust as real_cust,
+                c.Kname as supplier_name
+            FROM DPOFile d
+            LEFT JOIN CustomerFile c ON d.Custid = c.CID
+            WHERE d.Partno LIKE %s
+            ORDER BY d.PODT DESC, d.idx DESC
+        """, (p_term,))
+        po_rows = cur.fetchall() or []
+
+        conn.close()
+
+        # 정제 및 파싱
+        purchases = []
+        total_in_qty = 0
+        for r in income_rows:
+            qty = int(r["qty"]) if r["qty"] is not None else 0
+            total_in_qty += qty
+            purchases.append({
+                "idx": r["idx"],
+                "in_date": clean_val(r["in_date"]),
+                "invoice_no": clean_val(r["invoice_no"]),
+                "part_no": clean_val(r["part_no"]),
+                "maker": clean_val(r["maker"]),
+                "qty": qty,
+                "sl_up": float(r["sl_up"]) if r["sl_up"] is not None else 0.0,
+                "sl_amt": float(r["sl_amt"]) if r["sl_amt"] is not None else 0.0,
+                "in_rate": float(r["in_rate"]) if r["in_rate"] is not None else 0.0,
+                "w_up": float(r["w_up"]) if r["w_up"] is not None else 0.0,
+                "w_amt": float(r["w_amt"]) if r["w_amt"] is not None else 0.0,
+                "remark": clean_val(r["remark"])
+            })
+
+        sales = []
+        total_out_qty = 0
+        margin_rates = []
+        for r in report_rows:
+            qty = int(r["qty"]) if r["qty"] is not None else 0
+            total_out_qty += qty
+            out_amt = float(r["out_amt"]) if r["out_amt"] is not None else 0.0
+            mgn = float(r["mgn"]) if r["mgn"] is not None else 0.0
+            mgn_rate = round((mgn / out_amt * 100), 2) if out_amt > 0 else 0.0
+            margin_rates.append(mgn_rate)
+            sales.append({
+                "idx": r["idx"],
+                "out_date": clean_val(r["out_date"]),
+                "part_no": clean_val(r["part_no"]),
+                "maker": clean_val(r["maker"]),
+                "qty": qty,
+                "in_up": float(r["in_up"]) if r["in_up"] is not None else 0.0,
+                "out_up": float(r["out_up"]) if r["out_up"] is not None else 0.0,
+                "out_amt": out_amt,
+                "mgn": mgn,
+                "mgn_rate": mgn_rate,
+                "sales_rep": clean_val(r["sales_rep"]),
+                "customer_name": clean_val(r.get("customer_name")) or clean_val(r.get("customer_cname")),
+                "remark": clean_val(r["remark"])
+            })
+
+        quotations = []
+        for r in quote_rows:
+            quotations.append({
+                "idx": r["idx"],
+                "quote_date": clean_val(r["quote_date"]),
+                "quote_no": clean_val(r["quote_no"]),
+                "maker": clean_val(r["maker"]),
+                "customer_name": clean_val(r["customer_name"]),
+                "sales_rep": clean_val(r["sales_rep"]),
+                "part_no": clean_val(r["part_no"]),
+                "qty": int(r["qty"]) if r["qty"] is not None else 0,
+                "qunit": clean_val(r["qunit"]),
+                "qp": float(r["qp"]) if r["qp"] is not None else 0.0,
+                "amount": float(r["amount"]) if r["amount"] is not None else 0.0,
+                "remark": clean_val(r["remark"])
+            })
+
+        purchase_orders = []
+        pending_po_qty = 0
+        for r in po_rows:
+            st = clean_val(r["status"])
+            qty = int(r["qty"]) if r["qty"] is not None else 0
+            if st == "PO":
+                pending_po_qty += qty
+            purchase_orders.append({
+                "idx": r["idx"],
+                "po_date": clean_val(r["po_date"]),
+                "po_no": clean_val(r["po_no"]),
+                "part_no": clean_val(r["part_no"]),
+                "maker": clean_val(r["maker"]),
+                "qty": qty,
+                "unit_price": float(r["unit_price"]) if r["unit_price"] is not None else 0.0,
+                "amount": float(r["amount"]) if r["amount"] is not None else 0.0,
+                "currency": clean_val(r.get("currency")) or "KRW",
+                "eta_date": clean_val(r.get("eta_date")),
+                "status": st,
+                "status_label": "입고대기(예정)" if st == "PO" else ("입고완료" if st == "IN" else ("취소" if st == "CNL" else st)),
+                "sales_rep": clean_val(r["sales_rep"]),
+                "real_cust": clean_val(r.get("real_cust")),
+                "supplier_name": clean_val(r.get("supplier_name")),
+                "remark": clean_val(r["remark"])
+            })
+
+        # 요약 데이터 생성
+        latest_purchase = purchases[0] if purchases else None
+        latest_sale = sales[0] if sales else None
+        avg_margin = round(sum(margin_rates) / len(margin_rates), 1) if margin_rates else 0.0
+
+        return {
+            "part_no": p_clean,
+            "summary": {
+                "latest_purchase_usd": latest_purchase["sl_up"] if latest_purchase else 0.0,
+                "latest_purchase_krw": latest_purchase["w_up"] if latest_purchase else 0.0,
+                "latest_purchase_date": latest_purchase["in_date"] if latest_purchase else "-",
+                "latest_sale_price": latest_sale["out_up"] if latest_sale else 0.0,
+                "latest_sale_date": latest_sale["out_date"] if latest_sale else "-",
+                "latest_margin_rate": latest_sale["mgn_rate"] if latest_sale else 0.0,
+                "avg_margin_rate": avg_margin,
+                "total_purchased_qty": total_in_qty,
+                "total_sold_qty": total_out_qty,
+                "pending_po_qty": pending_po_qty,
+                "purchase_count": len(purchases),
+                "sale_count": len(sales),
+                "quote_count": len(quotations),
+                "po_count": len(purchase_orders)
+            },
+            "purchases": purchases,
+            "sales": sales,
+            "quotations": quotations,
+            "purchase_orders": purchase_orders
+        }
+    except Exception as e:
+        print(f"[ERROR] get_part_price_history 에러: {e}")
+        return {"part_no": p_clean, "summary": {}, "purchases": [], "sales": [], "quotations": [], "purchase_orders": []}
+
 
 
 

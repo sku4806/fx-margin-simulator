@@ -595,3 +595,138 @@ def create_sales_memo(item: MemoInput):
         "memo": item.memo
     })
     return {"status": "success"}
+
+# ========================================================
+# 🚢 발주(PO) 및 입고 예정(ETA) 조회 API (DPOFile 연동)
+# ========================================================
+@app.get("/api/purchase-orders")
+def list_purchase_orders(
+    q: Optional[str] = None,
+    part_no: Optional[str] = None,
+    po_no: Optional[str] = None,
+    maker: Optional[str] = None,
+    status: Optional[str] = None,
+    sales_rep: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 150
+):
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            rows = legacy_mssql.query_purchase_orders(
+                part_no=part_no,
+                po_no=po_no,
+                maker=maker,
+                status=status,
+                sales_rep=sales_rep,
+                search_query=q,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit
+            )
+            return {"status": "success", "total": len(rows), "orders": rows}
+        except Exception:
+            pass
+
+    # 클라우드/Vercel 환경 샘플 발주 데이터
+    mock_orders = [
+        {
+            "idx": 4063, "po_dt": "2026-11-06", "po_no": "BK-TW-261106", "part_no": "EN25QH32B-104HIP2C (Tube)",
+            "maker": "ESMT", "qty": 100, "unit_price": 350.0, "amount": 35000.0, "currency": "\\",
+            "foreign_up": 350.0, "foreign_amount": 35000.0, "eta_date": "2026-11-11", "status": "PO",
+            "status_label": "입고대기(예정)", "sales_rep": "WILLIAM", "supplier_name": "투윈전자",
+            "supplier_cname": "TWIN ELECTRONICS CO.LTD", "real_cust": "화성시스템", "end_cust": "화성시스템",
+            "remark": "긴급 납품건", "pay_terms": "당월말 결제", "inrate": 0.0
+        },
+        {
+            "idx": 4062, "po_dt": "2026-09-01", "po_no": "20260901-0000059", "part_no": "W5500",
+            "maker": "WIZnet", "qty": 12500, "unit_price": 1.27, "amount": 15875.0, "currency": "US$",
+            "foreign_up": 1.27, "foreign_amount": 15875.0, "eta_date": "2026-10-14", "status": "PO",
+            "status_label": "입고대기(예정)", "sales_rep": "WILLIAM", "supplier_name": "위즈네트",
+            "supplier_cname": "WIZnet", "real_cust": "피플웍스", "end_cust": "피플웍스",
+            "remark": "통신모듈용", "pay_terms": "익월말 결제", "inrate": 1341.0
+        },
+        {
+            "idx": 4061, "po_dt": "2026-10-27", "po_no": "BK-SB261019", "part_no": "BL1117-33CX",
+            "maker": "S.BELLING", "qty": 2500, "unit_price": 36.0, "amount": 90000.0, "currency": "\\",
+            "foreign_up": 36.0, "foreign_amount": 90000.0, "eta_date": "2026-10-19", "status": "IN",
+            "status_label": "입고완료", "sales_rep": "ERIC", "supplier_name": "선화전자",
+            "supplier_cname": "선화전자", "real_cust": "에이스전자", "end_cust": "에이스전자",
+            "remark": "", "pay_terms": "익월말 결제", "inrate": 0.0
+        }
+    ]
+    return {"status": "success", "total": len(mock_orders), "orders": mock_orders}
+
+@app.get("/api/purchase-orders/summary")
+def purchase_orders_summary():
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            summary = legacy_mssql.get_purchase_orders_summary()
+            return {"status": "success", "summary": summary}
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "summary": {
+            "total_count": 2828,
+            "pending_count": 16,
+            "pending_qty": 60698,
+            "arrived_count": 2761,
+            "cnl_count": 51,
+            "recent_pending_orders": [
+                {
+                    "idx": 4063, "po_dt": "2026-11-06", "po_no": "BK-TW-261106", "part_no": "EN25QH32B-104HIP2C (Tube)",
+                    "maker": "ESMT", "qty": 100, "unit_price": 350.0, "eta_date": "2026-11-11",
+                    "sales_rep": "WILLIAM", "real_cust": "화성시스템", "supplier_name": "투윈전자"
+                },
+                {
+                    "idx": 4062, "po_dt": "2026-09-01", "po_no": "20260901-0000059", "part_no": "W5500",
+                    "maker": "WIZnet", "qty": 12500, "unit_price": 1.27, "eta_date": "2026-10-14",
+                    "sales_rep": "WILLIAM", "real_cust": "피플웍스", "supplier_name": "위즈네트"
+                }
+            ]
+        }
+    }
+
+# ========================================================
+# 📈 품목별 과거 단가 및 마진 이력 추적 (Price History) API
+# ========================================================
+@app.get("/api/price-history")
+def price_history(part_no: str):
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            data = legacy_mssql.get_part_price_history(part_no=part_no)
+            return {"status": "success", "data": data}
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "data": {
+            "part_no": part_no,
+            "summary": {
+                "latest_purchase_usd": 1.27,
+                "latest_purchase_krw": 1703.0,
+                "latest_purchase_date": "2026-11-03",
+                "latest_sale_price": 2819.856,
+                "latest_sale_date": "2026-11-10",
+                "latest_margin_rate": 39.6,
+                "avg_margin_rate": 33.8,
+                "total_purchased_qty": 752772,
+                "total_sold_qty": 226483,
+                "pending_po_qty": 52500,
+                "purchase_count": 50,
+                "sale_count": 50,
+                "quote_count": 50,
+                "po_count": 30
+            },
+            "purchases": [],
+            "sales": [],
+            "quotations": [],
+            "purchase_orders": []
+        }
+    }

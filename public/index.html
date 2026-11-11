@@ -502,6 +502,10 @@
 
         <div class="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-end">
           <span id="selectedQuoteCountBadge" class="hidden text-[10px] bg-amber-400 text-slate-900 font-bold px-1.5 py-0.5 rounded-full">0</span>
+          <button type="button" id="openPoModalBtn" onclick="window.openPurchaseOrdersModal && window.openPurchaseOrdersModal('PO')" class="text-[11px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer" title="국내외 매입처 발주 및 입고예정일(CRD/ETA) 조회">
+            <span>🚢</span> 발주·입고예정 (PO/ETA)
+            <span id="poPendingBadge" class="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full hidden">0</span>
+          </button>
           <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors">
             <span>📄</span> 공식 견적서 발행 (PDF)
           </button>

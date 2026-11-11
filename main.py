@@ -185,6 +185,56 @@ def create_sales_memo(item: MemoInput):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# ========================================================
+# 🚢 발주(PO) 및 입고 예정(ETA) 조회 API (DPOFile 연동)
+# ========================================================
+@app.get("/api/purchase-orders")
+def list_purchase_orders(
+    q: Optional[str] = None,
+    part_no: Optional[str] = None,
+    po_no: Optional[str] = None,
+    maker: Optional[str] = None,
+    status: Optional[str] = None,
+    sales_rep: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 150
+):
+    try:
+        rows = legacy_mssql.query_purchase_orders(
+            part_no=part_no,
+            po_no=po_no,
+            maker=maker,
+            status=status,
+            sales_rep=sales_rep,
+            search_query=q,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit
+        )
+        return {"status": "success", "total": len(rows), "orders": rows}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "orders": []}
+
+@app.get("/api/purchase-orders/summary")
+def purchase_orders_summary():
+    try:
+        summary = legacy_mssql.get_purchase_orders_summary()
+        return {"status": "success", "summary": summary}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "summary": {}}
+
+# ========================================================
+# 📈 품목별 과거 단가 및 마진 이력 추적 (Price History) API
+# ========================================================
+@app.get("/api/price-history")
+def price_history(part_no: str):
+    try:
+        data = legacy_mssql.get_part_price_history(part_no=part_no)
+        return {"status": "success", "data": data}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "data": {}}
+
 # 정적 파일 서빙 (UI 및 SPA 리소스 서빙)
 app.mount("/", StaticFiles(directory="public", html=True), name="public")
 

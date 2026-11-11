@@ -375,7 +375,10 @@ function generateLegacyMasterRow(item) {
         <div class="font-bold text-indigo-800">${sales}</div>
       </td>
       <td class="py-2.5 px-2 align-middle">
-        <div class="font-black text-indigo-950 truncate max-w-[220px]" title="${part}">${part}</div>
+        <div class="flex items-center gap-1.5">
+          <span class="font-black text-indigo-950 truncate max-w-[180px]" title="${part}">${part}</span>
+          <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${part.replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer" title="과거 매입·판매·견적 단가 이력 추적">📈</button>
+        </div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">MFG: <span class="font-bold text-slate-700">${mfg}</span></div>
       </td>
       <td class="py-2.5 px-2 text-right align-middle whitespace-nowrap">
@@ -459,7 +462,10 @@ function generateFulfillmentRow(item, canEdit) {
       </td>
       <!-- 3. PART NO / MFG -->
       <td class="py-2.5 px-2 align-middle">
-        <div class="font-black text-indigo-950 truncate max-w-[170px]" title="${part}">${part}</div>
+        <div class="flex items-center gap-1.5">
+          <span class="font-black text-indigo-950 truncate max-w-[150px]" title="${part}">${part}</span>
+          <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${part.replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer" title="과거 매입·판매·견적 단가 이력 추적">📈</button>
+        </div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">${mfg} · <span class="text-indigo-600 font-bold">${kind}</span></div>
       </td>
       <!-- 4. 수량 / 배정 -->
