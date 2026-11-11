@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import datetime
 from typing import Optional
 import requests
 from fastapi import FastAPI, HTTPException
@@ -48,9 +49,18 @@ def get_current_fx() -> float:
         pass
     return CACHED_FX["rate"]
 
+@app.get("/api/fx-rate")
+def get_fx_rate():
+    rate = get_current_fx()
+    return {"currency": "USD/KRW", "current_rate": rate}
+
 @app.get("/api/products")
 def list_products():
     return []
+
+@app.post("/api/products")
+def create_product():
+    return {"status": "success"}
 
 @app.get("/api/simulate")
 def simulate(part_number: str, sale_discount_rate: float = 0.0):
@@ -350,24 +360,13 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
         try:
             import legacy_mssql
             results = legacy_mssql.query_customers(search_query=q, limit=limit)
-            if results:
+            if results is not None:
                 return {"status": "success", "total": len(results), "customers": results}
         except Exception:
             pass
 
-    # Supabase 클라우드 Fallback
+    # Supabase 클라우드 Fallback (Vercel 및 배포 환경)
     try:
-    try:
-        if not is_vercel:
-            try:
-                import legacy_mssql
-                results = legacy_mssql.query_customers(search_query=q, limit=limit)
-                if results is not None:
-                    return {"status": "success", "total": len(results), "customers": results}
-            except Exception:
-                pass
-
-        # Supabase 클라우드에서 고객사 검색 (Vercel 및 배포 환경)
         headers = {
             "apikey": SUPABASE_SERVICE_KEY,
             "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
@@ -554,17 +553,6 @@ class MemoInput(BaseModel):
     sales_rep: str
     memo: str
     input_date: Optional[str] = None
-
-@app.get("/api/sales/memos")
-def list_sales_memos(sales_rep: Optional[str] = None, limit: int = 40):
-    if not is_vercel:
-        try:
-            import legacy_mssql
-            rows = legacy_mssql.query_sales_memos(sales_rep=sales_rep, limit=limit)
-            if rows is not None:
-                return {"status": "success", "total": len(rows), "memos": rows}
-        except Exception:
-            pass
 
 # 클라우드/Vercel fallback 및 필터링 인메모리 저장소
 global_vercel_memos = [
