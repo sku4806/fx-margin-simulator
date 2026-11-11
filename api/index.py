@@ -24,7 +24,11 @@ def load_env():
 load_env()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://qheijtepveajdrqerxef.supabase.co")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+SUPABASE_SERVICE_KEY = (
+    os.getenv("SUPABASE_SERVICE_KEY") or 
+    os.getenv("SUPABASE_KEY") or 
+    "sb_publishable_0TB2JQq4BVfvihySxCbbkw_v4ZRAF80"
+).strip()
 
 # 인메모리 환율 캐시 (5분 유지)
 CACHED_FX = {"rate": 1380.0, "updated_at": 0}
