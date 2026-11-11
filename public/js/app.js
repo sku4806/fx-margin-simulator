@@ -1,5 +1,6 @@
 import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
+import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js';
 import { supabase, sbClient } from './supabase.js';
 import * as InventoryModule from './inventory.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
@@ -653,12 +654,14 @@ function bindTabSwitch() {
   const tabFulfillment = document.getElementById('tabFulfillment');
   const tabShipments = document.getElementById('tabShipments');
   const tabQuotations = document.getElementById('tabQuotations');
+  const tabUnpaid = document.getElementById('tabUnpaid');
 
   const invMain = document.getElementById('inventoryMainArea');
   const salesPanel = document.getElementById('salesQuotationPanel');
   const formSection = document.getElementById('formSection');
   const shipmentsSection = document.getElementById('shipmentsSection');
   const quotationsSection = document.getElementById('quotationsSection');
+  const unpaidSection = document.getElementById('unpaidSection');
   const csHeaderDesc = document.getElementById('csHeaderDesc');
 
   const activeStyle = "py-2 px-3 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1";
@@ -669,6 +672,7 @@ function bindTabSwitch() {
     if (tabFulfillment) tabFulfillment.className = (active === 'fulfillment') ? activeStyle : inactiveStyle;
     if (tabShipments) tabShipments.className = (active === 'shipments') ? activeStyle : inactiveStyle;
     if (tabQuotations) tabQuotations.className = (active === 'quotations') ? activeStyle : inactiveStyle;
+    if (tabUnpaid) tabUnpaid.className = (active === 'unpaid') ? activeStyle : inactiveStyle;
   }
 
   // 1. [영업 견적·재고] 탭 클릭
@@ -678,6 +682,7 @@ function bindTabSwitch() {
 
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (unpaidSection) unpaidSection.classList.add('hidden');
     if (invMain) invMain.classList.remove('hidden');
     if (salesPanel) salesPanel.classList.remove('hidden');
     if (formSection) formSection.classList.add('hidden');
@@ -693,6 +698,7 @@ function bindTabSwitch() {
 
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (unpaidSection) unpaidSection.classList.add('hidden');
     if (invMain) invMain.classList.remove('hidden');
     if (salesPanel) salesPanel.classList.add('hidden');
     if (formSection) formSection.classList.remove('hidden');
@@ -709,6 +715,7 @@ function bindTabSwitch() {
 
     if (invMain) invMain.classList.add('hidden'); // 기존 재고/견적 화면 완벽 숨김
     if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (unpaidSection) unpaidSection.classList.add('hidden');
     if (shipmentsSection) {
       shipmentsSection.classList.remove('hidden'); // 이력 섹션 단독 표시
       await fetchShipments();
@@ -726,6 +733,7 @@ function bindTabSwitch() {
 
     if (invMain) invMain.classList.add('hidden');
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
+    if (unpaidSection) unpaidSection.classList.add('hidden');
     if (quotationsSection) {
       quotationsSection.classList.remove('hidden');
       quotationsSection.innerHTML = `
@@ -741,6 +749,34 @@ function bindTabSwitch() {
     }
 
     if (csHeaderDesc) csHeaderDesc.innerText = "세일즈 마스터 MS-SQL 연동 견적 이력 및 BSK 견적서 재발행을 관리합니다.";
+  });
+
+  // 5. [미수금 및 결제예정 관리] 탭 클릭 (세일즈 마스터 FrmUnpaidCustList 연동)
+  tabUnpaid?.addEventListener('click', async () => {
+    activeTab = 'unpaid';
+    setTabs('unpaid');
+
+    if (invMain) invMain.classList.add('hidden');
+    if (shipmentsSection) shipmentsSection.classList.add('hidden');
+    if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (unpaidSection) {
+      unpaidSection.classList.remove('hidden');
+      unpaidSection.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+          <div class="inline-block animate-spin text-3xl">⏳</div>
+          <div class="font-bold text-sm text-slate-700">미수금 및 결제예정일 데이터를 불러오는 중입니다...</div>
+        </div>
+      `;
+      await Promise.all([
+        fetchUnpaidSummary('2010-01-01'),
+        fetchUnpaidSalesReps(),
+        fetchUnpaidList({ min_date: '2010-01-01' })
+      ]);
+      renderUnpaidView('unpaidSection');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    if (csHeaderDesc) csHeaderDesc.innerText = "세일즈 마스터 연동 미수금 현황 및 결제예정일 에이징(Aging)을 관리합니다.";
   });
 }
 

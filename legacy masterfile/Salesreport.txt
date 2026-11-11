@@ -1,0 +1,1 @@
+"C:\Program Files\SalesReport\AutoUpdate.exe" /u http://211.169.224.99:5252/SalesReport /m SalesReport.exe

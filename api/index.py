@@ -236,3 +236,100 @@ def get_quote_detail(quote_no: str):
             return {"status": "success", "quote_no": quote_no, "items": formatted}
     except Exception as e:
         return {"status": "error", "message": str(e), "items": []}
+
+# ========================================================
+# 💰 미수금 및 결제예정일 관리 (FrmUnpaidCustList) API
+# ========================================================
+@app.get("/api/unpaid")
+def list_unpaid(
+    sales_rep: Optional[str] = None,
+    customer: Optional[str] = None,
+    mfg: Optional[str] = None,
+    aging: Optional[str] = None,
+    query: Optional[str] = None,
+    min_date: Optional[str] = "2010-01-01",
+    sort: Optional[str] = "due_date_asc",
+    limit: int = 1500
+):
+    # 1. 로컬 MS-SQL 우선 조회 (사내망 환경)
+    try:
+        import legacy_mssql
+        rows = legacy_mssql.query_unpaid_list(
+            sales_rep=sales_rep,
+            customer=customer,
+            mfg=mfg,
+            aging_filter=aging,
+            search_query=query,
+            min_out_date=min_date,
+            sort_by=sort,
+            limit=limit
+        )
+        if rows:
+            return {"status": "success", "total": len(rows), "items": rows}
+    except Exception:
+        pass
+
+    # 2. Supabase Cloud Fallback (외부망 및 Vercel 배포 환경)
+    try:
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+        }
+        params = [
+            ("select", "*"),
+            ("limit", str(limit))
+        ]
+        if min_date:
+            params.append(("out_date", f"gte.{min_date}"))
+        if sales_rep and sales_rep != 'ALL':
+            params.append(("sales_rep", f"eq.{sales_rep.strip()}"))
+        if mfg:
+            params.append(("maker", f"eq.{mfg.strip()}"))
+        if query:
+            term = query.strip()
+            params.append(("or", f"(part_name.ilike.%{term}%,customer_name.ilike.%{term}%,sales_rep.ilike.%{term}%,po_no.ilike.%{term}%)"))
+
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_unpaid", headers=headers, params=params, timeout=10)
+        if res.status_code == 200:
+            rows = res.json()
+            formatted = []
+            for r in rows:
+                formatted.append({
+                    "idx": r.get("legacy_idx") or r.get("id"),
+                    "cname": r.get("customer_name"),
+                    "out_dt": r.get("out_date"),
+                    "po_no": r.get("po_no"),
+                    "part_no": r.get("part_name"),
+                    "mfg": r.get("maker"),
+                    "qty": r.get("qty") or 0,
+                    "amount_vat": float(r.get("amount_vat") or 0.0),
+                    "overdue_days": int(r.get("overdue_days") or 0),
+                    "pay_status": r.get("pay_status") or "미결제",
+                    "contact": r.get("contact"),
+                    "due_date": r.get("due_date"),
+                    "sales": r.get("sales_rep"),
+                    "color_code": int(r.get("color_code") or 0)
+                })
+            return {"status": "success", "total": len(formatted), "items": formatted}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "items": []}
+
+    return {"status": "success", "total": 0, "items": []}
+
+@app.get("/api/unpaid/summary")
+def unpaid_summary(min_date: Optional[str] = "2010-01-01"):
+    try:
+        import legacy_mssql
+        return {"status": "success", "summary": legacy_mssql.get_unpaid_summary(min_out_date=min_date)}
+    except Exception:
+        pass
+    return {"status": "success", "summary": {}}
+
+@app.get("/api/unpaid/sales-reps")
+def unpaid_sales_reps():
+    try:
+        import legacy_mssql
+        return {"status": "success", "sales_reps": legacy_mssql.get_unpaid_sales_reps()}
+    except Exception:
+        pass
+    return {"status": "success", "sales_reps": ["ALLEN", "STEVE", "WILLIAM", "PAUL", "JOEY", "DUSTIN"]}

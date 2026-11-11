@@ -219,10 +219,89 @@ def sync_quotations(conn, sb, min_date='2020-01-01'):
     print(f"✅ [legacy_quotations] 총 {success_count}건 Supabase 동기화 완료!")
     return success_count
 
+def sync_unpaid(conn, sb, min_date='2010-01-01'):
+    """
+    3. 미수금 데이터 동기화: DREPORTFILE + CUSTOMERFILE -> Supabase legacy_unpaid
+    """
+    print(f"\n💰 [3/3] 미수금(DREPORTFILE) 데이터 동기화 시작 (기준일자: {min_date or '전체'})...")
+    cur = conn.cursor(as_dict=True)
+    where_date = f"AND A.OUTDT >= '{min_date}'" if min_date else ""
+    sql = f"""
+        SELECT 
+            A.IDX as legacy_idx,
+            B.KNAME as customer_name,
+            A.OUTDT as out_date,
+            A.PONO as po_no,
+            A.PARTNO as part_no,
+            A.MFG as maker,
+            A.QTY as qty,
+            CAST(A.OUTAMT * 1.1 AS MONEY) as amount_vat,
+            DATEDIFF(DAY, A.PAY_PLAN_DT, GETDATE()) as overdue_days,
+            A.PAY as pay_status,
+            A.CONTACT as contact,
+            A.PAY_PLAN_DT as due_date,
+            A.SALES as sales_rep,
+            CASE 
+                WHEN DATEDIFF(DAY, A.PAY_PLAN_DT, GETDATE()) <= 0 THEN 0
+                WHEN DATEDIFF(DAY, A.PAY_PLAN_DT, GETDATE()) < 30 THEN 1
+                WHEN DATEDIFF(DAY, A.PAY_PLAN_DT, GETDATE()) < 45 THEN 2
+                WHEN DATEDIFF(DAY, A.PAY_PLAN_DT, GETDATE()) < 60 THEN 3
+                ELSE 4
+            END as gubun_color
+        FROM DREPORTFILE A
+        INNER JOIN CUSTOMERFILE B ON A.CUSTID = B.CID
+        WHERE A.RESULT = 'OUT' AND A.PAY = '미결제' {where_date}
+        ORDER BY A.PAY_PLAN_DT ASC, amount_vat DESC
+    """
+    cur.execute(sql)
+    rows = cur.fetchall()
+
+    records = []
+    for r in rows:
+        part = clean_val(r['part_no'])
+        if not part: continue
+        out_dt_str = r['out_date'].strftime('%Y-%m-%d') if r['out_date'] else None
+        due_dt_str = r['due_date'].strftime('%Y-%m-%d') if r['due_date'] else None
+        records.append({
+            "legacy_idx": int(r['legacy_idx']),
+            "customer_name": clean_val(r['customer_name']),
+            "out_date": out_dt_str,
+            "po_no": clean_val(r['po_no']),
+            "part_name": part,
+            "maker": clean_val(r['maker']) or "OTHERS",
+            "qty": int(r['qty']) if r['qty'] else 0,
+            "amount_vat": float(r['amount_vat']) if r['amount_vat'] else 0.0,
+            "due_date": due_dt_str,
+            "contact": clean_val(r['contact']),
+            "sales_rep": clean_val(r['sales_rep']),
+            "pay_status": clean_val(r['pay_status']) or "미결제",
+            "overdue_days": int(r['overdue_days']) if r['overdue_days'] is not None else 0,
+            "color_code": int(r['gubun_color']),
+            "last_synced_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        })
+
+    print(f"[*] 미수금 유효 데이터 {len(records)}건 변환 완료")
+    if not records:
+        return 0
+
+    chunk_size = 100
+    success_count = 0
+    for i in range(0, len(records), chunk_size):
+        chunk = records[i:i + chunk_size]
+        try:
+            sb.table("legacy_unpaid").upsert(chunk, on_conflict="legacy_idx").execute()
+            success_count += len(chunk)
+        except Exception as e:
+            print(f"❌ 미수금 청크 삽입 알림 ({i}~{i+len(chunk)}): {e}")
+
+    print(f"✅ [legacy_unpaid] 총 {success_count}건 클라우드 동기화 완료!")
+    return success_count
+
 def main():
     parser = argparse.ArgumentParser(description="사내 MS-SQL -> Supabase 클라우드 동기화 브릿지")
     parser.add_argument("--only-inventory", action="store_true", help="재고(inventory_items)만 동기화")
     parser.add_argument("--only-quotations", action="store_true", help="견적(legacy_quotations)만 동기화")
+    parser.add_argument("--only-unpaid", action="store_true", help="미수금(legacy_unpaid)만 동기화")
     parser.add_argument("--full-quotations", action="store_true", help="견적 전체(1999년~현재) 동기화")
     parser.add_argument("--since", default="2020-01-01", help="견적 동기화 시작일 (기본: 2020-01-01)")
     args = parser.parse_args()
@@ -247,10 +326,13 @@ def main():
             sync_quotations(conn, sb, min_date=min_date)
         elif args.only_inventory:
             sync_inventory(conn, sb)
+        elif args.only_unpaid:
+            sync_unpaid(conn, sb, min_date=args.since)
         else:
             sync_inventory(conn, sb)
             min_date = None if args.full_quotations else args.since
             sync_quotations(conn, sb, min_date=min_date)
+            sync_unpaid(conn, sb, min_date=args.since)
     finally:
         conn.close()
 

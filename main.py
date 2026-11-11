@@ -149,6 +149,51 @@ def get_quote_detail(quote_no: str):
     except Exception as e:
         return {"status": "error", "message": str(e), "items": []}
 
+# ========================================================
+# 💰 미수금 및 결제예정일 관리 (FrmUnpaidCustList) API
+# ========================================================
+@app.get("/api/unpaid")
+def list_unpaid(
+    sales_rep: Optional[str] = None,
+    customer: Optional[str] = None,
+    mfg: Optional[str] = None,
+    aging: Optional[str] = None,
+    query: Optional[str] = None,
+    min_date: Optional[str] = "2010-01-01",
+    sort: Optional[str] = "due_date_asc",
+    limit: int = 1500
+):
+    try:
+        rows = legacy_mssql.query_unpaid_list(
+            sales_rep=sales_rep,
+            customer=customer,
+            mfg=mfg,
+            aging_filter=aging,
+            search_query=query,
+            min_out_date=min_date,
+            sort_by=sort,
+            limit=limit
+        )
+        return {"status": "success", "total": len(rows), "items": rows}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "items": []}
+
+@app.get("/api/unpaid/summary")
+def unpaid_summary(min_date: Optional[str] = "2010-01-01"):
+    try:
+        summary = legacy_mssql.get_unpaid_summary(min_out_date=min_date)
+        return {"status": "success", "summary": summary}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "summary": {}}
+
+@app.get("/api/unpaid/sales-reps")
+def unpaid_sales_reps():
+    try:
+        reps = legacy_mssql.get_unpaid_sales_reps()
+        return {"status": "success", "sales_reps": reps}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "sales_reps": []}
+
 # 정적 파일 서빙 (UI 및 SPA 리소스 서빙)
 app.mount("/", StaticFiles(directory="public", html=True), name="public")
 
