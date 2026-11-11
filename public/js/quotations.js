@@ -6,6 +6,18 @@ let cachedQuotations = [];
 let cachedMfgs = [];
 let selectedQuoteIndexes = new Set();
 
+let quotePage = 1;
+let quotePageSize = 50;
+let lastFilteredQuotes = [];
+
+function debounce(fn, delay = 200) {
+  let timer = null;
+  return function(...args) {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
 /**
  * 기본 조회 날짜 계산 (종료일: 오늘, 시작일: 2달 전)
  */
@@ -299,6 +311,8 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
 
   const defaultDates = getDefaultDateRange();
   selectedQuoteIndexes.clear();
+  lastFilteredQuotes = cachedQuotations || [];
+  quotePage = 1;
 
   // 금액 합계 계산
   let count = cachedQuotations.length;
@@ -421,28 +435,134 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
             </tr>
           </thead>
           <tbody id="quotationTableBody" class="divide-y divide-slate-100 font-medium bg-white text-slate-700">
-            ${generateTableRows(cachedQuotations)}
           </tbody>
         </table>
       </div>
 
+      <!-- 📄 견적 페이지네이션 컨트롤러 -->
+      <div id="quotationPagination" class="flex flex-wrap items-center justify-between gap-2 pt-1 px-1 text-xs select-none"></div>
+
     </div>
   `;
+
+  // 페이지 렌더링
+  updateQuoteCurrentPage();
 
   // 이벤트 리스너 바인딩
   bindQuotationEvents();
 }
 
 /**
+ * 견적 페이지 전환 및 렌더링
+ */
+function updateQuoteCurrentPage() {
+  const total = lastFilteredQuotes.length;
+  const totalPages = quotePageSize === 'ALL' ? 1 : Math.max(1, Math.ceil(total / quotePageSize));
+  if (quotePage > totalPages) quotePage = totalPages;
+  if (quotePage < 1) quotePage = 1;
+
+  const offset = quotePageSize === 'ALL' ? 0 : (quotePage - 1) * quotePageSize;
+  const pagedItems = quotePageSize === 'ALL'
+    ? lastFilteredQuotes
+    : lastFilteredQuotes.slice(offset, offset + quotePageSize);
+
+  const tbody = document.getElementById("quotationTableBody");
+  if (tbody) {
+    tbody.innerHTML = generateTableRows(pagedItems, offset);
+  }
+
+  renderQuotePagination(total, totalPages);
+}
+
+/**
+ * 견적 페이지네이션 컨트롤 바 렌더링
+ */
+function renderQuotePagination(total, totalPages) {
+  const container = document.getElementById('quotationPagination');
+  if (!container) return;
+
+  if (total === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const startIdx = quotePageSize === 'ALL' ? 1 : (quotePage - 1) * quotePageSize + 1;
+  const endIdx = quotePageSize === 'ALL' ? total : Math.min(quotePage * quotePageSize, total);
+
+  let pageButtons = '';
+  const maxButtons = 5;
+  let startP = Math.max(1, quotePage - 2);
+  let endP = Math.min(totalPages, startP + maxButtons - 1);
+  if (endP - startP < maxButtons - 1) {
+    startP = Math.max(1, endP - maxButtons + 1);
+  }
+
+  for (let p = startP; p <= endP; p++) {
+    const isCurrent = (p === quotePage);
+    pageButtons += `
+      <button type="button" onclick="window.goToQuotePage(${p})" 
+              class="w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition-colors ${isCurrent ? 'bg-[#5b6f3c] text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'}">
+        ${p}
+      </button>
+    `;
+  }
+
+  container.innerHTML = `
+    <div class="flex items-center gap-2 text-slate-500 text-[11px]">
+      <span class="font-bold text-slate-800">${startIdx.toLocaleString()} - ${endIdx.toLocaleString()}</span> / 전체 <strong class="text-[#3f4f26] font-black">${total.toLocaleString()}</strong>건
+      <span class="text-slate-300">|</span>
+      <span>${quotePage} / ${totalPages} 페이지</span>
+    </div>
+
+    <div class="flex items-center gap-1.5">
+      <button type="button" onclick="window.goToQuotePage(${quotePage - 1})" 
+              ${quotePage <= 1 ? 'disabled class="px-2 py-1 bg-slate-100 text-slate-300 rounded text-xs cursor-not-allowed"' : 'class="px-2 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded text-xs transition-colors cursor-pointer"'}>
+        ◀ 이전
+      </button>
+
+      <div class="flex items-center gap-1">
+        ${pageButtons}
+      </div>
+
+      <button type="button" onclick="window.goToQuotePage(${quotePage + 1})" 
+              ${quotePage >= totalPages ? 'disabled class="px-2 py-1 bg-slate-100 text-slate-300 rounded text-xs cursor-not-allowed"' : 'class="px-2 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded text-xs transition-colors cursor-pointer"'}>
+        다음 ▶
+      </button>
+
+      <span class="text-slate-300 mx-1">|</span>
+
+      <select id="selectQuotePageSize" onchange="window.setQuotePageSize(this.value)" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700 outline-none cursor-pointer">
+        <option value="50" ${quotePageSize === 50 ? 'selected' : ''}>50개씩</option>
+        <option value="100" ${quotePageSize === 100 ? 'selected' : ''}>100개씩</option>
+        <option value="200" ${quotePageSize === 200 ? 'selected' : ''}>200개씩</option>
+        <option value="ALL" ${quotePageSize === 'ALL' ? 'selected' : ''}>전체 (${total})</option>
+      </select>
+    </div>
+  `;
+}
+
+window.goToQuotePage = function(page) {
+  quotePage = page;
+  updateQuoteCurrentPage();
+};
+
+window.setQuotePageSize = function(size) {
+  quotePageSize = (size === 'ALL') ? 'ALL' : parseInt(size, 10);
+  quotePage = 1;
+  updateQuoteCurrentPage();
+};
+
+/**
  * 테이블 행 렌더링
  */
-function generateTableRows(items) {
+function generateTableRows(items, offset = 0) {
   if (!items || items.length === 0) {
     return `<tr><td colspan="16" class="text-center py-12 text-slate-400 font-medium">조회된 견적 이력이 없습니다.</td></tr>`;
   }
 
   return items.map((q, idx) => {
-    const isSelected = selectedQuoteIndexes.has(idx);
+    const realIdx = offset + idx;
+    const isSelected = selectedQuoteIndexes.has(realIdx);
     const lineStr = q.line_no !== null && q.line_no !== undefined && q.line_no !== "" ? q.line_no : "-";
     const isUsd = (q.qunit && q.qunit.includes('$')) || (q.quot_type && q.quot_type.includes('$'));
     const isWon = (q.qunit && q.qunit.includes('\\')) || (q.quot_type && q.quot_type.includes('Won'));
@@ -461,15 +581,15 @@ function generateTableRows(items) {
     const amountVal = Number(q.amount) || 0;
     const amountDisplay = amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const bgClass = idx % 2 === 0 ? "bg-white" : "bg-amber-50/30";
+    const bgClass = realIdx % 2 === 0 ? "bg-white" : "bg-amber-50/30";
 
     return `
       <tr class="${bgClass} hover:bg-lime-50/80 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" 
-          data-quote-idx="${idx}" data-quote-no="${q.quote_no || ''}">
+          data-quote-idx="${realIdx}" data-quote-no="${q.quote_no || ''}">
         <td class="py-1.5 px-2 text-center" onclick="event.stopPropagation()">
-          <input type="checkbox" class="quote-row-chk rounded text-[#5b6f3c] focus:ring-0" data-idx="${idx}" ${isSelected ? 'checked' : ''}>
+          <input type="checkbox" class="quote-row-chk rounded text-[#5b6f3c] focus:ring-0" data-idx="${realIdx}" ${isSelected ? 'checked' : ''}>
         </td>
-        <td class="py-1.5 px-2 text-center font-mono text-slate-400">${idx + 1}</td>
+        <td class="py-1.5 px-2 text-center font-mono text-slate-400">${realIdx + 1}</td>
         <td class="py-1.5 px-2.5 text-center font-mono text-slate-600 whitespace-nowrap">${q.quote_dt || '-'}</td>
         <td class="py-1.5 px-3 font-bold text-slate-900 truncate max-w-[180px]" title="${q.cname || '-'}">${q.cname || '-'}</td>
         <td class="py-1.5 px-2.5 text-slate-700 truncate max-w-[100px]" title="${q.contact || '-'}">${q.contact || '-'}</td>
@@ -485,7 +605,7 @@ function generateTableRows(items) {
         <td class="py-1.5 px-2 text-slate-500 text-[10px] truncate max-w-[80px]" title="${q.application || '-'}">${q.application || '-'}</td>
         <td class="py-1.5 px-2 text-center whitespace-nowrap" onclick="event.stopPropagation()">
           <button type="button" class="btn-single-quote-print px-1.5 py-0.5 bg-slate-100 hover:bg-lime-600 hover:text-white text-slate-700 rounded text-[10px] font-bold transition-colors"
-                  data-idx="${idx}" title="BSK 표준 견적서 출력">
+                  data-idx="${realIdx}" title="BSK 표준 견적서 출력">
             인쇄
           </button>
         </td>
@@ -523,19 +643,27 @@ function bindQuotationEvents() {
     renderQuotationsView('quotationsSection');
   });
 
-  // 2. 실시간 키워드 필터링
+  // 2. 실시간 키워드 필터링 (200ms 디바운스 적용으로 버벅임 방지)
+  const handleLiveFilter = debounce((term) => {
+    if (!term) {
+      lastFilteredQuotes = cachedQuotations;
+    } else {
+      lastFilteredQuotes = cachedQuotations.filter(q => 
+        (q.part_no && q.part_no.toLowerCase().includes(term)) ||
+        (q.cname && q.cname.toLowerCase().includes(term)) ||
+        (q.contact && q.contact.toLowerCase().includes(term)) ||
+        (q.sales && q.sales.toLowerCase().includes(term)) ||
+        (q.mfg && q.mfg.toLowerCase().includes(term)) ||
+        (q.quote_no && q.quote_no.toLowerCase().includes(term))
+      );
+    }
+    quotePage = 1;
+    updateQuoteCurrentPage();
+    updateSummaries(lastFilteredQuotes);
+  }, 200);
+
   liveFilter?.addEventListener("input", (e) => {
-    const term = e.target.value.toLowerCase().trim();
-    const filtered = cachedQuotations.filter(q => 
-      (q.part_no && q.part_no.toLowerCase().includes(term)) ||
-      (q.cname && q.cname.toLowerCase().includes(term)) ||
-      (q.contact && q.contact.toLowerCase().includes(term)) ||
-      (q.sales && q.sales.toLowerCase().includes(term)) ||
-      (q.mfg && q.mfg.toLowerCase().includes(term)) ||
-      (q.quote_no && q.quote_no.toLowerCase().includes(term))
-    );
-    if (tbody) tbody.innerHTML = generateTableRows(filtered);
-    updateSummaries(filtered);
+    handleLiveFilter(e.target.value.toLowerCase().trim());
   });
 
   // 3. 전체 선택 체크박스
@@ -563,7 +691,7 @@ function bindQuotationEvents() {
     const row = e.target.closest("tr[data-quote-idx]");
     if (!row) return;
     const idx = parseInt(row.getAttribute("data-quote-idx"), 10);
-    const item = cachedQuotations[idx];
+    const item = lastFilteredQuotes[idx] || cachedQuotations[idx];
     if (item) {
       openLegacyQuotationModal(item.quote_no, item);
     }
@@ -575,7 +703,7 @@ function bindQuotationEvents() {
     if (!btn) return;
     e.stopPropagation();
     const idx = parseInt(btn.getAttribute("data-idx"), 10);
-    const item = cachedQuotations[idx];
+    const item = lastFilteredQuotes[idx] || cachedQuotations[idx];
     if (item) {
       openLegacyQuotationModal(item.quote_no, item);
     }
@@ -584,7 +712,9 @@ function bindQuotationEvents() {
   // 7. 상단 [REPORT] 버튼 클릭
   btnReport?.addEventListener("click", () => {
     if (selectedQuoteIndexes.size === 0) {
-      if (cachedQuotations.length > 0) {
+      if (lastFilteredQuotes.length > 0) {
+        openLegacyQuotationModal(lastFilteredQuotes[0].quote_no, lastFilteredQuotes[0]);
+      } else if (cachedQuotations.length > 0) {
         openLegacyQuotationModal(cachedQuotations[0].quote_no, cachedQuotations[0]);
       } else {
         alert("출력할 견적 내역이 없습니다.");
@@ -592,7 +722,7 @@ function bindQuotationEvents() {
       return;
     }
     const firstSelectedIdx = Array.from(selectedQuoteIndexes)[0];
-    const item = cachedQuotations[firstSelectedIdx];
+    const item = lastFilteredQuotes[firstSelectedIdx] || cachedQuotations[firstSelectedIdx];
     if (item) {
       openLegacyQuotationModal(item.quote_no, item);
     }
@@ -605,7 +735,7 @@ function bindQuotationEvents() {
 
   // 9. [Excel 다운로드] 버튼 클릭
   btnExcel?.addEventListener("click", () => {
-    exportQuotationsToCsv(cachedQuotations);
+    exportQuotationsToCsv(lastFilteredQuotes.length > 0 ? lastFilteredQuotes : cachedQuotations);
   });
 }
 

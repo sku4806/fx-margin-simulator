@@ -505,15 +505,134 @@ function updateGrandSummaries(items) {
   }
 }
 
-export function renderInventoryUI(items, activeTab, onEdit, onDelete, onSplit, canEdit) {
-  const countEl = document.getElementById('itemCount');
-  if (countEl) countEl.innerText = `총 ${items.length.toLocaleString()}건`;
-  updateGrandSummaries(items);
+let currentPage = 1;
+let pageSize = 50;
+let lastFilteredItems = [];
+let lastActiveTab = 'sales';
+let lastCanEdit = false;
+let lastOnEdit = null;
+let lastOnDelete = null;
+let lastOnSplit = null;
 
-  renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit);
-  renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit);
+export function renderInventoryUI(items, activeTab, onEdit, onDelete, onSplit, canEdit) {
+  lastFilteredItems = items || [];
+  lastActiveTab = activeTab;
+  lastCanEdit = canEdit;
+  lastOnEdit = onEdit;
+  lastOnDelete = onDelete;
+  lastOnSplit = onSplit;
+
+  const countEl = document.getElementById('itemCount');
+  if (countEl) countEl.innerText = `총 ${lastFilteredItems.length.toLocaleString()}건`;
+  
+  // 전체 필터링된 데이터 기준 그랜드 서머리 집계
+  updateGrandSummaries(lastFilteredItems);
+
+  // 현재 페이지 렌더링
+  renderCurrentPage();
   syncQuotationPermissionUI(canEdit);
 }
+
+function renderCurrentPage() {
+  const total = lastFilteredItems.length;
+  const totalPages = pageSize === 'ALL' ? 1 : Math.max(1, Math.ceil(total / pageSize));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+
+  const pagedItems = pageSize === 'ALL'
+    ? lastFilteredItems
+    : lastFilteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  renderDesktopTable(pagedItems, lastActiveTab, lastOnEdit, lastOnDelete, lastOnSplit, lastCanEdit);
+
+  // 모바일 화면(768px 미만)에서만 카드 DOM 생성하여 데스크탑 메모리 50% 절감
+  if (window.innerWidth < 768) {
+    renderMobileCards(pagedItems, lastActiveTab, lastOnEdit, lastOnDelete, lastOnSplit, lastCanEdit);
+  } else {
+    const cardBox = document.getElementById('inventoryCardContainer');
+    if (cardBox) cardBox.innerHTML = '';
+  }
+
+  renderPagination(total, totalPages);
+}
+
+function renderPagination(total, totalPages) {
+  const container = document.getElementById('inventoryPagination');
+  if (!container) return;
+
+  if (total === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const startIdx = pageSize === 'ALL' ? 1 : (currentPage - 1) * pageSize + 1;
+  const endIdx = pageSize === 'ALL' ? total : Math.min(currentPage * pageSize, total);
+
+  // 페이지 버튼 생성 (최대 5개 표시)
+  let pageButtons = '';
+  const maxButtons = 5;
+  let startP = Math.max(1, currentPage - 2);
+  let endP = Math.min(totalPages, startP + maxButtons - 1);
+  if (endP - startP < maxButtons - 1) {
+    startP = Math.max(1, endP - maxButtons + 1);
+  }
+
+  for (let p = startP; p <= endP; p++) {
+    const isCurrent = (p === currentPage);
+    pageButtons += `
+      <button type="button" onclick="window.goToInventoryPage(${p})" 
+              class="w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition-colors ${isCurrent ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'}">
+        ${p}
+      </button>
+    `;
+  }
+
+  container.innerHTML = `
+    <div class="flex items-center gap-2 text-slate-500 text-[11px]">
+      <span class="font-bold text-slate-800">${startIdx.toLocaleString()} - ${endIdx.toLocaleString()}</span> / 전체 <strong class="text-indigo-900 font-black">${total.toLocaleString()}</strong>건
+      <span class="text-slate-300">|</span>
+      <span>${currentPage} / ${totalPages} 페이지</span>
+    </div>
+
+    <div class="flex items-center gap-1.5">
+      <button type="button" onclick="window.goToInventoryPage(${currentPage - 1})" 
+              ${currentPage <= 1 ? 'disabled class="px-2 py-1 bg-slate-100 text-slate-400 rounded-lg text-xs cursor-not-allowed"' : 'class="px-2 py-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-lg text-xs transition-colors cursor-pointer"'}>
+        ◀ 이전
+      </button>
+      
+      <div class="flex items-center gap-1">
+        ${pageButtons}
+      </div>
+
+      <button type="button" onclick="window.goToInventoryPage(${currentPage + 1})" 
+              ${currentPage >= totalPages ? 'disabled class="px-2 py-1 bg-slate-100 text-slate-400 rounded-lg text-xs cursor-not-allowed"' : 'class="px-2 py-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-lg text-xs transition-colors cursor-pointer"'}>
+        다음 ▶
+      </button>
+
+      <span class="text-slate-300 mx-1">|</span>
+
+      <select id="selectPageSize" onchange="window.setInventoryPageSize(this.value)" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700 outline-none cursor-pointer">
+        <option value="50" ${pageSize === 50 ? 'selected' : ''}>50개씩</option>
+        <option value="100" ${pageSize === 100 ? 'selected' : ''}>100개씩</option>
+        <option value="200" ${pageSize === 200 ? 'selected' : ''}>200개씩</option>
+        <option value="ALL" ${pageSize === 'ALL' ? 'selected' : ''}>전체 (${total})</option>
+      </select>
+    </div>
+  `;
+}
+
+window.goToInventoryPage = function(page) {
+  currentPage = page;
+  renderCurrentPage();
+  const tableEl = document.querySelector('.overflow-y-auto');
+  if (tableEl) tableEl.scrollTop = 0;
+};
+
+window.setInventoryPageSize = function(size) {
+  pageSize = (size === 'ALL') ? 'ALL' : parseInt(size, 10);
+  currentPage = 1;
+  renderCurrentPage();
+};
 
 function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit) {
   const thead = document.getElementById('inventoryTableHeader');

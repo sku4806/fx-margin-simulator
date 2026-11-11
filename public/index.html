@@ -12,6 +12,11 @@
   <style>
     input, select, button { -webkit-tap-highlight-color: transparent; }
     .word-keep { word-break: keep-all; }
+    /* 🚀 대용량 테이블 스크롤 가속 및 브라우저 오프스크린 렌더링 최적화 */
+    tbody tr {
+      content-visibility: auto;
+      contain-intrinsic-size: 1px 36px;
+    }
   </style>
 
 <style id="mobile-font-fix">
@@ -625,6 +630,9 @@
             <tbody id="inventoryTableBody" class="divide-y divide-slate-100 font-medium bg-white"></tbody>
           </table>
         </div>
+
+        <!-- 📄 재고 페이지네이션 컨트롤러 -->
+        <div id="inventoryPagination" class="flex flex-wrap items-center justify-between gap-2 pt-2 px-1 text-xs select-none"></div>
       </div>
 
     </div>
