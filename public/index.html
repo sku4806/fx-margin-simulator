@@ -969,6 +969,7 @@
         <button onclick="document.getElementById('changePasswordModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
       </div>
       <form id="changePasswordForm" class="space-y-3 text-xs">
+        <input type="text" name="username" autocomplete="username" class="hidden" aria-hidden="true" value="bsk-user" readonly>
         <div>
           <label class="text-slate-600 block mb-1 font-semibold">새로운 비밀번호 (6자리 이상)</label>
           <input type="password" id="newPasswordInput" required autocomplete="new-password" minlength="6" class="w-full p-2.5 border rounded-lg bg-slate-50 text-xs outline-none">
