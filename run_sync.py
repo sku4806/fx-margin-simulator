@@ -380,12 +380,92 @@ def sync_customers(conn, sb):
     print(f"✅ [legacy_customers] 총 {success_count}건 클라우드 동기화 완료!")
     return success_count
 
+def sync_bundled_files(conn):
+    """
+    5. Vercel 클라우드 및 오프라인용 정적 번들 데이터(PO 2,828건, 단가 이력 27,000건) 파일 갱신
+    """
+    print(f"\n📦 [5/5] Vercel 배포용 번들 데이터(PO 및 단가 이력) 갱신 시작...")
+    import legacy_mssql
+    import json
+    
+    # 1. PO 전체 내역
+    pos = legacy_mssql.query_purchase_orders(limit=10000)
+    for p_dir in ["api/data", "data"]:
+        os.makedirs(p_dir, exist_ok=True)
+        with open(os.path.join(p_dir, "purchase_orders.json"), "w", encoding="utf-8") as f:
+            json.dump(pos, f, ensure_ascii=False, default=float)
+    print(f"[*] purchase_orders.json: 총 {len(pos)}건 저장 완료")
+
+    # 2. 단가 이력 (매입/매출)
+    cur = conn.cursor(as_dict=True)
+    cur.execute("""
+        SELECT 
+            IDX as idx, INDT as in_date, INVOICENO as invoice_no, PARTNO as part_no, 
+            MFG as maker, INQTY as qty, Slup as sl_up, SlAmt as sl_amt, 
+            InRate as in_rate, Wup as w_up, WAmt as w_amt, Remark as remark
+        FROM DincomeFile
+        ORDER BY INDT DESC, IDX DESC
+    """)
+    incomes = []
+    for r in cur.fetchall():
+        incomes.append({
+            "idx": r["idx"],
+            "in_date": r["in_date"].strftime('%Y-%m-%d') if r.get("in_date") else "",
+            "invoice_no": clean_val(r["invoice_no"]),
+            "part_no": clean_val(r["part_no"]),
+            "maker": clean_val(r["maker"]),
+            "qty": int(r["qty"]) if r.get("qty") is not None else 0,
+            "sl_up": float(r["sl_up"]) if r.get("sl_up") is not None else 0.0,
+            "sl_amt": float(r["sl_amt"]) if r.get("sl_amt") is not None else 0.0,
+            "in_rate": float(r["in_rate"]) if r.get("in_rate") is not None else 0.0,
+            "w_up": float(r["w_up"]) if r.get("w_up") is not None else 0.0,
+            "w_amt": float(r["w_amt"]) if r.get("w_amt") is not None else 0.0,
+            "remark": clean_val(r["remark"])
+        })
+
+    cur.execute("""
+        SELECT 
+            r.IDX as idx, r.OUTDT as out_date, r.Partno as part_no, r.Mfg as maker, 
+            r.Qty as qty, r.InUP as in_up, r.OutUP as out_up, r.OutAmt as out_amt, 
+            r.MGN as mgn, r.Sales as sales_rep, c.Kname as customer_name, r.Remark as remark
+        FROM DReportFile r
+        LEFT JOIN CustomerFile c ON r.Custid = c.CID
+        ORDER BY r.OUTDT DESC, r.IDX DESC
+    """)
+    sales = []
+    for r in cur.fetchall():
+        out_amt = float(r["out_amt"]) if r.get("out_amt") is not None else 0.0
+        mgn = float(r["mgn"]) if r.get("mgn") is not None else 0.0
+        sales.append({
+            "idx": r["idx"],
+            "out_date": r["out_date"].strftime('%Y-%m-%d') if r.get("out_date") else "",
+            "part_no": clean_val(r["part_no"]),
+            "maker": clean_val(r["maker"]),
+            "qty": int(r["qty"]) if r.get("qty") is not None else 0,
+            "in_up": float(r["in_up"]) if r.get("in_up") is not None else 0.0,
+            "out_up": float(r["out_up"]) if r.get("out_up") is not None else 0.0,
+            "out_amt": out_amt,
+            "mgn": mgn,
+            "sales_rep": clean_val(r["sales_rep"]),
+            "customer_name": clean_val(r["customer_name"]),
+            "remark": clean_val(r["remark"]),
+            "mgn_rate": round(mgn / out_amt * 100, 2) if out_amt > 0 else 0.0
+        })
+
+    ph_data = {"incomes": incomes, "sales": sales}
+    for p_dir in ["api/data", "data"]:
+        with open(os.path.join(p_dir, "price_history.json"), "w", encoding="utf-8") as f:
+            json.dump(ph_data, f, ensure_ascii=False, default=float)
+    print(f"[*] price_history.json: 매입 {len(incomes)}건, 매출 {len(sales)}건 저장 완료")
+    print(f"✅ 번들 데이터 갱신 완료!")
+
 def main():
     parser = argparse.ArgumentParser(description="사내 MS-SQL -> Supabase 클라우드 동기화 브릿지")
     parser.add_argument("--only-inventory", action="store_true", help="재고(inventory_items)만 동기화")
     parser.add_argument("--only-quotations", action="store_true", help="견적(legacy_quotations)만 동기화")
     parser.add_argument("--only-unpaid", action="store_true", help="미수금(legacy_unpaid)만 동기화")
     parser.add_argument("--only-customers", action="store_true", help="거래처(legacy_customers)만 동기화")
+    parser.add_argument("--only-bundle", action="store_true", help="Vercel/오프라인용 정적 번들 JSON만 갱신")
     parser.add_argument("--full-quotations", action="store_true", help="견적 전체(1999년~현재) 동기화")
     parser.add_argument("--since", default="2020-01-01", help="견적 동기화 시작일 (기본: 2020-01-01)")
     args = parser.parse_args()
@@ -415,12 +495,15 @@ def main():
             sync_unpaid(conn, sb, min_date=min_date)
         elif args.only_customers:
             sync_customers(conn, sb)
+        elif args.only_bundle:
+            sync_bundled_files(conn)
         else:
             sync_inventory(conn, sb)
             min_date = None if args.full_quotations else args.since
             sync_quotations(conn, sb, min_date=min_date)
             sync_unpaid(conn, sb, min_date="2010-01-01")
             sync_customers(conn, sb)
+            sync_bundled_files(conn)
     finally:
         conn.close()
 

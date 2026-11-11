@@ -599,6 +599,93 @@ def create_sales_memo(item: MemoInput):
 # ========================================================
 # 🚢 발주(PO) 및 입고 예정(ETA) 조회 API (DPOFile 연동)
 # ========================================================
+_BUNDLED_PO_DATA = None
+_BUNDLED_PH_DATA = None
+
+def get_bundled_po_data():
+    global _BUNDLED_PO_DATA
+    if _BUNDLED_PO_DATA is None:
+        po_paths = [
+            os.path.join(BASE_DIR, "data", "purchase_orders.json"),
+            os.path.join(os.path.dirname(BASE_DIR), "data", "purchase_orders.json"),
+            os.path.join(BASE_DIR, "purchase_orders.json")
+        ]
+        for p in po_paths:
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        _BUNDLED_PO_DATA = json.load(f)
+                        break
+                except Exception as e:
+                    print(f"[WARN] Failed to load {p}: {e}")
+        if _BUNDLED_PO_DATA is None:
+            _BUNDLED_PO_DATA = []
+    return _BUNDLED_PO_DATA
+
+def get_bundled_ph_data():
+    global _BUNDLED_PH_DATA
+    if _BUNDLED_PH_DATA is None:
+        ph_paths = [
+            os.path.join(BASE_DIR, "data", "price_history.json"),
+            os.path.join(os.path.dirname(BASE_DIR), "data", "price_history.json"),
+            os.path.join(BASE_DIR, "price_history.json")
+        ]
+        for p in ph_paths:
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        _BUNDLED_PH_DATA = json.load(f)
+                        break
+                except Exception as e:
+                    print(f"[WARN] Failed to load {p}: {e}")
+        if _BUNDLED_PH_DATA is None:
+            _BUNDLED_PH_DATA = {"incomes": [], "sales": []}
+    return _BUNDLED_PH_DATA
+
+def filter_purchase_orders(
+    orders,
+    q: Optional[str] = None,
+    part_no: Optional[str] = None,
+    po_no: Optional[str] = None,
+    maker: Optional[str] = None,
+    status: Optional[str] = None,
+    sales_rep: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 150
+):
+    res = []
+    q_lower = q.strip().lower() if q and q.strip() else None
+    part_lower = part_no.strip().lower() if part_no and part_no.strip() else None
+    po_lower = po_no.strip().lower() if po_no and po_no.strip() else None
+    maker_lower = maker.strip().lower() if maker and maker.strip() else None
+    status_clean = status.strip().upper() if status and status.strip() and status != 'ALL' else None
+    sales_clean = sales_rep.strip().upper() if sales_rep and sales_rep.strip() and sales_rep != 'ALL' else None
+
+    for item in orders:
+        if status_clean and (item.get("status") or "").strip().upper() != status_clean:
+            continue
+        if part_lower and part_lower not in (item.get("part_no") or "").lower():
+            continue
+        if po_lower and po_lower not in (item.get("po_no") or "").lower():
+            continue
+        if maker_lower and maker_lower != (item.get("maker") or "").strip().lower():
+            continue
+        if sales_clean and sales_clean != (item.get("sales_rep") or "").strip().upper():
+            continue
+        if start_date and (item.get("po_dt") or "") < start_date:
+            continue
+        if end_date and (item.get("po_dt") or "") > f"{end_date} 23:59:59":
+            continue
+        if q_lower:
+            searchable = f"{item.get('part_no','')} {item.get('po_no','')} {item.get('maker','')} {item.get('supplier_name','')} {item.get('supplier_cname','')} {item.get('real_cust','')} {item.get('end_cust','')} {item.get('sales_rep','')} {item.get('remark','')}".lower()
+            if q_lower not in searchable:
+                continue
+        res.append(item)
+        if len(res) >= limit:
+            break
+    return res
+
 @app.get("/api/purchase-orders")
 def list_purchase_orders(
     q: Optional[str] = None,
@@ -625,38 +712,26 @@ def list_purchase_orders(
                 end_date=end_date,
                 limit=limit
             )
-            return {"status": "success", "total": len(rows), "orders": rows}
+            if rows is not None and len(rows) > 0:
+                return {"status": "success", "total": len(rows), "orders": rows}
         except Exception:
             pass
 
-    # 클라우드/Vercel 환경 샘플 발주 데이터
-    mock_orders = [
-        {
-            "idx": 4063, "po_dt": "2026-11-06", "po_no": "BK-TW-261106", "part_no": "EN25QH32B-104HIP2C (Tube)",
-            "maker": "ESMT", "qty": 100, "unit_price": 350.0, "amount": 35000.0, "currency": "\\",
-            "foreign_up": 350.0, "foreign_amount": 35000.0, "eta_date": "2026-11-11", "status": "PO",
-            "status_label": "입고대기(예정)", "sales_rep": "WILLIAM", "supplier_name": "투윈전자",
-            "supplier_cname": "TWIN ELECTRONICS CO.LTD", "real_cust": "화성시스템", "end_cust": "화성시스템",
-            "remark": "긴급 납품건", "pay_terms": "당월말 결제", "inrate": 0.0
-        },
-        {
-            "idx": 4062, "po_dt": "2026-09-01", "po_no": "20260901-0000059", "part_no": "W5500",
-            "maker": "WIZnet", "qty": 12500, "unit_price": 1.27, "amount": 15875.0, "currency": "US$",
-            "foreign_up": 1.27, "foreign_amount": 15875.0, "eta_date": "2026-10-14", "status": "PO",
-            "status_label": "입고대기(예정)", "sales_rep": "WILLIAM", "supplier_name": "위즈네트",
-            "supplier_cname": "WIZnet", "real_cust": "피플웍스", "end_cust": "피플웍스",
-            "remark": "통신모듈용", "pay_terms": "익월말 결제", "inrate": 1341.0
-        },
-        {
-            "idx": 4061, "po_dt": "2026-10-27", "po_no": "BK-SB261019", "part_no": "BL1117-33CX",
-            "maker": "S.BELLING", "qty": 2500, "unit_price": 36.0, "amount": 90000.0, "currency": "\\",
-            "foreign_up": 36.0, "foreign_amount": 90000.0, "eta_date": "2026-10-19", "status": "IN",
-            "status_label": "입고완료", "sales_rep": "ERIC", "supplier_name": "선화전자",
-            "supplier_cname": "선화전자", "real_cust": "에이스전자", "end_cust": "에이스전자",
-            "remark": "", "pay_terms": "익월말 결제", "inrate": 0.0
-        }
-    ]
-    return {"status": "success", "total": len(mock_orders), "orders": mock_orders}
+    # 클라우드/Vercel 및 백엔드 폴백: 번들된 DPOFile 2,828건 데이터 동적 필터링
+    all_orders = get_bundled_po_data()
+    filtered = filter_purchase_orders(
+        all_orders,
+        q=q,
+        part_no=part_no,
+        po_no=po_no,
+        maker=maker,
+        status=status,
+        sales_rep=sales_rep,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit
+    )
+    return {"status": "success", "total": len(filtered), "orders": filtered}
 
 @app.get("/api/purchase-orders/summary")
 def purchase_orders_summary():
@@ -664,30 +739,45 @@ def purchase_orders_summary():
         try:
             import legacy_mssql
             summary = legacy_mssql.get_purchase_orders_summary()
-            return {"status": "success", "summary": summary}
+            if summary and summary.get("total_count", 0) > 0:
+                return {"status": "success", "summary": summary}
         except Exception:
             pass
+
+    orders = get_bundled_po_data()
+    total_count = len(orders)
+    pending_orders = [o for o in orders if (o.get("status") or "").strip().upper() == "PO"]
+    pending_count = len(pending_orders)
+    pending_qty = sum(o.get("qty", 0) for o in pending_orders)
+    arrived_count = sum(1 for o in orders if (o.get("status") or "").strip().upper() == "IN")
+    cnl_count = sum(1 for o in orders if (o.get("status") or "").strip().upper() == "CNL")
+
+    recent_pending = [
+        {
+            "idx": o.get("idx"),
+            "po_dt": o.get("po_dt"),
+            "po_no": o.get("po_no"),
+            "part_no": o.get("part_no"),
+            "maker": o.get("maker"),
+            "qty": o.get("qty", 0),
+            "unit_price": o.get("unit_price", 0.0),
+            "eta_date": o.get("eta_date"),
+            "sales_rep": o.get("sales_rep"),
+            "real_cust": o.get("real_cust"),
+            "supplier_name": o.get("supplier_name")
+        }
+        for o in pending_orders[:10]
+    ]
 
     return {
         "status": "success",
         "summary": {
-            "total_count": 2828,
-            "pending_count": 16,
-            "pending_qty": 60698,
-            "arrived_count": 2761,
-            "cnl_count": 51,
-            "recent_pending_orders": [
-                {
-                    "idx": 4063, "po_dt": "2026-11-06", "po_no": "BK-TW-261106", "part_no": "EN25QH32B-104HIP2C (Tube)",
-                    "maker": "ESMT", "qty": 100, "unit_price": 350.0, "eta_date": "2026-11-11",
-                    "sales_rep": "WILLIAM", "real_cust": "화성시스템", "supplier_name": "투윈전자"
-                },
-                {
-                    "idx": 4062, "po_dt": "2026-09-01", "po_no": "20260901-0000059", "part_no": "W5500",
-                    "maker": "WIZnet", "qty": 12500, "unit_price": 1.27, "eta_date": "2026-10-14",
-                    "sales_rep": "WILLIAM", "real_cust": "피플웍스", "supplier_name": "위즈네트"
-                }
-            ]
+            "total_count": total_count,
+            "pending_count": pending_count,
+            "pending_qty": pending_qty,
+            "arrived_count": arrived_count,
+            "cnl_count": cnl_count,
+            "recent_pending_orders": recent_pending
         }
     }
 
@@ -696,37 +786,134 @@ def purchase_orders_summary():
 # ========================================================
 @app.get("/api/price-history")
 def price_history(part_no: str):
+    p_clean = part_no.strip() if part_no else ""
+    if not p_clean:
+        return {
+            "status": "success",
+            "data": {
+                "part_no": "",
+                "summary": {},
+                "purchases": [],
+                "sales": [],
+                "quotations": [],
+                "purchase_orders": []
+            }
+        }
+
     if not is_vercel:
         try:
             import legacy_mssql
-            data = legacy_mssql.get_part_price_history(part_no=part_no)
-            return {"status": "success", "data": data}
+            data = legacy_mssql.get_part_price_history(part_no=p_clean)
+            if data and (data.get("purchases") or data.get("sales") or data.get("quotations") or data.get("purchase_orders")):
+                return {"status": "success", "data": data}
         except Exception:
             pass
+
+    # 클라우드/Vercel 및 오프라인 폴백: 실데이터 번들 파일 및 Supabase 조회
+    ph = get_bundled_ph_data()
+    all_pos = get_bundled_po_data()
+    p_lower = p_clean.lower()
+
+    # 1. 매입 이력 (DincomeFile 번들에서 품번 매칭, 최신순 최대 50건)
+    purchases = [
+        p for p in ph.get("incomes", [])
+        if p_lower in (p.get("part_no") or "").lower()
+    ][:50]
+
+    # 2. 판매 및 마진 이력 (DReportFile 번들에서 품번 매칭, 최신순 최대 50건)
+    sales = [
+        s for s in ph.get("sales", [])
+        if p_lower in (s.get("part_no") or "").lower()
+    ][:50]
+
+    # 3. 발주 이력 (DPOFile 번들에서 품번 매칭, 최신순 최대 30건)
+    matching_pos = [
+        {
+            "idx": o.get("idx"),
+            "po_date": o.get("po_dt"),
+            "po_no": o.get("po_no"),
+            "part_no": o.get("part_no"),
+            "maker": o.get("maker"),
+            "qty": o.get("qty", 0),
+            "unit_price": o.get("unit_price", 0.0),
+            "amount": o.get("amount", 0.0),
+            "currency": o.get("currency", "KRW"),
+            "eta_date": o.get("eta_date"),
+            "status": o.get("status"),
+            "status_label": o.get("status_label") or ("입고대기(예정)" if o.get("status") == "PO" else ("입고완료" if o.get("status") == "IN" else o.get("status"))),
+            "sales_rep": o.get("sales_rep"),
+            "real_cust": o.get("real_cust"),
+            "supplier_name": o.get("supplier_name"),
+            "remark": o.get("remark")
+        }
+        for o in all_pos
+        if p_lower in (o.get("part_no") or "").lower()
+    ][:30]
+
+    # 4. 견적 이력 (Supabase legacy_quotations 실시간 쿼리)
+    quotations = []
+    if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+        try:
+            headers = {"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"}
+            r = requests.get(
+                f"{SUPABASE_URL}/rest/v1/legacy_quotations?part_name=ilike.*{p_clean}*&order=quote_date.desc&limit=50",
+                headers=headers,
+                timeout=5
+            )
+            if r.status_code == 200:
+                for row in r.json():
+                    quotations.append({
+                        "idx": row.get("legacy_idx") or 0,
+                        "quote_date": row.get("quote_date") or "",
+                        "quote_no": row.get("quote_no") or "",
+                        "maker": row.get("maker") or "",
+                        "customer_name": row.get("customer_name") or "",
+                        "sales_rep": row.get("sales_rep") or "",
+                        "part_no": row.get("part_name") or "",
+                        "qty": row.get("qty_int") or 0,
+                        "qunit": row.get("currency_unit") or "",
+                        "qp": float(row.get("quote_price") or 0.0),
+                        "amount": float(row.get("amount") or 0.0),
+                        "remark": row.get("remark") or ""
+                    })
+        except Exception as e:
+            print(f"[WARN] Failed to fetch quotations from Supabase: {e}")
+
+    # 종합 지표 실시간 계산
+    total_in_qty = sum(p.get("qty", 0) for p in purchases)
+    total_out_qty = sum(s.get("qty", 0) for s in sales)
+    pending_po_qty = sum(po.get("qty", 0) for po in matching_pos if (po.get("status") or "").strip().upper() == "PO")
+    margin_rates = [s.get("mgn_rate", 0.0) for s in sales if "mgn_rate" in s and s.get("mgn_rate") is not None]
+
+    latest_purchase = purchases[0] if purchases else None
+    latest_sale = sales[0] if sales else None
+    avg_margin = round(sum(margin_rates) / len(margin_rates), 1) if margin_rates else 0.0
+
+    summary = {
+        "latest_purchase_usd": latest_purchase["sl_up"] if latest_purchase else 0.0,
+        "latest_purchase_krw": latest_purchase["w_up"] if latest_purchase else 0.0,
+        "latest_purchase_date": latest_purchase["in_date"] if latest_purchase else "-",
+        "latest_sale_price": latest_sale["out_up"] if latest_sale else 0.0,
+        "latest_sale_date": latest_sale["out_date"] if latest_sale else "-",
+        "latest_margin_rate": latest_sale["mgn_rate"] if latest_sale else 0.0,
+        "avg_margin_rate": avg_margin,
+        "total_purchased_qty": total_in_qty,
+        "total_sold_qty": total_out_qty,
+        "pending_po_qty": pending_po_qty,
+        "purchase_count": len(purchases),
+        "sale_count": len(sales),
+        "quote_count": len(quotations),
+        "po_count": len(matching_pos)
+    }
 
     return {
         "status": "success",
         "data": {
-            "part_no": part_no,
-            "summary": {
-                "latest_purchase_usd": 1.27,
-                "latest_purchase_krw": 1703.0,
-                "latest_purchase_date": "2026-11-03",
-                "latest_sale_price": 2819.856,
-                "latest_sale_date": "2026-11-10",
-                "latest_margin_rate": 39.6,
-                "avg_margin_rate": 33.8,
-                "total_purchased_qty": 752772,
-                "total_sold_qty": 226483,
-                "pending_po_qty": 52500,
-                "purchase_count": 50,
-                "sale_count": 50,
-                "quote_count": 50,
-                "po_count": 30
-            },
-            "purchases": [],
-            "sales": [],
-            "quotations": [],
-            "purchase_orders": []
+            "part_no": p_clean,
+            "summary": summary,
+            "purchases": purchases,
+            "sales": sales,
+            "quotations": quotations,
+            "purchase_orders": matching_pos
         }
     }

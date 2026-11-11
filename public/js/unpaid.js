@@ -343,16 +343,16 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
       </div>
 
       <!-- 4. 실시간 검색 및 필터 툴바 -->
-      <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
         <!-- 검색창 -->
-        <div class="md:col-span-5 relative">
+        <div class="md:col-span-2 relative">
           <input type="text" id="unpaidLiveFilter" value="${activeSearchTerm}" placeholder="고객사명, 품번(Part#), PO번호, 담당자, 영업담당 검색..." 
                  class="w-full pl-7 pr-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-600 outline-none">
           <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
         </div>
 
         <!-- 영업담당자 드롭다운 필터 -->
-        <div class="md:col-span-2 flex items-center gap-1 text-xs">
+        <div class="flex items-center gap-1 text-xs">
           <span class="text-slate-500 font-bold whitespace-nowrap text-[11px]">담당:</span>
           <select id="unpaidSalesRepSelect" class="w-full bg-white text-slate-800 text-[11px] px-2 py-1.5 rounded-lg border border-slate-300 font-semibold outline-none cursor-pointer">
             <option value="ALL" ${activeSalesRep === 'ALL' ? 'selected' : ''}>(전체 영업사원)</option>
@@ -361,7 +361,7 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
         </div>
 
         <!-- 정렬 순서 -->
-        <div class="md:col-span-2 flex items-center gap-1 text-xs">
+        <div class="flex items-center gap-1 text-xs">
           <span class="text-slate-500 font-bold whitespace-nowrap text-[11px]">정렬:</span>
           <select id="unpaidSortSelect" class="w-full bg-white text-slate-800 text-[11px] px-2 py-1.5 rounded-lg border border-slate-300 font-semibold outline-none cursor-pointer">
             <option value="due_date_asc" ${activeSortBy === 'due_date_asc' ? 'selected' : ''}>결제예정일 빠른순</option>
@@ -369,13 +369,6 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
             <option value="amount_desc" ${activeSortBy === 'amount_desc' ? 'selected' : ''}>미수금액 큰순</option>
             <option value="out_date_desc" ${activeSortBy === 'out_date_desc' ? 'selected' : ''}>출하일자 최근순</option>
           </select>
-        </div>
-
-        <!-- 📄 잔액확인서/청구서 A4 발행 버튼 -->
-        <div class="md:col-span-3 flex items-center justify-end">
-          <button type="button" id="unpaidPrintSoaBtn" class="w-full px-3 py-1.5 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap">
-            <span>📄</span> <span>미수금 잔액확인서/청구서 발행</span>
-          </button>
         </div>
       </div>
 
@@ -683,22 +676,6 @@ function bindUnpaidEvents() {
   // 5. 엑셀 CSV 다운로드
   btnExcel?.addEventListener("click", () => {
     exportUnpaidToCsv(lastFilteredUnpaid.length > 0 ? lastFilteredUnpaid : cachedUnpaid);
-  });
-
-  // 6. 📄 미수금 잔액확인서/청구서 A4 발행
-  const btnPrintSoa = document.getElementById("unpaidPrintSoaBtn");
-  btnPrintSoa?.addEventListener("click", () => {
-    let items = lastFilteredUnpaid.length > 0 ? lastFilteredUnpaid : cachedUnpaid;
-    let targetCustomer = activeSearchTerm.trim();
-    if (targetCustomer && items.length > 0) {
-      const match = items.find(u => u.cname && u.cname.toLowerCase().includes(targetCustomer.toLowerCase()));
-      if (match) targetCustomer = match.cname;
-    } else if (items.length > 0) {
-      targetCustomer = items[0].cname;
-    }
-    if (window.openStatementOfAccount) {
-      window.openStatementOfAccount(targetCustomer, items);
-    }
   });
 }
 
