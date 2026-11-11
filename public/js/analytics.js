@@ -356,8 +356,24 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
 
   // 메모 자동 로드
   loadSalesMemos('ALL');
+
+  // DOM 이벤트 리스너 안전 바인딩 (인라인 핸들러 외 이중 보장)
+  const yrSelect = container.querySelector('#analyticsYearSelect');
+  if (yrSelect) {
+    yrSelect.addEventListener('change', (e) => {
+      window.switchAnalyticsYear(e.target.value);
+    });
+  }
+
+  const memoFilter = container.querySelector('#memoSalesFilter');
+  if (memoFilter) {
+    memoFilter.addEventListener('change', (e) => {
+      window.filterSalesMemos(e.target.value);
+    });
+  }
 }
 
+let allMemos = [];
 let cachedMemos = [];
 
 async function loadSalesMemos(rep = 'ALL') {
@@ -369,11 +385,21 @@ async function loadSalesMemos(rep = 'ALL') {
     const res = await fetch(url);
     const data = await res.json();
     if (data.status === 'success') {
-      cachedMemos = data.memos || [];
+      if (rep === 'ALL') {
+        allMemos = data.memos || [];
+        cachedMemos = allMemos;
+      } else {
+        cachedMemos = data.memos || [];
+      }
       renderMemoList(cachedMemos);
     }
   } catch (e) {
-    container.innerHTML = '<div class="text-slate-400 text-center py-4">메모 로드에 실패했습니다.</div>';
+    if (rep !== 'ALL' && allMemos.length > 0) {
+      const fallback = allMemos.filter(m => (m.sales_rep || '').toUpperCase() === rep.toUpperCase());
+      renderMemoList(fallback);
+    } else {
+      container.innerHTML = '<div class="text-slate-400 text-center py-4">메모 로드에 실패했습니다.</div>';
+    }
   }
 }
 
@@ -382,7 +408,7 @@ function renderMemoList(memos) {
   if (!container) return;
 
   if (!memos || memos.length === 0) {
-    container.innerHTML = '<div class="text-slate-400 text-center py-4">등록된 영업 활동 메모가 없습니다.</div>';
+    container.innerHTML = '<div class="text-slate-400 text-center py-6 font-medium">선택한 영업사원의 활동 메모가 없습니다.</div>';
     return;
   }
 
@@ -404,12 +430,23 @@ function renderMemoList(memos) {
 }
 
 window.filterSalesMemos = function(rep) {
+  if (rep === 'ALL') {
+    renderMemoList(allMemos);
+  } else {
+    const localFiltered = allMemos.filter(m => (m.sales_rep || '').toUpperCase() === rep.toUpperCase());
+    renderMemoList(localFiltered);
+  }
   loadSalesMemos(rep);
 };
 
 window.toggleMemoInputForm = function() {
   const box = document.getElementById('memoInputFormBox');
-  if (box) box.classList.toggle('hidden');
+  if (box) {
+    box.classList.toggle('hidden');
+    if (!box.classList.contains('hidden')) {
+      document.getElementById('newMemoText')?.focus();
+    }
+  }
 };
 
 window.saveNewSalesMemo = async function() {
@@ -432,8 +469,10 @@ window.saveNewSalesMemo = async function() {
     if (data.status === 'success') {
       document.getElementById('newMemoText').value = '';
       window.toggleMemoInputForm();
+      const newEntry = { sales_rep: rep, memo: text, input_date: date, update_date: date };
+      allMemos.unshift(newEntry);
       const currentRep = document.getElementById('memoSalesFilter')?.value || 'ALL';
-      loadSalesMemos(currentRep);
+      window.filterSalesMemos(currentRep);
     } else {
       alert("메모 등록 실패: " + (data.message || '오류 발생'));
     }
@@ -443,15 +482,17 @@ window.saveNewSalesMemo = async function() {
 };
 
 window.switchAnalyticsYear = function(year) {
+  currentYear = year;
   fetchSalesAnalytics(year).then(() => {
-    renderAnalyticsView();
+    renderAnalyticsView('analyticsSection');
   });
 };
 
 window.refreshSalesAnalytics = function() {
   const select = document.getElementById('analyticsYearSelect');
   const year = select ? select.value : currentYear;
+  currentYear = year;
   fetchSalesAnalytics(year).then(() => {
-    renderAnalyticsView();
+    renderAnalyticsView('analyticsSection');
   });
 };

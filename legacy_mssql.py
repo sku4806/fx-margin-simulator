@@ -450,21 +450,26 @@ def query_customers(search_query: Optional[str] = None, limit: int = 30) -> List
         cur = conn.cursor(as_dict=True)
         cur.execute(sql, tuple(params))
         rows = cur.fetchall()
-        conn.close()
 
         results = []
+        existing_names = set()
+
         for r in rows:
             kname = clean_val(r["kname"])
             cname = clean_val(r["cname"])
             contact = clean_val(r["contact_name"])
             title = clean_val(r["contact_title"])
             contact_display = f"{contact} {title}".strip() if contact else ""
+            display_name = kname or cname
+
+            if display_name:
+                existing_names.add(display_name.lower())
 
             results.append({
                 "cid": int(r["cid"]),
                 "kname": kname,
                 "cname": cname,
-                "display_name": kname or cname,
+                "display_name": display_name,
                 "tel": clean_val(r["tel"]) or clean_val(r["contact_tel"]),
                 "fax": clean_val(r["fax"]),
                 "address": clean_val(r["address"]),
@@ -475,6 +480,40 @@ def query_customers(search_query: Optional[str] = None, limit: int = 30) -> List
                 "contact_display": contact_display,
                 "mobile": clean_val(r["contact_mobile"])
             })
+
+        # 2. CustomerFile에 미등록된 재고 계약사/거래처(DincomeFile.Remark e.g. TOWS, CH Global 등) 추가 매칭
+        if search_query and len(results) < limit:
+            term = f"%{search_query.strip()}%"
+            cur.execute("""
+                SELECT DISTINCT TOP 10
+                    LTRIM(RTRIM(Remark)) as cust_name,
+                    LTRIM(RTRIM(INPUT_PERSON)) as rep
+                FROM DincomeFile
+                WHERE Remark LIKE %s AND LEN(LTRIM(RTRIM(Remark))) BETWEEN 2 AND 50
+            """, (term,))
+            for dr in cur.fetchall():
+                c_name = clean_val(dr["cust_name"])
+                if c_name and c_name.lower() not in existing_names:
+                    existing_names.add(c_name.lower())
+                    results.append({
+                        "cid": 0,
+                        "kname": c_name,
+                        "cname": c_name,
+                        "display_name": c_name,
+                        "tel": "",
+                        "fax": "",
+                        "address": "",
+                        "email": "",
+                        "sales_rep": clean_val(dr["rep"]) or "",
+                        "contact_name": "",
+                        "contact_title": "",
+                        "contact_display": "",
+                        "mobile": ""
+                    })
+                    if len(results) >= limit:
+                        break
+
+        conn.close()
         return results
     except Exception as e:
         print(f"[ERROR] query_customers 에러: {e}")
@@ -541,10 +580,10 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
                 COUNT(*) as order_count
             FROM DReportFile A
             INNER JOIN CUSTOMERFILE B ON A.CUSTID = B.CID
-            WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s
+            WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.OUTDT <= %s
             GROUP BY COALESCE(B.KNAME, B.CNAME, '기타')
             ORDER BY total_billing DESC
-        """, (f"{year}-01-01",))
+        """, (f"{year}-01-01", f"{year}-12-31"))
         top_cust_raw = cur.fetchall()
         top_customers = [
             {
@@ -561,10 +600,10 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
                 SUM(A.OutAmt) as total_billing,
                 COUNT(*) as item_count
             FROM DReportFile A
-            WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.Mfg IS NOT NULL AND LTRIM(RTRIM(A.Mfg)) <> ''
+            WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.OUTDT <= %s AND A.Mfg IS NOT NULL AND LTRIM(RTRIM(A.Mfg)) <> ''
             GROUP BY LTRIM(RTRIM(A.Mfg))
             ORDER BY total_billing DESC
-        """, (f"{year}-01-01",))
+        """, (f"{year}-01-01", f"{year}-12-31"))
         top_maker_raw = cur.fetchall()
         top_makers = [
             {
@@ -582,10 +621,10 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
                 SUM(COALESCE(A.MGN, 0)) as total_margin,
                 COUNT(*) as shipment_count
             FROM DReportFile A
-            WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.Sales IS NOT NULL AND LTRIM(RTRIM(A.Sales)) <> ''
+            WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.OUTDT <= %s AND A.Sales IS NOT NULL AND LTRIM(RTRIM(A.Sales)) <> ''
             GROUP BY LTRIM(RTRIM(A.Sales))
             ORDER BY total_billing DESC
-        """, (f"{year}-01-01",))
+        """, (f"{year}-01-01", f"{year}-12-31"))
         sales_raw = cur.fetchall()
         sales_reps = [
             {

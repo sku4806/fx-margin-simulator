@@ -41,15 +41,33 @@ export function attachCustomerAutocomplete(inputEl, onSelect) {
       const data = await res.json();
       if (data.status === 'success' && data.customers && data.customers.length > 0) {
         currentResults = data.customers;
-        renderResults(data.customers);
+        renderResults(data.customers, term);
       } else {
+        currentResults = [{
+          display_name: term.trim(),
+          kname: term.trim(),
+          cname: term.trim(),
+          sales_rep: ""
+        }];
         dropdown.innerHTML = `
-          <div class="px-3 py-2 text-slate-400 text-center text-[11px]">
-            일치하는 거래처가 없습니다.
+          <div class="px-3 py-1.5 text-slate-400 text-center text-[10px] border-b border-slate-100">
+            공식 거래처 마스터에 미등록된 고객사입니다.
+          </div>
+          <div class="cust-direct-item px-3 py-2 hover:bg-indigo-50/80 cursor-pointer text-indigo-700 font-bold flex items-center justify-between transition-colors">
+            <span class="truncate">✨ "${term.trim()}" (직접 입력으로 적용)</span>
+            <span class="text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-black shrink-0">선택</span>
           </div>
         `;
         updatePosition();
         dropdown.classList.remove('hidden');
+
+        const directEl = dropdown.querySelector('.cust-direct-item');
+        if (directEl) {
+          directEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectCustomer(currentResults[0]);
+          });
+        }
       }
     } catch (e) {
       console.warn("거래처 검색 오류:", e);
@@ -57,9 +75,9 @@ export function attachCustomerAutocomplete(inputEl, onSelect) {
     }
   }
 
-  function renderResults(customers) {
+  function renderResults(customers, term = '') {
     updatePosition();
-    dropdown.innerHTML = customers.map((c, idx) => {
+    let html = customers.map((c, idx) => {
       const displayName = c.display_name || c.kname || c.cname;
       const subName = (c.cname && c.cname !== displayName) ? c.cname : '';
       const contact = c.contact_display || c.contact_name || '';
@@ -86,6 +104,18 @@ export function attachCustomerAutocomplete(inputEl, onSelect) {
       `;
     }).join('');
 
+    // 만약 사용자가 입력한 값과 완전히 일치하지 않으면 직접 입력 옵션도 하단에 추가
+    const exactMatch = customers.some(c => (c.display_name || c.kname || '').toLowerCase() === term.toLowerCase());
+    if (term && !exactMatch) {
+      html += `
+        <div class="cust-custom-direct px-3 py-1.5 hover:bg-slate-100 cursor-pointer text-slate-500 hover:text-indigo-600 text-[11px] font-medium border-t border-slate-200 flex items-center justify-between transition-colors">
+          <span>직접 입력값 적용: "${term}"</span>
+          <span class="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded font-bold">적용</span>
+        </div>
+      `;
+    }
+
+    dropdown.innerHTML = html;
     dropdown.classList.remove('hidden');
 
     dropdown.querySelectorAll('.cust-item').forEach(el => {
@@ -95,6 +125,14 @@ export function attachCustomerAutocomplete(inputEl, onSelect) {
         selectCustomer(currentResults[idx]);
       });
     });
+
+    const customDirectEl = dropdown.querySelector('.cust-custom-direct');
+    if (customDirectEl) {
+      customDirectEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectCustomer({ display_name: term, kname: term, cname: term });
+      });
+    }
   }
 
   function selectCustomer(cust) {

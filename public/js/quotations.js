@@ -387,69 +387,73 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
       
       <!-- 1. 레거시 세일즈 마스터 스타일 헤더 바 (올리브/그린 테마) -->
       <div class="rounded-xl overflow-hidden shadow-sm border border-[#4d5e33]">
-        <div class="bg-[#5b6f3c] text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
-          <div class="flex items-center gap-2.5">
-            <span class="text-lg">📋</span>
-            <div>
-              <h2 class="text-base sm:text-lg font-black tracking-wide uppercase font-sans text-white">QUOTATION LIST</h2>
-              <p class="text-[10px] text-lime-100 font-medium">세일즈 마스터 MS-SQL 및 Supabase 클라우드 실시간 동기화</p>
+        <div class="bg-[#5b6f3c] text-white p-3 sm:p-4 space-y-2.5">
+          <!-- 상단 1행: 타이틀 및 주요 액션 버튼 -->
+          <div class="flex flex-wrap items-center justify-between gap-2.5">
+            <div class="flex items-center gap-2.5">
+              <span class="text-xl">📋</span>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h2 class="text-base sm:text-lg font-black tracking-wide uppercase font-sans text-white">QUOTATION LIST</h2>
+                  <span class="text-[9px] bg-lime-400/20 text-lime-200 border border-lime-400/30 px-1.5 py-0.2 rounded font-bold">MS-SQL 연동</span>
+                </div>
+                <p class="text-[10px] text-lime-100 font-medium">세일즈 마스터 연동 견적 이력 및 BSK 견적서 재발행</p>
+              </div>
+            </div>
+
+            <!-- 우측 액션 버튼군 -->
+            <div class="flex items-center gap-1.5">
+              <button id="btnSearchQuotes" class="h-8 px-3 bg-white text-[#3f4f26] font-black text-xs rounded-lg hover:bg-lime-50 shadow-xs transition-colors flex items-center gap-1 cursor-pointer">
+                <span>🔍</span> 검색
+              </button>
+              <button id="btnQuoteReport" class="h-8 px-3 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer">
+                <span>📄</span> REPORT
+              </button>
+              <button id="btnQuoteResend" class="h-8 px-2.5 bg-[#44542c] hover:bg-[#384623] text-lime-100 font-bold text-xs rounded-lg border border-lime-500/40 shadow-xs transition-colors cursor-pointer">
+                REPORT_Resend
+              </button>
+              <button id="btnQuoteExcelExport" class="h-8 px-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer">
+                <span>📥</span> Excel
+              </button>
             </div>
           </div>
 
-          <!-- 상단 필터 및 버튼군 -->
-          <div class="flex flex-wrap items-center gap-2 text-xs">
-            <!-- 퀵 날짜 프리셋 버튼군 -->
-            <div class="flex items-center gap-0.5 bg-[#44542c] p-0.5 rounded-lg border border-lime-500/30">
-              <button type="button" onclick="window.setQuoteDatePreset('1M')" 
-                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '1M' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">1개월</button>
-              <button type="button" onclick="window.setQuoteDatePreset('3M')" 
-                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '3M' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">3개월</button>
-              <button type="button" onclick="window.setQuoteDatePreset('6M')" 
-                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '6M' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">6개월</button>
-              <button type="button" onclick="window.setQuoteDatePreset('1Y')" 
-                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '1Y' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">1년</button>
-              <button type="button" onclick="window.setQuoteDatePreset('ALL')" 
-                      class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === 'ALL' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">전체</button>
+          <!-- 하단 2행: 통합 필터 툴바 -->
+          <div class="bg-black/20 p-2 rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-2 flex-wrap">
+              <!-- 퀵 날짜 프리셋 버튼군 -->
+              <div class="flex items-center gap-0.5 bg-[#44542c] p-0.5 rounded-lg border border-lime-500/30">
+                <button type="button" onclick="window.setQuoteDatePreset('1M')" 
+                        class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '1M' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">1개월</button>
+                <button type="button" onclick="window.setQuoteDatePreset('3M')" 
+                        class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '3M' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">3개월</button>
+                <button type="button" onclick="window.setQuoteDatePreset('6M')" 
+                        class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '6M' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">6개월</button>
+                <button type="button" onclick="window.setQuoteDatePreset('1Y')" 
+                        class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === '1Y' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">1년</button>
+                <button type="button" onclick="window.setQuoteDatePreset('ALL')" 
+                        class="px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${currentPreset === 'ALL' ? 'bg-amber-400 text-slate-900 shadow-xs' : 'text-lime-200 hover:bg-[#384623]'}">전체</button>
+              </div>
+
+              <!-- DATE 필터 -->
+              <div class="flex items-center gap-1 bg-[#4d5e33] px-2 py-1 rounded-lg border border-lime-500/30">
+                <span class="text-[10px] font-bold text-lime-200 tracking-wider">기간:</span>
+                <input type="date" id="quoteStartDate" value="${currentStartDate}" 
+                       class="bg-white text-slate-800 text-[11px] px-1.5 py-0.5 rounded border border-slate-300 font-mono outline-none">
+                <span class="text-lime-200 text-[10px]">~</span>
+                <input type="date" id="quoteEndDate" value="${currentEndDate}" 
+                       class="bg-white text-slate-800 text-[11px] px-1.5 py-0.5 rounded border border-slate-300 font-mono outline-none">
+              </div>
+
+              <!-- MFG 드롭다운 필터 -->
+              <div class="flex items-center gap-1 bg-[#4d5e33] px-2 py-1 rounded-lg border border-lime-500/30">
+                <span class="text-[10px] font-bold text-lime-200 tracking-wider">제조사:</span>
+                <select id="quoteMfgSelect" class="bg-white text-slate-800 text-[11px] px-2 py-0.5 rounded border border-slate-300 outline-none max-w-[130px]">
+                  <option value="" ${currentMfg === '' ? 'selected' : ''}>(전체 MFG)</option>
+                  ${cachedMfgs.map(m => `<option value="${m}" ${currentMfg === m ? 'selected' : ''}>${m}</option>`).join('')}
+                </select>
+              </div>
             </div>
-
-            <!-- DATE 필터 -->
-            <div class="flex items-center gap-1 bg-[#4d5e33] px-2 py-1 rounded-lg border border-lime-500/30">
-              <span class="text-[10px] font-bold text-lime-200 tracking-wider">DATE:</span>
-              <input type="date" id="quoteStartDate" value="${currentStartDate}" 
-                     class="bg-white text-slate-800 text-[11px] px-1.5 py-0.5 rounded border border-slate-300 font-mono outline-none">
-              <span class="text-lime-200 text-[10px]">~</span>
-              <input type="date" id="quoteEndDate" value="${currentEndDate}" 
-                     class="bg-white text-slate-800 text-[11px] px-1.5 py-0.5 rounded border border-slate-300 font-mono outline-none">
-            </div>
-
-            <!-- MFG 드롭다운 필터 -->
-            <div class="flex items-center gap-1 bg-[#4d5e33] px-2 py-1 rounded-lg border border-lime-500/30">
-              <span class="text-[10px] font-bold text-lime-200 tracking-wider">MFG:</span>
-              <select id="quoteMfgSelect" class="bg-white text-slate-800 text-[11px] px-2 py-0.5 rounded border border-slate-300 outline-none max-w-[120px]">
-                <option value="" ${currentMfg === '' ? 'selected' : ''}>(전체 MFG)</option>
-                ${cachedMfgs.map(m => `<option value="${m}" ${currentMfg === m ? 'selected' : ''}>${m}</option>`).join('')}
-              </select>
-            </div>
-
-            <!-- 검색 버튼 -->
-            <button id="btnSearchQuotes" class="px-3 py-1.5 bg-white text-[#3f4f26] font-black text-xs rounded-lg hover:bg-lime-50 shadow-sm transition-colors flex items-center gap-1 cursor-pointer">
-              <span>🔍</span> 검색
-            </button>
-
-            <!-- REPORT (선택 건 견적서 출력) -->
-            <button id="btnQuoteReport" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer">
-              <span>📄</span> REPORT
-            </button>
-
-            <!-- REPORT_Resend -->
-            <button id="btnQuoteResend" class="px-2.5 py-1.5 bg-[#44542c] hover:bg-[#384623] text-lime-100 font-bold text-xs rounded-lg border border-lime-500/40 shadow-sm transition-colors cursor-pointer">
-              REPORT_Resend
-            </button>
-
-            <!-- 엑셀 다운로드 -->
-            <button id="btnQuoteExcelExport" class="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer">
-              <span>📥</span> Excel
-            </button>
           </div>
         </div>
       </div>

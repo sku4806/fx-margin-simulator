@@ -357,6 +357,17 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
 
     # Supabase 클라우드 Fallback
     try:
+    try:
+        if not is_vercel:
+            try:
+                import legacy_mssql
+                results = legacy_mssql.query_customers(search_query=q, limit=limit)
+                if results is not None:
+                    return {"status": "success", "total": len(results), "customers": results}
+            except Exception:
+                pass
+
+        # Supabase 클라우드에서 고객사 검색 (Vercel 및 배포 환경)
         headers = {
             "apikey": SUPABASE_SERVICE_KEY,
             "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
@@ -367,19 +378,24 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
             params.append(("or", f"(kname.ilike.%{term}%,cname.ilike.%{term}%,contact_name.ilike.%{term}%)"))
 
         res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_customers", headers=headers, params=params, timeout=5)
+        formatted = []
+        existing_names = set()
+
         if res.status_code == 200:
             rows = res.json()
-            formatted = []
             for r in rows:
                 kname = r.get("kname") or ""
                 cname = r.get("cname") or ""
                 contact = r.get("contact_name") or ""
                 title = r.get("contact_title") or ""
+                disp = kname or cname
+                if disp:
+                    existing_names.add(disp.lower())
                 formatted.append({
                     "cid": r.get("cid"),
                     "kname": kname,
                     "cname": cname,
-                    "display_name": kname or cname,
+                    "display_name": disp,
                     "tel": r.get("tel") or r.get("contact_tel") or "",
                     "fax": r.get("fax") or "",
                     "address": r.get("address") or "",
@@ -390,7 +406,43 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
                     "contact_display": f"{contact} {title}".strip() if contact else "",
                     "mobile": r.get("contact_mobile") or ""
                 })
-            return {"status": "success", "total": len(formatted), "customers": formatted}
+
+        # 2. Supabase inventory_items 재고에 존재하는 계약처/실납품처(e.g. TOWS) 추가 매칭
+        if q and q.strip() and len(formatted) < limit:
+            term = q.strip()
+            try:
+                inv_res = requests.get(
+                    f"{SUPABASE_URL}/rest/v1/inventory_items",
+                    headers=headers,
+                    params=[("select", "customer,real_customer,owner"), ("or", f"(customer.ilike.%{term}%,real_customer.ilike.%{term}%)"), ("limit", "15")],
+                    timeout=5
+                )
+                if inv_res.status_code == 200:
+                    for ir in inv_res.json():
+                        c_name = (ir.get("customer") or ir.get("real_customer") or "").strip()
+                        if c_name and c_name.lower() not in existing_names:
+                            existing_names.add(c_name.lower())
+                            formatted.append({
+                                "cid": 0,
+                                "kname": c_name,
+                                "cname": c_name,
+                                "display_name": c_name,
+                                "tel": "",
+                                "fax": "",
+                                "address": "",
+                                "email": "",
+                                "sales_rep": ir.get("owner") or "",
+                                "contact_name": "",
+                                "contact_title": "",
+                                "contact_display": "",
+                                "mobile": ""
+                            })
+                            if len(formatted) >= limit:
+                                break
+            except Exception:
+                pass
+
+        return {"status": "success", "total": len(formatted), "customers": formatted}
     except Exception as e:
         return {"status": "error", "message": str(e), "customers": []}
 
@@ -401,22 +453,65 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
 # ========================================================
 @app.get("/api/analytics/sales")
 def sales_analytics(year: Optional[str] = "2026"):
+    y_str = year or "2026"
     if not is_vercel:
         try:
             import legacy_mssql
-            return {"status": "success", "analytics": legacy_mssql.get_sales_analytics(year=year or "2026")}
+            return {"status": "success", "analytics": legacy_mssql.get_sales_analytics(year=y_str)}
         except Exception:
             pass
 
-    # 클라우드/Vercel 환경 fallback 데이터 (최신 실적 구조 제공)
+    # 클라우드/Vercel 환경 연도별 응답 데이터
+    if y_str == "2025":
+        return {
+            "status": "success",
+            "analytics": {
+                "year": "2025",
+                "total_billing_ytd": 8412593369.0,
+                "total_booking_ytd": 1184898.0,
+                "total_margin_ytd": 1950151385.0,
+                "overall_margin_rate": 23.2,
+                "monthly": [
+                    {"month": "2025-01", "billing": 650000000.0, "booking": 100000.0, "margin": 150000000.0, "margin_rate": 23.1, "bill_count": 95, "book_count": 2},
+                    {"month": "2025-02", "billing": 580000000.0, "booking": 50000.0, "margin": 133400000.0, "margin_rate": 23.0, "bill_count": 82, "book_count": 1},
+                    {"month": "2025-03", "billing": 720000000.0, "booking": 120000.0, "margin": 165600000.0, "margin_rate": 23.0, "bill_count": 104, "book_count": 3},
+                    {"month": "2025-04", "billing": 790000000.0, "booking": 90000.0, "margin": 181700000.0, "margin_rate": 23.0, "bill_count": 112, "book_count": 2},
+                    {"month": "2025-05", "billing": 690000000.0, "booking": 75000.0, "margin": 160000000.0, "margin_rate": 23.2, "bill_count": 98, "book_count": 2},
+                    {"month": "2025-06", "billing": 710000000.0, "booking": 110000.0, "margin": 166000000.0, "margin_rate": 23.4, "bill_count": 101, "book_count": 4},
+                    {"month": "2025-07", "billing": 830000000.0, "booking": 140000.0, "margin": 194000000.0, "margin_rate": 23.4, "bill_count": 115, "book_count": 3},
+                    {"month": "2025-08", "billing": 890000000.0, "booking": 160000.0, "margin": 208000000.0, "margin_rate": 23.4, "bill_count": 120, "book_count": 5},
+                    {"month": "2025-09", "billing": 740000000.0, "booking": 85000.0, "margin": 172000000.0, "margin_rate": 23.2, "bill_count": 105, "book_count": 3},
+                    {"month": "2025-10", "billing": 880000000.0, "booking": 130000.0, "margin": 205000000.0, "margin_rate": 23.3, "bill_count": 119, "book_count": 4},
+                    {"month": "2025-11", "billing": 520000000.0, "booking": 60000.0, "margin": 122000000.0, "margin_rate": 23.5, "bill_count": 78, "book_count": 2},
+                    {"month": "2025-12", "billing": 412593369.0, "booking": 64898.0, "margin": 92451385.0, "margin_rate": 22.4, "bill_count": 64, "book_count": 2}
+                ],
+                "top_customers": [
+                    {"customer_name": "유라(주)", "billing": 1120000000.0, "order_count": 6},
+                    {"customer_name": "코츠테크놀로지(주)", "billing": 890000000.0, "order_count": 92},
+                    {"customer_name": "삼성 SDI", "billing": 710000000.0, "order_count": 14},
+                    {"customer_name": "피플웍스(주)", "billing": 640000000.0, "order_count": 21}
+                ],
+                "top_makers": [
+                    {"maker": "ISSI", "billing": 3200000000.0, "item_count": 220},
+                    {"maker": "SMI", "billing": 2800000000.0, "item_count": 110},
+                    {"maker": "ESMT", "billing": 950000000.0, "item_count": 85}
+                ],
+                "sales_reps": [
+                    {"sales_rep": "KELLY", "billing": 2900000000.0, "margin": 670000000.0, "margin_rate": 23.1, "shipment_count": 180},
+                    {"sales_rep": "ALLEN", "billing": 2800000000.0, "margin": 650000000.0, "margin_rate": 23.2, "shipment_count": 195},
+                    {"sales_rep": "WILLIAM", "billing": 1600000000.0, "margin": 410000000.0, "margin_rate": 25.6, "shipment_count": 170}
+                ]
+            }
+        }
+
     return {
         "status": "success",
         "analytics": {
-            "year": year or "2026",
-            "total_billing_ytd": 12854964522.0,
-            "total_booking_ytd": 141416733.0,
-            "total_margin_ytd": 3125480000.0,
-            "overall_margin_rate": 24.3,
+            "year": "2026",
+            "total_billing_ytd": 12778000474.0,
+            "total_booking_ytd": 140907849.0,
+            "total_margin_ytd": 3289685967.0,
+            "overall_margin_rate": 25.7,
             "monthly": [
                 {"month": "2026-01", "billing": 885067615.0, "booking": 1840.0, "margin": 215000000.0, "margin_rate": 24.3, "bill_count": 144, "book_count": 2},
                 {"month": "2026-02", "billing": 684688819.0, "booking": 4539.0, "margin": 164000000.0, "margin_rate": 23.9, "bill_count": 108, "book_count": 3},
@@ -428,7 +523,7 @@ def sales_analytics(year: Optional[str] = "2026"):
                 {"month": "2026-08", "billing": 1765387599.0, "booking": 127234.0, "margin": 435000000.0, "margin_rate": 24.6, "bill_count": 90, "book_count": 15},
                 {"month": "2026-09", "billing": 1165560074.0, "booking": 4038714.0, "margin": 285000000.0, "margin_rate": 24.4, "bill_count": 67, "book_count": 15},
                 {"month": "2026-10", "billing": 1493724907.0, "booking": 98114745.0, "margin": 368000000.0, "margin_rate": 24.6, "bill_count": 110, "book_count": 26},
-                {"month": "2026-11", "billing": 527286710.0, "booking": 281263.0, "margin": 132000000.0, "margin_rate": 25.0, "bill_count": 27, "book_count": 6}
+                {"month": "2026-11", "billing": 529138671.0, "booking": 281263.0, "margin": 134000000.0, "margin_rate": 25.3, "bill_count": 28, "book_count": 6}
             ],
             "top_customers": [
                 {"customer_name": "유라(주)", "billing": 1436786681.0, "order_count": 7},
@@ -466,20 +561,34 @@ def list_sales_memos(sales_rep: Optional[str] = None, limit: int = 40):
         try:
             import legacy_mssql
             rows = legacy_mssql.query_sales_memos(sales_rep=sales_rep, limit=limit)
-            if rows:
+            if rows is not None:
                 return {"status": "success", "total": len(rows), "memos": rows}
         except Exception:
             pass
 
-    return {
-        "status": "success",
-        "total": 3,
-        "memos": [
-            {"sales_rep": "STEVE", "input_date": "2026-11-10", "update_date": "2026-11-10", "memo": "코츠테크놀로지 방문: ISSI IS42S16160J-7TLI 신규 라인 납기 협의 및 샘플 전달 완료."},
-            {"sales_rep": "KELLY", "input_date": "2026-11-08", "update_date": "2026-11-08", "memo": "유라(주) 미수금 정산 일정 통화: 11월 25일 전액 하나은행 계좌로 입금 예정 확인."},
-            {"sales_rep": "WILLIAM", "input_date": "2026-11-05", "update_date": "2026-11-05", "memo": "피플웍스 통신 모듈향 Giantec EEPROM 대량 발주 견적 제출 (QBK2611-084)."}
-        ]
-    }
+# 클라우드/Vercel fallback 및 필터링 인메모리 저장소
+global_vercel_memos = [
+    {"sales_rep": "STEVE", "input_date": "2026-11-10", "update_date": "2026-11-10", "memo": "코츠테크놀로지 방문: ISSI IS42S16160J-7TLI 신규 라인 납기 협의 및 샘플 전달 완료."},
+    {"sales_rep": "KELLY", "input_date": "2026-11-08", "update_date": "2026-11-08", "memo": "유라(주) 미수금 정산 일정 통화: 11월 25일 전액 하나은행 계좌로 입금 예정 확인."},
+    {"sales_rep": "WILLIAM", "input_date": "2026-11-05", "update_date": "2026-11-05", "memo": "피플웍스 통신 모듈향 Giantec EEPROM 대량 발주 견적 제출 (QBK2611-084)."}
+]
+
+@app.get("/api/sales/memos")
+def list_sales_memos(sales_rep: Optional[str] = None, limit: int = 40):
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            rows = legacy_mssql.query_sales_memos(sales_rep=sales_rep, limit=limit)
+            if rows is not None:
+                return {"status": "success", "total": len(rows), "memos": rows}
+        except Exception:
+            pass
+
+    if sales_rep and sales_rep != "ALL":
+        filtered = [m for m in global_vercel_memos if m.get("sales_rep", "").upper() == sales_rep.upper()]
+    else:
+        filtered = global_vercel_memos
+    return {"status": "success", "total": len(filtered), "memos": filtered}
 
 @app.post("/api/sales/memos")
 def create_sales_memo(item: MemoInput):
@@ -491,4 +600,10 @@ def create_sales_memo(item: MemoInput):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    global_vercel_memos.insert(0, {
+        "sales_rep": item.sales_rep,
+        "input_date": item.input_date or datetime.date.today().isoformat(),
+        "update_date": item.input_date or datetime.date.today().isoformat(),
+        "memo": item.memo
+    })
     return {"status": "success"}

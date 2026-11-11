@@ -118,7 +118,7 @@ export function openInvoiceModal(item) {
                 <span class="font-mono text-[9px] text-slate-500">등록번호: 214-87-54877</span>
               </div>
               <div class="font-black text-xs text-slate-900">상호: (주)빅샤인코리아</div>
-              <div class="text-[10px] text-slate-700">대표자: 이동인</div>
+              <div class="text-[10px] text-slate-700">대표자: 이동일</div>
               <div class="text-[10px] text-slate-600">사업장: 경기도 성남시 분당구 성남대로 779번길 18</div>
               <div class="text-[10px] text-slate-600">업태: 도소매 | 종목: 전자부품, 반도체</div>
               <div class="text-[10px] text-slate-600">TEL: 031-711-8881 | FAX: 031-711-8174</div>
