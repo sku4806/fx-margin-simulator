@@ -204,22 +204,31 @@
       </div>
     </div>
 
-    <!-- 4. 전문화 입력 폼팩터 -->
-    <div id="formSection" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-      <div class="border-b pb-2.5 flex flex-row flex-wrap items-center sm:flex-row justify-between items-start sm:items-center gap-2">
-        <div>
-          <h2 id="formTitle" class="font-bold text-xs sm:text-base text-slate-900">수주 및 재고 배정 등록 (Sales Order Entry)</h2>
-          <p id="formSubtitle" class="text-[10px] sm:text-[11px] text-slate-400">공식 배정 물량, 협의 단가 및 Date Code를 설정합니다.</p>
+    <!-- 4. 전문화 입력 폼팩터 (접이식 아코디언) -->
+    <div id="formSection" class="bg-white p-3.5 sm:p-5 rounded-2xl shadow-sm border border-slate-200 transition-all">
+      <div class="flex flex-row flex-wrap items-center justify-between gap-2 cursor-pointer select-none" id="formSectionHeader" onclick="window.toggleFormSection && window.toggleFormSection()">
+        <div class="flex items-center gap-2.5">
+          <span id="formToggleIcon" class="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center text-xs font-black border border-indigo-200 transition-transform">➕</span>
+          <div>
+            <h2 id="formTitle" class="font-bold text-xs sm:text-base text-slate-900">수주 및 재고 배정 등록 (Sales Order Entry)</h2>
+            <p id="formSubtitle" class="text-[10px] sm:text-[11px] text-slate-400">신규 수주·재고 등록 시 클릭하여 폼을 펼치세요. (기존 데이터는 아래 표에서 클릭)</p>
+          </div>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <button type="button" id="openPackagingConfigBtn" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1 transition-colors whitespace-nowrap shadow-sm">
-            <span>📦</span> 라인별 포장기준 설정
+        <div class="flex items-center gap-2 shrink-0" onclick="event.stopPropagation()">
+          <button type="button" id="openPackagingConfigBtn" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1 transition-colors whitespace-nowrap shadow-sm">
+            <span>📦</span> 라인별 포장기준
           </button>
-          <button id="saveItemBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-sm whitespace-nowrap">
+          <button type="button" id="toggleFormSectionBtn" onclick="window.toggleFormSection && window.toggleFormSection()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3 py-1.5 rounded-lg border border-indigo-200 flex items-center gap-1.5 transition-colors whitespace-nowrap shadow-sm cursor-pointer">
+            <span id="toggleFormBtnText">➕ 신규 등록 폼 펼치기</span>
+          </button>
+          <button id="saveItemBtn" class="hidden text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-sm whitespace-nowrap">
             저장
           </button>
         </div>
       </div>
+
+      <!-- 접이식 폼 본문 컨테이너 -->
+      <div id="formSectionBody" class="hidden space-y-4 pt-3 border-t border-slate-100 mt-3">
 
       <div id="editingBanner" class="hidden p-2 bg-indigo-50 border border-indigo-200 rounded-lg flex justify-between items-center text-xs">
         <span id="editingBannerText" class="font-bold text-indigo-900 text-[11px]"></span>
@@ -490,7 +499,8 @@
 
       <!-- 🕒 감사 로그 타임라인 슬롯 -->
       <div id="auditHistoryContainer" class="hidden"></div>
-    </div>
+      </div> <!-- formSectionBody end -->
+    </div> <!-- formSection end -->
 
     <!-- 5. 마스터 리스트 -->
     <div class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-2.5 sm:space-y-4">

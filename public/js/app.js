@@ -785,6 +785,30 @@ function bindTabSwitch() {
   });
 }
 
+// 📦 수주등록 폼 접이식(Accordion) 토글
+window.toggleFormSection = function(forceOpen = null) {
+  const body = document.getElementById('formSectionBody');
+  const icon = document.getElementById('formToggleIcon');
+  const text = document.getElementById('toggleFormBtnText');
+  const saveBtn = document.getElementById('saveItemBtn');
+  if (!body) return;
+
+  const willOpen = (forceOpen !== null) ? forceOpen : body.classList.contains('hidden');
+  if (willOpen) {
+    body.classList.remove('hidden');
+    if (icon) icon.innerText = '➖';
+    if (text) text.innerText = '폼 닫기';
+    if (saveBtn && (typeof isCsOrAdminUser === 'function' ? isCsOrAdminUser() : false)) {
+      saveBtn.classList.remove('hidden');
+    }
+  } else {
+    body.classList.add('hidden');
+    if (icon) icon.innerText = '➕';
+    if (text) text.innerText = '➕ 신규 등록 폼 펼치기';
+    if (saveBtn) saveBtn.classList.add('hidden');
+  }
+};
+
 function updateFormVisibility(canEdit) {
   const formSection = document.getElementById('formSection');
   const formTitle = document.getElementById('formTitle');
@@ -799,9 +823,15 @@ function updateFormVisibility(canEdit) {
   }
 
   formSection?.classList.remove('hidden');
-  if (formTitle) formTitle.innerText = "수주 등록 / 재고 배정 및 출하·정산 관리";
-  if (formSubtitle) formSubtitle.innerText = "고객사 수주 배정 물량, 단가, 출고(송장) 및 세금계산서/채권 만기를 통합 설정합니다.";
+  if (formTitle) formTitle.innerText = "수주 및 재고 배정 등록 (Sales Order Entry)";
+  if (formSubtitle) formSubtitle.innerText = "신규 수주·재고 등록 시 클릭하여 폼을 펼치세요. (기존 데이터는 아래 표에서 클릭)";
   if (saveBtn) saveBtn.innerText = "정보 저장 및 업데이트";
+
+  // 기본적으로 접힌 상태로 두어 테이블 뷰를 즉시 확보
+  const body = document.getElementById('formSectionBody');
+  if (body && !editingItemId) {
+    window.toggleFormSection(false);
+  }
 
   salesFields.forEach(el => el.classList.remove('hidden'));
   fulfillmentFields.forEach(el => el.classList.remove('hidden'));
@@ -813,7 +843,6 @@ function updateFormVisibility(canEdit) {
       inp.classList.add('bg-slate-50', 'cursor-default');
     });
   } else {
-    if (saveBtn) saveBtn.classList.remove('hidden');
     document.querySelectorAll('#formSection input, #formSection select').forEach(inp => {
       inp.disabled = false;
       inp.classList.remove('bg-slate-50', 'cursor-default');
@@ -1195,6 +1224,8 @@ export function resetCurrentForm() {
   runEngine();
   if (activeTab === 'sales') {
     document.getElementById('formSection')?.classList.add('hidden');
+  } else {
+    window.toggleFormSection && window.toggleFormSection(false);
   }
 }
 
@@ -1340,6 +1371,8 @@ function updateFxDisplay() {
   runEngine();
   if (activeTab === 'sales') {
     document.getElementById('formSection')?.classList.add('hidden');
+  } else {
+    window.toggleFormSection && window.toggleFormSection(false);
   }
 }
 
@@ -1667,6 +1700,8 @@ async function saveCurrentForm() {
     }
 
     alert(`[${payload.part_name}] 데이터가 저장되었습니다.`);
+    resetCurrentForm();
+    window.toggleFormSection && window.toggleFormSection(false);
     await refreshInventory();
   } catch (err) {
     alert(" 저장 실패: " + err.message);

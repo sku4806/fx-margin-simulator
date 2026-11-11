@@ -363,7 +363,7 @@ function generateLegacyMasterRow(item) {
   const paymentStatus = item.paymentStatus || item.payment_status || '미수';
 
   return `
-    <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 우측 상세/수정 창 오픈" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+    <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 상단 견적 계산기에 품목 단가/수량 즉시 반영" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
       <td class="py-2.5 px-3 text-center align-middle no-print" onclick="event.stopPropagation()"><input type="checkbox" class="quote-select-checkbox rounded cursor-pointer w-3.5 h-3.5" value="${item.id}" onchange="updateSelectedQuoteCount()"></td><td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         ${getKindBadge(kind)}
       </td>
@@ -378,6 +378,7 @@ function generateLegacyMasterRow(item) {
         <div class="flex items-center gap-1.5">
           <span class="font-black text-indigo-950 truncate max-w-[180px]" title="${part}">${part}</span>
           <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${part.replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer" title="과거 매입·판매·견적 단가 이력 추적">📈</button>
+          <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer whitespace-nowrap" title="상단 고객사 제시 견적 계산기에 품목 단가/수량 즉시 반영">🧮 견적계산</button>
         </div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">MFG: <span class="font-bold text-slate-700">${mfg}</span></div>
       </td>
@@ -448,7 +449,7 @@ function generateFulfillmentRow(item, canEdit) {
     : ((typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false);
 
   return `
-    <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 우측 상세/수정 창 오픈" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+    <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 우측 상세 수주/출하 수정 드로어 오픈" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
       <td class="py-2.5 px-3 text-center align-middle no-print" onclick="event.stopPropagation()"><input type="checkbox" class="quote-select-checkbox rounded cursor-pointer w-3.5 h-3.5" value="${item.id}" onchange="updateSelectedQuoteCount()"></td>
       <!-- 1. 상태 / SALES -->
       <td class="py-2.5 px-1.5 text-center align-middle whitespace-nowrap">

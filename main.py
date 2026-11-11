@@ -33,29 +33,10 @@ def fetch_current_fx_rate() -> float:
     
     return CACHED_FX["rate"]
 
-class ProductInput(BaseModel):
-    part_number: str
-    unit_price_usd: float
-    shipping_fx_rate: float
-    target_margin_rate: float
-    msrp_krw: float
-
 @app.get("/api/fx-rate")
 def get_fx_rate():
     rate = fetch_current_fx_rate()
     return {"currency": "USD/KRW", "current_rate": rate}
-
-@app.get("/api/products")
-def list_products():
-    return []
-
-@app.post("/api/products")
-def create_product(item: ProductInput):
-    return {"status": "success"}
-
-@app.get("/api/simulate")
-def simulate_margin(part_number: str, sale_discount_rate: float = 0.0):
-    return {"status": "success", "part_number": part_number}
 
 # --- MS-SQL 레거시 세일즈 마스터 [frmQuotationSQL] 견적 연동 API ---
 @app.get("/api/quotations")

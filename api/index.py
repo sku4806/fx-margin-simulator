@@ -54,18 +54,6 @@ def get_fx_rate():
     rate = get_current_fx()
     return {"currency": "USD/KRW", "current_rate": rate}
 
-@app.get("/api/products")
-def list_products():
-    return []
-
-@app.post("/api/products")
-def create_product():
-    return {"status": "success"}
-
-@app.get("/api/simulate")
-def simulate(part_number: str, sale_discount_rate: float = 0.0):
-    return {"status": "success", "part_number": part_number}
-
 # ========================================================
 # 📋 Vercel Serverless Supabase 견적 이력 API (Service Key 권한 우회)
 # ========================================================

@@ -406,11 +406,8 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
               <button id="btnSearchQuotes" class="h-8 px-3 bg-white text-[#3f4f26] font-black text-xs rounded-lg hover:bg-lime-50 shadow-xs transition-colors flex items-center gap-1 cursor-pointer">
                 <span>🔍</span> 검색
               </button>
-              <button id="btnQuoteReport" class="h-8 px-3 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer">
-                <span>📄</span> REPORT
-              </button>
-              <button id="btnQuoteResend" class="h-8 px-2.5 bg-[#44542c] hover:bg-[#384623] text-lime-100 font-bold text-xs rounded-lg border border-lime-500/40 shadow-xs transition-colors cursor-pointer">
-                REPORT_Resend
+              <button id="btnQuoteReport" class="h-8 px-3 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer" title="선택된 견적서 상세 확인 및 BSK 공식 견적서(A4/PDF) 재발행">
+                <span>📄</span> REPORT (견적서 조회)
               </button>
               <button id="btnQuoteExcelExport" class="h-8 px-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer">
                 <span>📥</span> Excel
@@ -716,7 +713,6 @@ function bindQuotationEvents() {
   const selectMfg = document.getElementById("quoteMfgSelect");
   const liveFilter = document.getElementById("quoteLiveFilter");
   const btnReport = document.getElementById("btnQuoteReport");
-  const btnResend = document.getElementById("btnQuoteResend");
   const btnExcel = document.getElementById("btnQuoteExcelExport");
   const chkAll = document.getElementById("chkQuoteSelectAll");
   const tbody = document.getElementById("quotationTableBody");
@@ -837,12 +833,7 @@ function bindQuotationEvents() {
     }
   });
 
-  // 8. [REPORT_Resend] 버튼 클릭
-  btnResend?.addEventListener("click", () => {
-    btnReport?.click();
-  });
-
-  // 9. [Excel 다운로드] 버튼 클릭
+  // 8. [Excel 다운로드] 버튼 클릭
   btnExcel?.addEventListener("click", () => {
     exportQuotationsToCsv(lastFilteredQuotes.length > 0 ? lastFilteredQuotes : cachedQuotations);
   });
