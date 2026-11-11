@@ -7,7 +7,6 @@ import * as InventoryModule from './inventory.js';
 import { initAuth, isCsOrAdminUser } from './modules/auth.js';
 window.isCsOrAdminUser = isCsOrAdminUser;
 import { initManualViewer } from './modules/manual.js';
-import { computeKpiMetrics, renderKpiBar } from './modules/kpi.js';
 import {
   evaluatePackaging,
   fetchPackagingStandards,
@@ -871,13 +870,6 @@ async function refreshInventory() {
     updateLineFilterCounts(cachedItems);
     callRenderInventoryHeaders(activeTab);
 
-    try {
-      const kpiMetrics = computeKpiMetrics(cachedItems, rawFxRate);
-      renderKpiBar(kpiMetrics);
-    } catch (e) {
-      console.warn("KPI 계산 예외", e);
-    }
-
     applyFilters();
   } catch (err) {
     console.error("데이터 로드 실패", err);
@@ -1242,14 +1234,6 @@ function bindInputs() {
   safeAddListener('fxBufferSelect', 'change', updateFxDisplay);
   safeAddListener('copyQuoteBtn', 'click', copyQuotation);
   safeAddListener('openQuotationModalBtn', 'click', openQuotationModal);
-
-  safeAddListener('toggleKpiBtn', 'click', () => {
-    const bar = document.getElementById('kpiSummaryBar');
-    const arrow = document.getElementById('kpiToggleArrow');
-    if (!bar) return;
-    const isHidden = bar.classList.toggle('hidden');
-    if (arrow) arrow.innerText = isHidden ? '▼' : '▲';
-  });
 
   const spaCheck = document.getElementById('checkIsSpa');
   const spaDebitWrapper = document.getElementById('spaDebitWrapper');

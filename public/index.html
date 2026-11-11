@@ -501,10 +501,6 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-end">
-          <button type="button" id="toggleKpiBtn" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1.5 rounded-lg border border-indigo-200 flex items-center gap-1 shadow-sm transition-colors">
-            <span>📊</span> KPI 지표 <span id="kpiToggleArrow" class="text-[9px]">▼</span>
-          </button>
-          
           <span id="selectedQuoteCountBadge" class="hidden text-[10px] bg-amber-400 text-slate-900 font-bold px-1.5 py-0.5 rounded-full">0</span>
           <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors">
             <span>📄</span> 공식 견적서 발행 (PDF)
@@ -536,8 +532,6 @@
       </div>
 
       <div id="unlockedContent" class="hidden space-y-2.5">
-        <div id="kpiSummaryBar" class="pt-1 hidden transition-all duration-200"></div>
-
         <div class="bg-slate-50 p-2 rounded-xl border border-slate-200/80 flex flex-wrap lg:flex-nowrap gap-1.5 items-center">
           <div class="flex-1 min-w-[200px] relative">
             <input type="text" id="searchInput" style="min-height: 38px;" placeholder="Part, D/C, 세일즈, 고객사, 송장 검색..." class="w-full pl-7 pr-2.5 py-1.5 border rounded-lg bg-white text-xs outline-none">
