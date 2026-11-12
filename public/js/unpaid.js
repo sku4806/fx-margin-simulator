@@ -8,7 +8,7 @@ let cachedSalesReps = [];
 let activeAgingFilter = 'all';
 let activeSalesRep = 'ALL';
 let activeSearchTerm = '';
-let activeSortBy = 'due_date_asc';
+let activeSortBy = 'out_date_desc';
 let unpaidPage = 1;
 let unpaidPageSize = 50;
 let lastFilteredUnpaid = [];
@@ -92,7 +92,7 @@ export async function fetchUnpaidList(params = {}) {
         const term = params.query;
         qb = qb.or(`part_name.ilike.%${term}%,customer_name.ilike.%${term}%,sales_rep.ilike.%${term}%,po_no.ilike.%${term}%`);
       }
-      qb = qb.order('due_date', { ascending: true });
+      qb = qb.order('out_date', { ascending: false });
 
       const { data, error } = await qb.limit(1500);
       if (!error && data && data.length > 0) {
@@ -364,10 +364,10 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
         <div class="flex items-center gap-1 text-xs">
           <span class="text-slate-500 font-bold whitespace-nowrap text-[11px]">정렬:</span>
           <select id="unpaidSortSelect" class="w-full bg-white text-slate-800 text-[11px] px-2 py-1.5 rounded-lg border border-slate-300 font-semibold outline-none cursor-pointer">
+            <option value="out_date_desc" ${activeSortBy === 'out_date_desc' ? 'selected' : ''}>출하일자 최근순</option>
             <option value="due_date_asc" ${activeSortBy === 'due_date_asc' ? 'selected' : ''}>결제예정일 빠른순</option>
             <option value="overdue_desc" ${activeSortBy === 'overdue_desc' ? 'selected' : ''}>연체일수 높은순</option>
             <option value="amount_desc" ${activeSortBy === 'amount_desc' ? 'selected' : ''}>미수금액 큰순</option>
-            <option value="out_date_desc" ${activeSortBy === 'out_date_desc' ? 'selected' : ''}>출하일자 최근순</option>
           </select>
         </div>
       </div>
@@ -718,11 +718,11 @@ function sortUnpaidList(sortBy) {
     lastFilteredUnpaid.sort((a, b) => (b.amount_vat || 0) - (a.amount_vat || 0));
   } else if (sortBy === 'overdue_desc') {
     lastFilteredUnpaid.sort((a, b) => (b.overdue_days || 0) - (a.overdue_days || 0));
-  } else if (sortBy === 'out_date_desc') {
-    lastFilteredUnpaid.sort((a, b) => String(b.out_dt || '').localeCompare(String(a.out_dt || '')));
-  } else {
-    // due_date_asc (기본)
+  } else if (sortBy === 'due_date_asc') {
     lastFilteredUnpaid.sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')));
+  } else {
+    // out_date_desc (기본: 출하일자 최근순)
+    lastFilteredUnpaid.sort((a, b) => String(b.out_dt || '').localeCompare(String(a.out_dt || '')));
   }
 }
 
