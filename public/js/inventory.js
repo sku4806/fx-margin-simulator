@@ -359,8 +359,28 @@ function generateLegacyMasterRow(item) {
   const rawDate = item.entryDate || item.entry_date || '-';
   const entryDate = rawDate.length >= 10 ? rawDate.slice(2, 10) : rawDate;
   const mfg = item.maker || '-';
-  const pono = item.poNo || item.po_no || '-';
+  const pono = (item.poNo || item.po_no || '').trim();
+  const invNo = (item.invoiceNo || item.invoice_no || '').trim();
   const paymentStatus = item.paymentStatus || item.payment_status || '미수';
+
+  let poDisplayHtml = '';
+  if (pono) {
+    poDisplayHtml = `
+      <div class="font-bold text-indigo-950 font-mono text-[10px] truncate" title="발주번호: ${pono}">PO: ${pono}</div>
+      ${invNo && invNo !== pono ? `<div class="text-[9px] text-slate-400 font-mono truncate" title="입고송장: ${invNo}">INV: ${invNo}</div>` : ''}
+    `;
+  } else if (invNo && invNo.toUpperCase().startsWith('OTH')) {
+    poDisplayHtml = `
+      <div class="truncate text-[10px]" title="실사/조정 재고 (송장: ${invNo})">
+        <span class="bg-amber-100 text-amber-800 font-bold px-1 py-0.2 rounded text-[9px] mr-1">실사재고</span>
+        <span class="font-mono text-slate-500 text-[9px]">${invNo}</span>
+      </div>
+    `;
+  } else if (invNo) {
+    poDisplayHtml = `<div class="font-mono text-slate-500 text-[10px] truncate" title="송장: ${invNo}"><span class="text-slate-400 text-[9px]">INV:</span> ${invNo}</div>`;
+  } else {
+    poDisplayHtml = `<div class="font-mono text-slate-400 text-[10px]">-</div>`;
+  }
 
   return `
     <tr id="row-item-${item.id}" data-item-id="${item.id}" class="hover:bg-indigo-50/70 transition-colors border-b border-slate-200 text-[11px] cursor-pointer" title="클릭 시 상단 견적 계산기에 품목 단가/수량 즉시 반영" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
@@ -403,8 +423,8 @@ function generateLegacyMasterRow(item) {
         </div>
         <div class="text-[10px] text-slate-400 font-mono mt-0.5">($${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: window.isPrecisionMode ? 4 : 2 })})</div>
       </td>
-      <td class="py-2.5 px-2 text-slate-500 font-mono text-[10px] align-middle truncate max-w-[220px]" title="${pono}">
-        <div>PO: ${pono}</div>
+      <td class="py-2.5 px-2 align-middle max-w-[220px]">
+        ${poDisplayHtml}
       </td>
       <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${paymentStatus === '완료' || paymentStatus === '수금완료' || paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">
@@ -438,10 +458,22 @@ function generateFulfillmentRow(item, canEdit) {
   const sales = item.owner || '본사';
   const part = item.partName || item.part_name || '-';
   const mfg = item.maker || '-';
-  const pono = item.poNo || item.po_no || '-';
+  const pono = (item.poNo || item.po_no || '').trim();
+  const invNo = (item.invoiceNo || item.invoice_no || '').trim();
   const orderStatus = item.orderStatus || item.order_status || '배정요청';
   const paymentStatus = item.paymentStatus || item.payment_status || '미수';
   const trackingNo = (item.trackingNo || item.tracking_no || '').trim();
+
+  let poDisplayHtml = '';
+  if (pono) {
+    poDisplayHtml = `<div class="font-mono font-bold text-slate-800 truncate max-w-[140px]" title="발주번호: ${pono}">PO: ${pono}</div>`;
+  } else if (invNo && invNo.toUpperCase().startsWith('OTH')) {
+    poDisplayHtml = `<div class="font-mono text-amber-800 truncate max-w-[140px] text-[10px]" title="실사/조정 재고 (송장: ${invNo})"><span class="bg-amber-100 text-amber-800 font-bold px-1 py-0.2 rounded text-[9px] mr-1">실사</span>${invNo}</div>`;
+  } else if (invNo) {
+    poDisplayHtml = `<div class="font-mono text-slate-500 truncate max-w-[140px] text-[10px]" title="송장: ${invNo}"><span class="text-slate-400 text-[9px]">INV:</span>${invNo}</div>`;
+  } else {
+    poDisplayHtml = `<div class="font-mono text-slate-400 truncate max-w-[140px]">PO: -</div>`;
+  }
 
   // 권한 판별: canEdit가 전달되지 않았을 경우 window.isCsOrAdminUser 직접 확인
   const isAuthorized = (typeof canEdit === 'boolean') 
@@ -493,7 +525,7 @@ function generateFulfillmentRow(item, canEdit) {
       </td>
       <!-- 7. PO / 송장(B/L) -->
       <td class="py-2.5 px-2 text-[10px] text-slate-600 align-middle">
-        <div class="font-mono text-slate-500 truncate max-w-[140px]">PO: ${pono}</div>
+        ${poDisplayHtml}
         <div class="mt-0.5 flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
           <span class="font-mono font-bold text-slate-800 text-[9px] truncate" title="${trackingNo}">
             ${trackingNo ? trackingNo : '<span class="text-slate-400 font-normal">B/L 미등록</span>'}
@@ -714,6 +746,9 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
 
   container.innerHTML = items.map(item => {
     const costKrw = Math.round(item.unitUsd * item.shipFx);
+    const pono = (item.poNo || item.po_no || '').trim();
+    const invNo = (item.invoiceNo || item.invoice_no || '').trim();
+    const poStr = pono ? `PO: ${pono}` : (invNo && invNo.toUpperCase().startsWith('OTH') ? `실사재고 (${invNo})` : (invNo ? `INV: ${invNo}` : '-'));
     return `
       <div class="p-3.5 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2 cursor-pointer" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
         <div class="flex justify-between items-start">
@@ -730,8 +765,8 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
             <div class="font-bold text-slate-800">${item.customer}</div>
           </div>
           <div>
-            <span class="text-[10px] text-slate-400 block font-semibold">담당 Sales</span>
-            <div class="font-semibold text-slate-700">${item.owner}</div>
+            <span class="text-[10px] text-slate-400 block font-semibold">발주/송장</span>
+            <div class="font-bold text-indigo-900 font-mono text-[11px] truncate" title="${poStr}">${poStr}</div>
           </div>
           <div>
             <span class="text-[10px] text-slate-400 block font-semibold">선적 매입가</span>

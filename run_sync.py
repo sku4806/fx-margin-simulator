@@ -50,16 +50,42 @@ def clean_val(v):
 def sync_inventory(conn, sb):
     """
     1. 재고 데이터 동기화: DincomeFile (NOTOUTQTY > 0) -> Supabase inventory_items
+    DPOFile 및 ShippingFile을 조인하여 실제 발주번호(po_no)를 완벽하게 추출하여 적재합니다.
     """
-    print(f"\n📦 [1/2] 재고(DincomeFile) 데이터 동기화 시작...")
+    print(f"\n📦 [1/2] 재고(DincomeFile) 데이터 동기화 시작 (DPOFile & ShippingFile PO 번호 조인)...")
     cur = conn.cursor(as_dict=True)
     query = """
         SELECT 
-            IDX, INVOICENO, PARTNO, MFG, INDT, INQTY, NOTOUTQTY, 
-            WOUP, Wup, Slup, InRate, RealSales, DATACODE, Remark
-        FROM DincomeFile
-        WHERE NOTOUTQTY > 0
-        ORDER BY INDT DESC, IDX DESC
+            d.IDX, d.INVOICENO, d.PARTNO, d.MFG, d.INDT, d.INQTY, d.NOTOUTQTY, 
+            d.WOUP, d.Wup, d.Slup, d.InRate, d.RealSales, d.DATACODE, d.Remark,
+            COALESCE(
+                NULLIF(LTRIM(RTRIM(p1.PONO)), ''),
+                NULLIF(LTRIM(RTRIM(s1.PoNo)), ''),
+                NULLIF(LTRIM(RTRIM(s2.PoNo)), ''),
+                NULLIF(LTRIM(RTRIM(s3.PoNo)), ''),
+                NULLIF(LTRIM(RTRIM(p2.PONO)), '')
+            ) as po_no
+        FROM DincomeFile d
+        LEFT JOIN DPOFile p1 ON d.DPOIDX = p1.idx
+        LEFT JOIN ShippingFile s1 ON d.idxship = s1.IDX
+        LEFT JOIN (
+            SELECT INVOICENO, PartNo, MAX(PoNo) as PoNo
+            FROM ShippingFile
+            GROUP BY INVOICENO, PartNo
+        ) s2 ON LTRIM(RTRIM(d.INVOICENO)) = LTRIM(RTRIM(s2.INVOICENO)) 
+             AND LTRIM(RTRIM(d.PARTNO)) = LTRIM(RTRIM(s2.PartNo))
+        LEFT JOIN (
+            SELECT INVOICENO, MAX(PoNo) as PoNo
+            FROM ShippingFile
+            GROUP BY INVOICENO
+        ) s3 ON LTRIM(RTRIM(d.INVOICENO)) = LTRIM(RTRIM(s3.INVOICENO))
+        LEFT JOIN (
+            SELECT PONO, MAX(Partno) as Partno
+            FROM DPOFile
+            GROUP BY PONO
+        ) p2 ON LTRIM(RTRIM(d.INVOICENO)) = LTRIM(RTRIM(p2.PONO))
+        WHERE d.NOTOUTQTY > 0
+        ORDER BY d.INDT DESC, d.IDX DESC
     """
     cur.execute(query)
     rows = cur.fetchall()
@@ -89,6 +115,7 @@ def sync_inventory(conn, sb):
             "owner": owner_val,
             "entry_date": indt_str,
             "invoice_no": clean_val(r['INVOICENO']),
+            "po_no": clean_val(r.get('po_no')),
             "memo": clean_val(r['Remark']),
             "customer": clean_val(r['Remark']) or "BIGSHINE KOREA",
             "real_customer": clean_val(r['Remark']) or "BIGSHINE KOREA",
@@ -100,7 +127,8 @@ def sync_inventory(conn, sb):
         }
         items.append(record)
 
-    print(f"[*] 레거시 유효 재고 {len(items)}건 변환 완료")
+    po_count = sum(1 for it in items if it["po_no"])
+    print(f"[*] 레거시 유효 재고 {len(items)}건 변환 완료 (실제 PO 번호 확인: {po_count}건, 기타/실사재고: {len(items)-po_count}건)")
 
     try:
         sb.table("inventory_items").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
