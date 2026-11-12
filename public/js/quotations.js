@@ -499,7 +499,7 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
               <th class="py-2 px-2 text-center whitespace-nowrap w-16">Sales</th>
               <th class="py-2 px-2 text-center whitespace-nowrap min-w-[80px]">Delivery</th>
               <th class="py-2 px-2 text-left min-w-[70px]">Application</th>
-              <th class="py-2 px-2 text-center whitespace-nowrap w-16">작업</th>
+              <th class="py-2 px-2 text-center whitespace-nowrap min-w-[105px]">수주 / 출력</th>
             </tr>
           </thead>
           <tbody id="quotationTableBody" class="divide-y divide-slate-100 font-medium bg-white text-slate-700">
@@ -693,10 +693,16 @@ function generateTableRows(items, offset = 0) {
         <td class="py-1.5 px-2 text-center font-mono text-slate-500 text-[10px] whitespace-nowrap">${q.delivery || '-'}</td>
         <td class="py-1.5 px-2 text-slate-500 text-[10px] truncate max-w-[80px]" title="${q.application || '-'}">${q.application || '-'}</td>
         <td class="py-1.5 px-2 text-center whitespace-nowrap" onclick="event.stopPropagation()">
-          <button type="button" class="btn-single-quote-print px-1.5 py-0.5 bg-slate-100 hover:bg-lime-600 hover:text-white text-slate-700 rounded text-[10px] font-bold transition-colors"
-                  data-idx="${realIdx}" title="BSK 표준 견적서 출력">
-            인쇄
-          </button>
+          <div class="flex items-center justify-center gap-1">
+            <button type="button" class="btn-quote-to-order px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[10px] font-bold transition-colors shadow-2xs flex items-center gap-0.5 cursor-pointer"
+                    data-idx="${realIdx}" title="해당 견적건을 수주 및 출하 등록으로 전환 (CS 및 관리자 전용)">
+              <span>📦</span> 수주
+            </button>
+            <button type="button" class="btn-single-quote-print px-1.5 py-0.5 bg-slate-100 hover:bg-lime-600 hover:text-white text-slate-700 rounded text-[10px] font-bold transition-colors cursor-pointer"
+                    data-idx="${realIdx}" title="BSK 표준 견적서 출력">
+              인쇄
+            </button>
+          </div>
         </td>
       </tr>
     `;
@@ -791,23 +797,36 @@ function bindQuotationEvents() {
     }
   });
 
-  // 5. 행 클릭 시 견적서 미리보기 모달 연동
+  // 5. 테이블 내 클릭 이벤트 (수주 전환, 인쇄, 행 클릭 미리보기)
   tbody?.addEventListener("click", (e) => {
+    // 1) 수주 전환 버튼 클릭
+    const orderBtn = e.target.closest(".btn-quote-to-order");
+    if (orderBtn) {
+      e.stopPropagation();
+      const idx = parseInt(orderBtn.getAttribute("data-idx"), 10);
+      handleConvertQuoteToOrder(idx);
+      return;
+    }
+
+    // 2) 단일 인쇄 버튼 클릭
+    const printBtn = e.target.closest(".btn-single-quote-print");
+    if (printBtn) {
+      e.stopPropagation();
+      const idx = parseInt(printBtn.getAttribute("data-idx"), 10);
+      const item = lastFilteredQuotes[idx] || cachedQuotations[idx];
+      if (item) {
+        openLegacyQuotationModal(item.quote_no, item);
+      }
+      return;
+    }
+
+    // 3) 체크박스 클릭 시 행 모달 열림 방지
+    if (e.target.closest("input[type='checkbox']")) return;
+
+    // 4) 행 클릭 시 견적서 미리보기 모달 연동
     const row = e.target.closest("tr[data-quote-idx]");
     if (!row) return;
     const idx = parseInt(row.getAttribute("data-quote-idx"), 10);
-    const item = lastFilteredQuotes[idx] || cachedQuotations[idx];
-    if (item) {
-      openLegacyQuotationModal(item.quote_no, item);
-    }
-  });
-
-  // 6. 단일 인쇄 버튼 클릭
-  tbody?.addEventListener("click", (e) => {
-    const btn = e.target.closest(".btn-single-quote-print");
-    if (!btn) return;
-    e.stopPropagation();
-    const idx = parseInt(btn.getAttribute("data-idx"), 10);
     const item = lastFilteredQuotes[idx] || cachedQuotations[idx];
     if (item) {
       openLegacyQuotationModal(item.quote_no, item);
@@ -903,3 +922,124 @@ function exportQuotationsToCsv(items) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * 📦 견적 항목을 수주 및 출하 등록으로 전환 (CS / 관리자 전용)
+ */
+export function handleConvertQuoteToOrder(idx) {
+  // 1. 권한 판별: CS 및 관리자 권한 계정만 가능
+  const canEdit = (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
+  if (!canEdit) {
+    alert("⚠️ [수주 및 출하 등록 권한 제한]\n\n세일즈(영업) 계정은 견적 조회 및 발행만 가능하며, 수주 전환 및 출하 등록은 CS 및 관리자 권한 계정(CS Master / Admin)만 가능합니다.\n\n수주 및 출하 등록이 필요하신 경우 CS 담당자에게 문의해 주세요.");
+    return;
+  }
+
+  // 2. 견적 데이터 가져오기
+  const q = lastFilteredQuotes[idx] || cachedQuotations[idx];
+  if (!q) {
+    alert("견적 정보를 찾을 수 없습니다.");
+    return;
+  }
+
+  const rawQty = q.qty_int || parseInt(String(q.qty_str || '').replace(/[^0-9]/g, ''), 10) || 0;
+  const isUsd = (q.qunit && q.qunit.includes('$')) || (q.quot_type && q.quot_type.includes('$'));
+  const currLabel = isUsd ? 'USD' : 'KRW';
+
+  const confirmMsg = 
+    `[📦 견적 ➔ 수주/출하 등록 전환]\n\n` +
+    `• 견적번호: ${q.quote_no || '-'} (Line# ${q.line_no || '1'})\n` +
+    `• 고객사명: ${q.cname || '-'}\n` +
+    `• 품번(Part#): ${q.part_no || '-'}\n` +
+    `• 견적수량: ${rawQty.toLocaleString()} EA\n` +
+    `• 견적단가: ${isUsd ? '$' : '₩'}${q.qp || '0'}\n` +
+    `• 제조사: ${q.mfg || '-'}\n` +
+    `• 영업담당: ${q.sales || '-'}\n\n` +
+    `해당 견적 데이터를 수주 및 출하 등록 폼으로 불러와 등록 작업을 진행하시겠습니까?`;
+
+  if (!confirm(confirmMsg)) return;
+
+  // 3. 수주/출하(Tab 2) 탭으로 즉시 전환
+  const tabFulfillment = document.getElementById('tabFulfillment');
+  if (tabFulfillment) {
+    tabFulfillment.click();
+  }
+
+  // 4. 수주 등록 폼에 데이터 자동 주입
+  setTimeout(() => {
+    if (typeof window.resetCurrentForm === 'function') {
+      window.resetCurrentForm();
+    }
+
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = (val !== null && val !== undefined) ? val : '';
+    };
+
+    setVal('inputPartName', q.part_no || '');
+    setVal('inputCustomer', q.cname || '');
+    setVal('inputRealCustomer', q.cname || '');
+    setVal('inputApplication', q.application || '');
+
+    if (rawQty > 0) {
+      setVal('inputStock', (typeof window.formatNumberWithMask === 'function') ? window.formatNumberWithMask(rawQty, 0) : rawQty);
+    }
+
+    setVal('selectCurrency', isUsd ? 'USD' : 'KRW');
+    if (q.qp) {
+      const qpNum = Number(q.qp);
+      setVal('inputSoldPrice', !isNaN(qpNum) ? ((typeof window.formatNumberWithMask === 'function') ? window.formatNumberWithMask(qpNum, 4) : qpNum) : q.qp);
+    }
+
+    if (q.payment) {
+      const paySel = document.getElementById('selectPaymentTerms');
+      if (paySel) {
+        const match = Array.from(paySel.options).find(o => o.value.toLowerCase() === q.payment.toLowerCase() || o.text.toLowerCase().includes(q.payment.toLowerCase()));
+        if (match) paySel.value = match.value;
+      }
+    }
+
+    if (typeof window.setSelectValue === 'function') {
+      window.setSelectValue('selectMaker', 'inputCustomMaker', q.mfg || '', '__CUSTOM_MAKER__');
+      window.setSelectValue('selectOwner', 'inputCustomOwner', q.sales || '', '__CUSTOM_OWNER__');
+    }
+
+    const quoteRef = `[견적연동: ${q.quote_no || '-'}${q.line_no ? ' / L#' + q.line_no : ''}]`;
+    const memoParts = [quoteRef, q.remark].filter(Boolean);
+    setVal('inputMemo', memoParts.join(' '));
+
+    // 타이틀 및 배너 표시
+    const titleEl = document.getElementById('selectedPartTitle');
+    if (titleEl) {
+      titleEl.innerText = `📦 수주 등록 [견적 ${q.quote_no || '-'}] : ${q.part_no || ''} (${rawQty.toLocaleString()} EA)`;
+    }
+
+    // 폼 아코디언 펼치기
+    if (typeof window.toggleFormSection === 'function') {
+      window.toggleFormSection(true);
+    }
+
+    // 수주 폼으로 부드럽게 스크롤
+    const formSection = document.getElementById('formSection');
+    if (formSection) {
+      formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // 견적 연동 알림 배너 표출
+    const banner = document.getElementById('editingBanner');
+    const bannerText = document.getElementById('editingBannerText');
+    if (banner && bannerText) {
+      banner.className = "p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-950 text-xs flex items-center justify-between shadow-xs mb-3";
+      bannerText.innerHTML = `
+        <div class="flex items-center gap-2">
+          <span class="text-base">📦</span>
+          <div>
+            <strong>견적 연동 신규 수주 등록:</strong> [${q.cname}] ${q.part_no} (${rawQty.toLocaleString()} EA, 견적단가: ${currLabel} ${q.qp || 0})
+            <div class="text-[11px] text-emerald-700">매입단가(USD), 환율, 납기 및 출하정보를 확인한 뒤 저장하세요.</div>
+          </div>
+        </div>
+      `;
+      banner.classList.remove('hidden');
+    }
+  }, 120);
+}
+window.handleConvertQuoteToOrder = handleConvertQuoteToOrder;

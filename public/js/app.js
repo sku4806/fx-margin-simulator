@@ -1071,6 +1071,7 @@ function setSelectValue(selectId, customInputId, val, customVal) {
     }
   }
 }
+window.setSelectValue = setSelectValue;
 
 function loadFormFromItem(id) {
   const item = getCachedItem(id);

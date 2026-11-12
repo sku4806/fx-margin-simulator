@@ -249,6 +249,8 @@ def list_unpaid(
             formatted = []
             for r in rows:
                 formatted.append({
+                    "id": r.get("id"),
+                    "legacy_idx": r.get("legacy_idx"),
                     "idx": r.get("legacy_idx") or r.get("id"),
                     "cname": r.get("customer_name"),
                     "out_dt": r.get("out_date"),
@@ -338,6 +340,114 @@ def unpaid_sales_reps():
     except Exception:
         pass
     return {"status": "success", "sales_reps": ["ALLEN", "STEVE", "WILLIAM", "PAUL", "JOEY", "DUSTIN"]}
+
+class UnpaidSettlementRequest(BaseModel):
+    id: Optional[str] = None
+    legacy_idx: Optional[int] = None
+    action_type: str = "full_settle"  # 'full_settle', 'partial_settle', 'reschedule', 'note_only'
+    collected_amount: Optional[float] = 0.0
+    new_amount_vat: Optional[float] = None
+    new_due_date: Optional[str] = None
+    pay_status: Optional[str] = None
+    contact_note: Optional[str] = None
+
+@app.post("/api/unpaid/settlement")
+def settle_unpaid(req: UnpaidSettlementRequest):
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+
+    # 1. 대상 레코드 조회
+    query_params = []
+    if req.id:
+        query_params.append(("id", f"eq.{req.id}"))
+    elif req.legacy_idx:
+        query_params.append(("legacy_idx", f"eq.{req.legacy_idx}"))
+    else:
+        raise HTTPException(status_code=400, detail="레코드 식별자(id 또는 legacy_idx)가 필요합니다.")
+
+    get_res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_unpaid", headers=headers, params=query_params, timeout=5)
+    if get_res.status_code != 200 or not get_res.json():
+        raise HTTPException(status_code=404, detail="해당 미수금 레코드를 찾을 수 없습니다.")
+
+    row = get_res.json()[0]
+    record_id = row.get("id")
+
+    # 2. 업데이트 필드 계산
+    update_data = {
+        "last_synced_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+    }
+
+    curr_amount_vat = float(row.get("amount_vat") or 0.0)
+    final_amount_vat = curr_amount_vat
+    pay_status = req.pay_status or row.get("pay_status") or "미결제"
+
+    if req.action_type == "full_settle":
+        final_amount_vat = 0.0
+        pay_status = "수금완료"
+    elif req.action_type == "partial_settle":
+        if req.new_amount_vat is not None:
+            final_amount_vat = max(0.0, float(req.new_amount_vat))
+        else:
+            final_amount_vat = max(0.0, curr_amount_vat - float(req.collected_amount or 0.0))
+        pay_status = "수금완료" if final_amount_vat <= 0 else "부분입금"
+    elif req.action_type == "reschedule":
+        pay_status = req.pay_status or ("결제약속" if curr_amount_vat > 0 else "수금완료")
+
+    update_data["amount_vat"] = final_amount_vat
+    update_data["pay_status"] = pay_status
+
+    # 날짜 및 연체일수 재계산
+    target_due_date = req.new_due_date or row.get("due_date")
+    if target_due_date:
+        update_data["due_date"] = target_due_date
+        try:
+            due_dt = datetime.date.fromisoformat(target_due_date[:10])
+            today = datetime.date.today()
+            diff_days = (today - due_dt).days
+            update_data["overdue_days"] = diff_days
+
+            if final_amount_vat <= 0 or pay_status == "수금완료":
+                update_data["color_code"] = 0
+            elif diff_days <= 0:
+                update_data["color_code"] = 0
+            elif diff_days < 30:
+                update_data["color_code"] = 1
+            elif diff_days < 45:
+                update_data["color_code"] = 2
+            elif diff_days < 60:
+                update_data["color_code"] = 3
+            else:
+                update_data["color_code"] = 4
+        except Exception:
+            pass
+
+    # 메모 / 연락 기록 추가
+    if req.contact_note and req.contact_note.strip():
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        note_text = f"[{now_str}] {req.contact_note.strip()}"
+        existing_contact = row.get("contact") or ""
+        if existing_contact:
+            update_data["contact"] = f"{existing_contact} | {note_text}" if len(existing_contact) < 150 else f"{note_text} (이전: {existing_contact[:80]}...)"
+        else:
+            update_data["contact"] = note_text
+
+    # 3. Supabase PATCH 전송
+    patch_url = f"{SUPABASE_URL}/rest/v1/legacy_unpaid?id=eq.{record_id}"
+    patch_res = requests.patch(patch_url, headers=headers, json=update_data, timeout=5)
+
+    if patch_res.status_code not in (200, 204):
+        raise HTTPException(status_code=patch_res.status_code, detail=f"수금 상태 업데이트 실패: {patch_res.text}")
+
+    updated_rows = patch_res.json() if patch_res.status_code == 200 and patch_res.text else [update_data]
+    return {
+        "status": "success",
+        "message": "수금 확인 및 입금약속 메모가 성공적으로 저장되었습니다.",
+        "item": updated_rows[0] if updated_rows else update_data
+    }
 
 # ========================================================
 # 🏢 거래처 및 담당자 마스터 (CustomerFile & ContactFile) API

@@ -31,6 +31,8 @@ function debounce(fn, delay = 200) {
 
 function mapSupabaseToUnpaid(r) {
   return {
+    id: r.id,
+    legacy_idx: r.legacy_idx,
     idx: r.legacy_idx || r.id,
     cname: r.customer_name,
     out_dt: r.out_date,
@@ -49,13 +51,14 @@ function mapSupabaseToUnpaid(r) {
 }
 
 function computeSummaryFromItems(items) {
-  const totalCount = items.length;
-  const totalAmount = items.reduce((a, b) => a + (b.amount_vat || 0), 0);
-  const overdueAmount = items.filter(u => u.overdue_days > 0).reduce((a, b) => a + (b.amount_vat || 0), 0);
-  const upcomingAmount = items.filter(u => u.overdue_days <= 0).reduce((a, b) => a + (b.amount_vat || 0), 0);
+  const activeItems = (items || []).filter(u => u.pay_status !== '수금완료' && (u.amount_vat || 0) > 0);
+  const totalCount = activeItems.length;
+  const totalAmount = activeItems.reduce((a, b) => a + (b.amount_vat || 0), 0);
+  const overdueAmount = activeItems.filter(u => u.overdue_days > 0).reduce((a, b) => a + (b.amount_vat || 0), 0);
+  const upcomingAmount = activeItems.filter(u => u.overdue_days <= 0).reduce((a, b) => a + (b.amount_vat || 0), 0);
 
   const custMap = {};
-  items.forEach(it => {
+  activeItems.forEach(it => {
     const c = it.cname || "기타";
     custMap[c] = (custMap[c] || 0) + (it.amount_vat || 0);
   });
@@ -256,8 +259,8 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
             <span class="text-slate-400 font-mono text-[10px]">TOTAL</span>
           </div>
           <div class="mt-1">
-            <div class="text-base sm:text-lg font-black text-slate-900 font-mono">₩${Math.round(sum.total_amount).toLocaleString()}</div>
-            <div class="text-[10px] text-slate-500 font-medium mt-0.5">총 <strong class="text-indigo-950">${sum.total_count.toLocaleString()}</strong>건 관리 중</div>
+            <div id="unpaidKpiTotalAmount" class="text-base sm:text-lg font-black text-slate-900 font-mono">₩${Math.round(sum.total_amount).toLocaleString()}</div>
+            <div class="text-[10px] text-slate-500 font-medium mt-0.5">총 <strong id="unpaidKpiTotalCount" class="text-indigo-950">${sum.total_count.toLocaleString()}</strong>건 관리 중</div>
           </div>
         </div>
 
@@ -268,7 +271,7 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
             <span class="text-emerald-600 text-xs">⏳</span>
           </div>
           <div class="mt-1">
-            <div class="text-base sm:text-lg font-black text-emerald-700 font-mono">₩${Math.round(sum.upcoming_amount).toLocaleString()}</div>
+            <div id="unpaidKpiUpcomingAmount" class="text-base sm:text-lg font-black text-emerald-700 font-mono">₩${Math.round(sum.upcoming_amount).toLocaleString()}</div>
             <div class="text-[10px] text-emerald-600 font-medium mt-0.5">정상 회수 예정 채권</div>
           </div>
         </div>
@@ -280,7 +283,7 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
             <span class="text-rose-600 text-xs">🚨</span>
           </div>
           <div class="mt-1">
-            <div class="text-base sm:text-lg font-black text-rose-700 font-mono">₩${Math.round(sum.overdue_amount).toLocaleString()}</div>
+            <div id="unpaidKpiOverdueAmount" class="text-base sm:text-lg font-black text-rose-700 font-mono">₩${Math.round(sum.overdue_amount).toLocaleString()}</div>
             <div class="text-[10px] text-rose-600 font-medium mt-0.5">기한 초과 미회수 채권</div>
           </div>
         </div>
@@ -292,8 +295,8 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
             <span class="text-indigo-600 text-xs">🏢</span>
           </div>
           <div class="mt-1 truncate">
-            <div class="text-sm font-black text-indigo-950 truncate" title="${topCust ? topCust.customer_name : '-'}">${topCust ? topCust.customer_name : '-'}</div>
-            <div class="text-xs font-bold text-indigo-800 font-mono mt-0.5">₩${topCust ? Math.round(topCust.total_unpaid || topCust.total_amount || 0).toLocaleString() : '0'}</div>
+            <div id="unpaidKpiTopCustName" class="text-sm font-black text-indigo-950 truncate" title="${topCust ? topCust.customer_name : '-'}">${topCust ? topCust.customer_name : '-'}</div>
+            <div id="unpaidKpiTopCustAmount" class="text-xs font-bold text-indigo-800 font-mono mt-0.5">₩${topCust ? Math.round(topCust.total_unpaid || topCust.total_amount || 0).toLocaleString() : '0'}</div>
           </div>
         </div>
       </div>
@@ -389,8 +392,8 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
               <th class="py-2.5 px-2.5 text-right whitespace-nowrap min-w-[60px]">수량</th>
               <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-[90px]">출하일자</th>
               <th class="py-2.5 px-2.5 text-left min-w-[110px]">PO 번호</th>
-              <th class="py-2.5 px-2 text-center whitespace-nowrap w-14">상태</th>
-              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">청구서</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">상태</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap min-w-[135px]">수금/청구 관리</th>
             </tr>
           </thead>
           <tbody id="unpaidTableBody" class="divide-y divide-slate-100 font-medium bg-white text-slate-700">
@@ -500,12 +503,23 @@ function generateUnpaidTableRows(items, offset = 0) {
         <td class="py-1.5 px-2.5 text-right font-semibold text-slate-700 whitespace-nowrap">${(u.qty || 0).toLocaleString()}</td>
         <td class="py-1.5 px-2.5 text-center font-mono text-slate-500 whitespace-nowrap">${u.out_dt || '-'}</td>
         <td class="py-1.5 px-2.5 text-slate-600 font-mono text-[10px] truncate max-w-[120px]" title="${u.po_no || '-'}">${u.po_no || '-'}</td>
-        <td class="py-1.5 px-2 text-center font-semibold text-rose-600 whitespace-nowrap">${u.pay_status || '미결제'}</td>
         <td class="py-1.5 px-2 text-center whitespace-nowrap">
-          <button type="button" onclick="event.stopPropagation(); window.openStatementOfAccount && window.openStatementOfAccount('${(u.cname || '').replace(/'/g, "\\'")}')" 
-                  class="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] rounded border border-rose-200 cursor-pointer shadow-2xs transition-colors" title="${u.cname} 미수금 잔액확인서/청구서 A4 발행">
-            📄 청구서
-          </button>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${u.pay_status === '수금완료' ? 'bg-emerald-100 text-emerald-800' : (u.pay_status === '부분입금' ? 'bg-blue-100 text-blue-800' : (u.pay_status === '결제약속' ? 'bg-amber-100 text-amber-900' : 'bg-rose-50 text-rose-700'))}">
+            ${u.pay_status || '미결제'}
+          </span>
+        </td>
+        <td class="py-1.5 px-2 text-center whitespace-nowrap" onclick="event.stopPropagation()">
+          <div class="flex items-center justify-center gap-1">
+            <button type="button" onclick="event.stopPropagation(); window.openPaymentSettlementModal && window.openPaymentSettlementModal(${realIdx})" 
+                    class="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[10px] rounded shadow-2xs transition-colors cursor-pointer flex items-center gap-0.5" 
+                    title="수금 확인 / 부분입금 처리 및 입금약속 메모">
+              <span>💰</span> 수금/약속
+            </button>
+            <button type="button" onclick="event.stopPropagation(); window.openStatementOfAccount && window.openStatementOfAccount('${(u.cname || '').replace(/'/g, "\\'")}')" 
+                    class="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] rounded border border-rose-200 cursor-pointer shadow-2xs transition-colors" title="${u.cname} 미수금 잔액확인서/청구서 A4 발행">
+              📄 청구서
+            </button>
+          </div>
         </td>
       </tr>
     `;
@@ -677,6 +691,16 @@ function bindUnpaidEvents() {
   btnExcel?.addEventListener("click", () => {
     exportUnpaidToCsv(lastFilteredUnpaid.length > 0 ? lastFilteredUnpaid : cachedUnpaid);
   });
+
+  // 6. 테이블 행 클릭 시 수금/약속 관리 모달 오픈
+  const tbody = document.getElementById("unpaidTableBody");
+  tbody?.addEventListener("click", (e) => {
+    if (e.target.closest("button") || e.target.closest("input") || e.target.closest("a")) return;
+    const row = e.target.closest("tr[data-unpaid-idx]");
+    if (!row) return;
+    const idx = parseInt(row.getAttribute("data-unpaid-idx"), 10);
+    openPaymentSettlementModal(idx);
+  });
 }
 
 function applyLocalUnpaidFilters() {
@@ -763,3 +787,557 @@ function exportUnpaidToCsv(items) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * ========================================================
+ * 💰 수금 확인 / 부분입금 처리 및 입금약속 메모 모달 관리
+ * ========================================================
+ */
+let currentSettlementIdx = null;
+let currentSettlementMode = 'full_settle';
+
+export function openPaymentSettlementModal(idx) {
+  const u = lastFilteredUnpaid[idx] || cachedUnpaid[idx];
+  if (!u) {
+    alert("해당 미수금 내역을 찾을 수 없습니다.");
+    return;
+  }
+
+  currentSettlementIdx = idx;
+  currentSettlementMode = (u.amount_vat <= 0 || u.pay_status === '수금완료') ? 'reschedule' : 'full_settle';
+
+  // 기존 모달 제거
+  document.getElementById("paymentSettlementModal")?.remove();
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const amtVat = Math.round(u.amount_vat || 0);
+
+  const modalHtml = `
+    <div id="paymentSettlementModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity select-none">
+      <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+        
+        <!-- 1. 헤더 (레거시 다크 네이비 테마) -->
+        <div class="bg-[#1e293b] text-white p-3.5 sm:p-4 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <span class="text-2xl">💰</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm sm:text-base font-black text-white">수금 확인 및 입금약속 관리</h3>
+                <span class="text-[10px] font-bold bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded shadow-xs">${u.cname || '-'}</span>
+              </div>
+              <p class="text-[10px] text-slate-300">거래처 수금 완료 처리, 부분입금 잔액 차감 및 입금약속일/통화메모 관리</p>
+            </div>
+          </div>
+          <button type="button" onclick="window.closePaymentSettlementModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-lg font-bold cursor-pointer transition-colors">
+            ✕
+          </button>
+        </div>
+
+        <!-- 2. 모달 본문 (스크롤) -->
+        <div class="p-4 space-y-4 overflow-y-auto text-xs">
+          
+          <!-- (1) 기본 채권 정보 카드 -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div>
+              <span class="text-[10px] text-slate-400 font-bold block">고객사 (CNAME)</span>
+              <span class="text-xs font-black text-slate-900 truncate block" title="${u.cname || '-'}">${u.cname || '-'}</span>
+              <span class="text-[10px] text-slate-500">담당: ${u.contact || '-'}</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-400 font-bold block">품번 / 제조사</span>
+              <span class="text-xs font-black text-indigo-950 font-mono truncate block" title="${u.part_no || '-'}">${u.part_no || '-'}</span>
+              <span class="text-[10px] text-slate-500">${u.mfg || '-'} / ${(u.qty || 0).toLocaleString()} EA</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-400 font-bold block">출하일자 / PO#</span>
+              <span class="text-xs font-bold text-slate-700 font-mono block">${u.out_dt || '-'}</span>
+              <span class="text-[10px] text-slate-500 font-mono truncate block" title="${u.po_no || '-'}">${u.po_no || '-'}</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-rose-500 font-bold block">현재 미수 잔액 (VAT포함)</span>
+              <span class="text-sm font-black text-rose-700 font-mono block">₩ ${amtVat.toLocaleString()}</span>
+              <span class="text-[10px] font-bold ${u.overdue_days > 0 ? 'text-rose-600' : 'text-emerald-600'}">
+                ${u.due_date || '-'} (${u.overdue_days <= 0 ? (u.overdue_days === 0 ? 'D-Day' : 'D' + u.overdue_days) : '+' + u.overdue_days + '일 연체'})
+              </span>
+            </div>
+          </div>
+
+          <!-- (2) 처리 모드 3버튼 탭 선택 -->
+          <div>
+            <label class="block text-[11px] font-black text-slate-700 mb-1.5">⚡ 처리 방식 선택 (Action Mode)</label>
+            <div class="grid grid-cols-3 gap-2" id="settlementActionTabs">
+              <button type="button" data-mode="full_settle" onclick="window.switchSettlementMode('full_settle')" 
+                      class="settle-tab-btn py-2 px-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs ${currentSettlementMode === 'full_settle' ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'} flex flex-col items-center gap-0.5">
+                <span>💰 전액 수금 완료</span>
+                <span class="text-[9px] opacity-90 font-normal">미수 잔액 ₩0 종결</span>
+              </button>
+              <button type="button" data-mode="partial_settle" onclick="window.switchSettlementMode('partial_settle')" 
+                      class="settle-tab-btn py-2 px-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs ${currentSettlementMode === 'partial_settle' ? 'bg-blue-700 text-white border-blue-800 shadow-xs' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'} flex flex-col items-center gap-0.5">
+                <span>💵 부분 입금 처리</span>
+                <span class="text-[9px] opacity-90 font-normal">입금액 차감 후 잔액 갱신</span>
+              </button>
+              <button type="button" data-mode="reschedule" onclick="window.switchSettlementMode('reschedule')" 
+                      class="settle-tab-btn py-2 px-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs ${currentSettlementMode === 'reschedule' ? 'bg-amber-600 text-white border-amber-700 shadow-xs' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'} flex flex-col items-center gap-0.5">
+                <span>📅 입금 약속일 연기</span>
+                <span class="text-[9px] opacity-90 font-normal">협의된 새 결제일 지정</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- (3) 모드 1: 전액 수금 완료 -->
+          <div id="modeFullSettleSection" class="${currentSettlementMode === 'full_settle' ? '' : 'hidden'} bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 space-y-2.5">
+            <div class="flex items-start gap-2">
+              <span class="text-emerald-700 text-base">✅</span>
+              <div>
+                <h4 class="font-black text-emerald-950 text-xs">전액 수금 완료 처리 안내</h4>
+                <p class="text-[11px] text-emerald-800 mt-0.5">거래처로부터 미수금 전액(<strong>₩ ${amtVat.toLocaleString()}</strong>) 입금이 확인되었습니다. 저장 시 미수 잔액이 <strong>₩0</strong>으로 변경되고 상태가 <strong>[수금완료]</strong>로 종결 처리됩니다.</p>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <div>
+                <label class="block text-[10px] font-bold text-emerald-900 mb-1">수금 입금일자</label>
+                <input type="date" id="settleDateInput" value="${todayStr}" class="w-full bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-950 outline-none cursor-pointer">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-emerald-900 mb-1">입금 확인 수단</label>
+                <select id="settleMethodSelect" class="w-full bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-emerald-950 outline-none cursor-pointer">
+                  <option value="법인통장 계좌입금">법인통장 계좌입금</option>
+                  <option value="전자어음 결제">전자어음 결제</option>
+                  <option value="구매카드 / 법인카드">구매카드 / 법인카드</option>
+                  <option value="상계 처리 (매입채무 상계)">상계 처리 (매입채무 상계)</option>
+                  <option value="기타 입금">기타 입금</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- (4) 모드 2: 부분 입금 처리 -->
+          <div id="modePartialSettleSection" class="${currentSettlementMode === 'partial_settle' ? '' : 'hidden'} bg-blue-50/70 border border-blue-200 rounded-xl p-3.5 space-y-3">
+            <div class="flex items-start gap-2">
+              <span class="text-blue-700 text-base">💵</span>
+              <div>
+                <h4 class="font-black text-blue-950 text-xs">부분 입금 및 잔여 채권 잔액 갱신</h4>
+                <p class="text-[11px] text-blue-800 mt-0.5">입금된 부분 금액을 입력하세요. 남은 미수 잔액이 자동 계산되어 갱신됩니다.</p>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-[10px] font-bold text-blue-950">금회 입금액 (₩, VAT포함)</label>
+                <div class="flex items-center gap-1">
+                  <button type="button" onclick="window.setPartialAmountPercent(0.3)" class="px-1.5 py-0.5 bg-white border border-blue-200 hover:bg-blue-100 rounded text-[9px] font-bold text-blue-900 cursor-pointer">30%</button>
+                  <button type="button" onclick="window.setPartialAmountPercent(0.5)" class="px-1.5 py-0.5 bg-white border border-blue-200 hover:bg-blue-100 rounded text-[9px] font-bold text-blue-900 cursor-pointer">50%</button>
+                  <button type="button" onclick="window.setPartialAmountPercent(0.7)" class="px-1.5 py-0.5 bg-white border border-blue-200 hover:bg-blue-100 rounded text-[9px] font-bold text-blue-900 cursor-pointer">70%</button>
+                  <button type="button" onclick="window.setPartialAmountPercent(1.0)" class="px-1.5 py-0.5 bg-white border border-blue-200 hover:bg-blue-100 rounded text-[9px] font-bold text-blue-900 cursor-pointer">전액</button>
+                </div>
+              </div>
+              <div class="relative">
+                <span class="absolute left-3 top-2 text-slate-400 font-bold">₩</span>
+                <input type="text" id="partialAmountInput" placeholder="0" class="w-full pl-7 pr-3 py-1.5 bg-white border border-blue-300 rounded-lg text-sm font-black text-blue-950 outline-none">
+              </div>
+            </div>
+
+            <!-- 실시간 차감 미리보기 카드 -->
+            <div class="bg-white border border-blue-200 rounded-lg p-2.5 grid grid-cols-3 text-center text-xs">
+              <div>
+                <span class="text-[9px] text-slate-400 block font-bold">기존 미수금</span>
+                <span class="font-bold text-slate-700">₩ ${amtVat.toLocaleString()}</span>
+              </div>
+              <div>
+                <span class="text-[9px] text-blue-500 block font-bold">금회 입금액</span>
+                <span id="partialPreviewPaid" class="font-bold text-blue-600">- ₩ 0</span>
+              </div>
+              <div class="border-l border-blue-100">
+                <span class="text-[9px] text-rose-500 block font-bold">차감 후 남은 잔액</span>
+                <span id="partialPreviewRemaining" class="font-black text-rose-700 text-sm">₩ ${amtVat.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-bold text-blue-950 mb-1">잔여금 결제 약속일 (선택)</label>
+              <input type="date" id="partialNextDueDate" value="${u.due_date || todayStr}" class="w-full bg-white border border-blue-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none cursor-pointer">
+            </div>
+          </div>
+
+          <!-- (5) 모드 3: 입금 약속일 연기 -->
+          <div id="modeRescheduleSection" class="${currentSettlementMode === 'reschedule' ? '' : 'hidden'} bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 space-y-3">
+            <div class="flex items-start gap-2">
+              <span class="text-amber-700 text-base">📅</span>
+              <div>
+                <h4 class="font-black text-amber-950 text-xs">입금 약속일 재지정 (일정 연기)</h4>
+                <p class="text-[11px] text-amber-800 mt-0.5">거래처와 협의된 새로운 결제 약속일을 선택하세요. 연체일수와 Aging 구간이 즉시 재계산됩니다.</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 mb-1">기존 결제예정일</label>
+                <input type="text" readonly value="${u.due_date || '-'} (${u.overdue_days <= 0 ? (u.overdue_days === 0 ? 'D-Day' : 'D' + u.overdue_days) : '+' + u.overdue_days + '일 연체'})" class="w-full bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 outline-none cursor-default">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-amber-950 mb-1">새로운 입금 약속일</label>
+                <input type="date" id="rescheduleDueDateInput" value="${u.due_date || todayStr}" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-amber-950 outline-none cursor-pointer">
+              </div>
+            </div>
+
+            <div id="rescheduleDDayFeedback" class="bg-white border border-amber-200 rounded-lg p-2 text-xs text-amber-900 font-bold flex items-center gap-2">
+              <span>⏳</span>
+              <span id="rescheduleDDayText">새 약속일 선택 시 연체 일수가 실시간 계산됩니다.</span>
+            </div>
+          </div>
+
+          <!-- (6) 통화 및 입금약속 상세 메모 (공통 입력란) -->
+          <div>
+            <label class="block text-[11px] font-black text-slate-800 mb-1 flex items-center justify-between">
+              <span>📝 통화 및 입금약속 상세 메모</span>
+              <span class="text-[10px] font-normal text-slate-400">거래처 통화 내용, 입금 조건 등을 기록</span>
+            </label>
+            <textarea id="settlementNoteInput" rows="3" placeholder="예: 2026-11-12 자금담당 김과장 통화: 월말 자금집행일에 맞춰 11/28 전액 입금 확약함." class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-600 outline-none resize-none"></textarea>
+            
+            ${u.contact ? `
+              <div class="mt-2 p-2 bg-slate-100/80 rounded-lg border border-slate-200 text-[10px] text-slate-600">
+                <span class="font-bold text-slate-700 block mb-0.5">📌 기존 담당자 및 이력 메모:</span>
+                <div class="font-mono whitespace-pre-wrap">${u.contact}</div>
+              </div>
+            ` : ''}
+          </div>
+
+        </div>
+
+        <!-- 3. 푸터 버튼 바 -->
+        <div class="bg-slate-100 p-3 sm:p-4 border-t border-slate-200 flex items-center justify-between">
+          <button type="button" onclick="window.closePaymentSettlementModal()" class="px-4 py-2 bg-white hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 transition-colors cursor-pointer">
+            취소
+          </button>
+          <button type="button" id="btnSaveSettlement" onclick="window.submitPaymentSettlement(${idx})" class="px-5 py-2 bg-indigo-900 hover:bg-indigo-950 text-white text-xs font-black rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5">
+            <span>💾</span> 저장 및 상태 업데이트
+          </button>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML("beforeend", modalHtml);
+
+  // 이벤트 바인딩
+  bindSettlementModalEvents(u);
+}
+window.openPaymentSettlementModal = openPaymentSettlementModal;
+
+export function closePaymentSettlementModal() {
+  const modal = document.getElementById("paymentSettlementModal");
+  if (modal) modal.remove();
+  currentSettlementIdx = null;
+}
+window.closePaymentSettlementModal = closePaymentSettlementModal;
+
+/**
+ * 처리 모드 전환
+ */
+export function switchSettlementMode(mode) {
+  currentSettlementMode = mode;
+  const fullSec = document.getElementById("modeFullSettleSection");
+  const partSec = document.getElementById("modePartialSettleSection");
+  const rescSec = document.getElementById("modeRescheduleSection");
+
+  fullSec?.classList.toggle("hidden", mode !== 'full_settle');
+  partSec?.classList.toggle("hidden", mode !== 'partial_settle');
+  rescSec?.classList.toggle("hidden", mode !== 'reschedule');
+
+  // 탭 버튼 스타일 갱신
+  document.querySelectorAll(".settle-tab-btn").forEach(btn => {
+    const btnMode = btn.getAttribute("data-mode");
+    if (btnMode === mode) {
+      if (mode === 'full_settle') {
+        btn.className = "settle-tab-btn py-2 px-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs bg-emerald-700 text-white border-emerald-800 shadow-xs flex flex-col items-center gap-0.5";
+      } else if (mode === 'partial_settle') {
+        btn.className = "settle-tab-btn py-2 px-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs bg-blue-700 text-white border-blue-800 shadow-xs flex flex-col items-center gap-0.5";
+      } else {
+        btn.className = "settle-tab-btn py-2 px-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs bg-amber-600 text-white border-amber-700 shadow-xs flex flex-col items-center gap-0.5";
+      }
+    } else {
+      btn.className = "settle-tab-btn py-2 px-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs bg-white text-slate-700 border-slate-300 hover:bg-slate-50 flex flex-col items-center gap-0.5";
+    }
+  });
+}
+window.switchSettlementMode = switchSettlementMode;
+
+/**
+ * 부분 입금 퍼센트 빠른 입력
+ */
+export function setPartialAmountPercent(pct) {
+  if (currentSettlementIdx === null) return;
+  const u = lastFilteredUnpaid[currentSettlementIdx] || cachedUnpaid[currentSettlementIdx];
+  if (!u) return;
+
+  const total = Math.round(u.amount_vat || 0);
+  const val = Math.round(total * pct);
+  const input = document.getElementById("partialAmountInput");
+  if (input) {
+    input.value = val.toLocaleString();
+    input.dispatchEvent(new Event('input'));
+  }
+}
+window.setPartialAmountPercent = setPartialAmountPercent;
+
+function bindSettlementModalEvents(u) {
+  const partialInp = document.getElementById("partialAmountInput");
+  const previewPaid = document.getElementById("partialPreviewPaid");
+  const previewRemaining = document.getElementById("partialPreviewRemaining");
+  const rescheduleDateInp = document.getElementById("rescheduleDueDateInput");
+  const ddayText = document.getElementById("rescheduleDDayText");
+
+  const totalVat = Math.round(u.amount_vat || 0);
+
+  // 부분 입금 금액 입력 시 실시간 차감 계산
+  partialInp?.addEventListener("input", (e) => {
+    let cleanVal = e.target.value.replace(/[^0-9]/g, '');
+    const num = parseInt(cleanVal, 10) || 0;
+    e.target.value = cleanVal ? num.toLocaleString() : '';
+
+    const remaining = Math.max(0, totalVat - num);
+    if (previewPaid) previewPaid.innerText = `- ₩ ${num.toLocaleString()}`;
+    if (previewRemaining) {
+      previewRemaining.innerText = `₩ ${remaining.toLocaleString()}`;
+      if (remaining === 0 && num > 0) {
+        previewRemaining.className = "font-black text-emerald-700 text-sm";
+      } else {
+        previewRemaining.className = "font-black text-rose-700 text-sm";
+      }
+    }
+  });
+
+  // 약속일자 변경 시 D-Day 실시간 계산
+  const updateRescheduleFeedback = () => {
+    const val = rescheduleDateInp?.value;
+    if (!val || !ddayText) return;
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const target = new Date(val);
+      target.setHours(0, 0, 0, 0);
+      const diff = Math.floor((today - target) / (1000 * 60 * 60 * 24));
+
+      if (diff < 0) {
+        ddayText.innerHTML = `선택 약속일 기준: <strong class="text-emerald-700">D${diff} (정상 회수 예정 전환)</strong>`;
+      } else if (diff === 0) {
+        ddayText.innerHTML = `선택 약속일 기준: <strong class="text-emerald-700">D-Day (오늘 결제 예정)</strong>`;
+      } else {
+        ddayText.innerHTML = `선택 약속일 기준: <strong class="text-rose-700">+${diff}일 연체</strong>`;
+      }
+    } catch(e) {}
+  };
+
+  rescheduleDateInp?.addEventListener("change", updateRescheduleFeedback);
+  updateRescheduleFeedback();
+}
+
+/**
+ * 수금 및 입금약속 저장 처리
+ */
+export async function submitPaymentSettlement(idx) {
+  const u = lastFilteredUnpaid[idx] || cachedUnpaid[idx];
+  if (!u) return;
+
+  const btn = document.getElementById("btnSaveSettlement");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "저장 중...";
+  }
+
+  const mode = currentSettlementMode;
+  let collectedAmount = 0;
+  let newAmountVat = u.amount_vat;
+  let newDueDate = u.due_date;
+  let payStatus = u.pay_status || '미결제';
+  const noteRaw = document.getElementById("settlementNoteInput")?.value.trim() || '';
+
+  if (mode === 'full_settle') {
+    const settleDate = document.getElementById("settleDateInput")?.value || new Date().toISOString().slice(0, 10);
+    const settleMethod = document.getElementById("settleMethodSelect")?.value || '법인통장 계좌입금';
+    collectedAmount = u.amount_vat;
+    newAmountVat = 0.0;
+    payStatus = '수금완료';
+    newDueDate = settleDate;
+  } else if (mode === 'partial_settle') {
+    const paidStr = (document.getElementById("partialAmountInput")?.value || '').replace(/[^0-9]/g, '');
+    const paid = parseInt(paidStr, 10) || 0;
+    if (paid <= 0) {
+      alert("입금된 금액을 입력해 주세요.");
+      if (btn) { btn.disabled = false; btn.innerText = "💾 저장 및 상태 업데이트"; }
+      return;
+    }
+    collectedAmount = paid;
+    newAmountVat = Math.max(0, u.amount_vat - paid);
+    payStatus = (newAmountVat <= 0) ? '수금완료' : '부분입금';
+    const nextDue = document.getElementById("partialNextDueDate")?.value;
+    if (nextDue) newDueDate = nextDue;
+  } else if (mode === 'reschedule') {
+    const reschedDue = document.getElementById("rescheduleDueDateInput")?.value;
+    if (!reschedDue) {
+      alert("새로운 입금 약속일을 지정해 주세요.");
+      if (btn) { btn.disabled = false; btn.innerText = "💾 저장 및 상태 업데이트"; }
+      return;
+    }
+    newDueDate = reschedDue;
+    payStatus = (u.amount_vat <= 0) ? '수금완료' : '결제약속';
+  }
+
+  // 메모 작성
+  let finalContactNote = noteRaw;
+  if (mode === 'full_settle') {
+    const method = document.getElementById("settleMethodSelect")?.value || '계좌입금';
+    finalContactNote = `[전액수금완료: ₩${Math.round(u.amount_vat).toLocaleString()} / ${method}] ${noteRaw}`.trim();
+  } else if (mode === 'partial_settle') {
+    finalContactNote = `[부분입금: ₩${Math.round(collectedAmount).toLocaleString()} / 잔액: ₩${Math.round(newAmountVat).toLocaleString()}] ${noteRaw}`.trim();
+  } else if (mode === 'reschedule') {
+    finalContactNote = `[약속일연기 ➔ ${newDueDate}] ${noteRaw}`.trim();
+  }
+
+  const payload = {
+    id: u.id,
+    legacy_idx: u.legacy_idx,
+    action_type: mode,
+    collected_amount: collectedAmount,
+    new_amount_vat: newAmountVat,
+    new_due_date: newDueDate,
+    pay_status: payStatus,
+    contact_note: finalContactNote
+  };
+
+  try {
+    let success = false;
+    let updatedItem = null;
+
+    // 1. FastAPI 서버 브릿지 호출 (/api/unpaid/settlement)
+    try {
+      const res = await fetch('/api/unpaid/settlement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'success') {
+          success = true;
+          updatedItem = data.item;
+        }
+      }
+    } catch (apiErr) {
+      console.warn("로컬 API 수금 처리 실패, Supabase 직접 업데이트 시도:", apiErr);
+    }
+
+    // 2. Fallback: Supabase 직접 업데이트
+    if (!success && sbClient) {
+      const sbUpdate = {
+        amount_vat: newAmountVat,
+        pay_status: payStatus,
+        due_date: newDueDate,
+        last_synced_at: new Date().toISOString()
+      };
+      if (finalContactNote) {
+        const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
+        sbUpdate.contact = u.contact ? `${u.contact} | [${nowStr}] ${finalContactNote}` : `[${nowStr}] ${finalContactNote}`;
+      }
+      if (newDueDate) {
+        const diff = Math.floor((new Date() - new Date(newDueDate)) / (1000 * 60 * 60 * 24));
+        sbUpdate.overdue_days = diff;
+        sbUpdate.color_code = (newAmountVat <= 0 || diff <= 0) ? 0 : (diff < 30 ? 1 : (diff < 45 ? 2 : (diff < 60 ? 3 : 4)));
+      }
+
+      let qb = sbClient.from('legacy_unpaid').update(sbUpdate);
+      if (u.id) qb = qb.eq('id', u.id);
+      else if (u.legacy_idx) qb = qb.eq('legacy_idx', u.legacy_idx);
+
+      const { data, error } = await qb.select();
+      if (!error) {
+        success = true;
+        updatedItem = (data && data.length > 0) ? data[0] : sbUpdate;
+      }
+    }
+
+    // 3. 인메모리 캐시 및 화면 즉각 동기화
+    u.amount_vat = newAmountVat;
+    u.pay_status = payStatus;
+    u.due_date = newDueDate;
+
+    if (updatedItem) {
+      if (updatedItem.overdue_days !== undefined) u.overdue_days = updatedItem.overdue_days;
+      if (updatedItem.color_code !== undefined) u.color_code = updatedItem.color_code;
+      if (updatedItem.contact) u.contact = updatedItem.contact;
+    } else if (newDueDate) {
+      const diff = Math.floor((new Date() - new Date(newDueDate)) / (1000 * 60 * 60 * 24));
+      u.overdue_days = diff;
+      u.color_code = (newAmountVat <= 0 || diff <= 0) ? 0 : (diff < 30 ? 1 : (diff < 45 ? 2 : (diff < 60 ? 3 : 4)));
+      if (finalContactNote) {
+        const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
+        u.contact = u.contact ? `${u.contact} | [${nowStr}] ${finalContactNote}` : `[${nowStr}] ${finalContactNote}`;
+      }
+    }
+
+    // KPI 카드 및 테이블 뷰 즉각 갱신
+    cachedSummary = computeSummaryFromItems(cachedUnpaid);
+    refreshUnpaidKpis();
+    applyLocalUnpaidFilters();
+    updateUnpaidCurrentPage();
+
+    closePaymentSettlementModal();
+    alert(`✅ [${u.cname}] ${u.part_no}\n\n수금 및 입금약속 처리가 성공적으로 저장되었습니다.\n(현재 미수 잔액: ₩${Math.round(u.amount_vat).toLocaleString()}, 상태: ${u.pay_status})`);
+
+  } catch (err) {
+    console.error("수금 정산 처리 예외:", err);
+    alert(`처리 중 오류가 발생했습니다: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "💾 저장 및 상태 업데이트";
+    }
+  }
+}
+window.submitPaymentSettlement = submitPaymentSettlement;
+
+/**
+ * 상단 KPI 요약 카드 실시간 리프레시
+ */
+function refreshUnpaidKpis() {
+  const sum = cachedSummary || computeSummaryFromItems(cachedUnpaid);
+  const totalAmtEl = document.getElementById("unpaidKpiTotalAmount");
+  const totalCntEl = document.getElementById("unpaidKpiTotalCount");
+  const upcomingAmtEl = document.getElementById("unpaidKpiUpcomingAmount");
+  const overdueAmtEl = document.getElementById("unpaidKpiOverdueAmount");
+  const topNameEl = document.getElementById("unpaidKpiTopCustName");
+  const topAmtEl = document.getElementById("unpaidKpiTopCustAmount");
+
+  if (totalAmtEl) totalAmtEl.innerText = `₩${Math.round(sum.total_amount).toLocaleString()}`;
+  if (totalCntEl) totalCntEl.innerText = sum.total_count.toLocaleString();
+  if (upcomingAmtEl) upcomingAmtEl.innerText = `₩${Math.round(sum.upcoming_amount).toLocaleString()}`;
+  if (overdueAmtEl) overdueAmtEl.innerText = `₩${Math.round(sum.overdue_amount).toLocaleString()}`;
+
+  const topCust = (sum.top_customers && sum.top_customers.length > 0) ? sum.top_customers[0] : null;
+  if (topNameEl && topCust) topNameEl.innerText = topCust.customer_name;
+  if (topAmtEl && topCust) topAmtEl.innerText = `₩${Math.round(topCust.total_unpaid || 0).toLocaleString()}`;
+
+  // Aging 필터 카운트 실시간 업데이트
+  const activeItems = cachedUnpaid.filter(u => u.pay_status !== '수금완료' && (u.amount_vat || 0) > 0);
+  const cntAll = activeItems.length;
+  const cntUpcoming = activeItems.filter(u => u.overdue_days <= 0).length;
+  const cnt1_30 = activeItems.filter(u => u.overdue_days > 0 && u.overdue_days < 30).length;
+  const cnt30_45 = activeItems.filter(u => u.overdue_days >= 30 && u.overdue_days < 45).length;
+  const cnt45_60 = activeItems.filter(u => u.overdue_days >= 45 && u.overdue_days < 60).length;
+  const cnt60Plus = activeItems.filter(u => u.overdue_days >= 60).length;
+
+  const btnAll = document.querySelector("#unpaidAgingFilters button[data-aging='all']");
+  if (btnAll) btnAll.innerHTML = `전체 (${cntAll})`;
+  const btnUpcoming = document.querySelector("#unpaidAgingFilters button[data-aging='upcoming']");
+  if (btnUpcoming) btnUpcoming.innerHTML = `결제예정 (${cntUpcoming})`;
+  const btn1_30 = document.querySelector("#unpaidAgingFilters button[data-aging='1_30']");
+  if (btn1_30) btn1_30.innerHTML = `+1 ~ 29일 연체 (${cnt1_30})`;
+  const btn30_45 = document.querySelector("#unpaidAgingFilters button[data-aging='30_45']");
+  if (btn30_45) btn30_45.innerHTML = `30 ~ 44일 연체 (${cnt30_45})`;
+  const btn45_60 = document.querySelector("#unpaidAgingFilters button[data-aging='45_60']");
+  if (btn45_60) btn45_60.innerHTML = `45 ~ 59일 연체 (${cnt45_60})`;
+  const btn60 = document.querySelector("#unpaidAgingFilters button[data-aging='60_plus']");
+  if (btn60) btn60.innerHTML = `★ 60일 이상 (${cnt60Plus})`;
+}
+window.refreshUnpaidKpis = refreshUnpaidKpis;
