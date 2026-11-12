@@ -51,6 +51,9 @@ export async function initPaymentModule() {
       : "w-2.5 h-2.5 rounded-full bg-rose-500 inline-block";
   }
 
+  // 결재 권한 UI 초기화 (비인가자 관리자 버튼 숨김)
+  refreshAdminPaymentAuthUI();
+
   if (window.lucide) {
     try { lucide.createIcons(); } catch (e) {}
   }
@@ -60,10 +63,20 @@ export async function initPaymentModule() {
 }
 
 /**
- * 상단 탭 뱃지 카운트 업데이트
+ * 상단 탭 뱃지 카운트 업데이트 (지정 결재 승인권자에게만 노출)
  */
 export async function updatePaymentPendingBadge() {
   if (!paymentSupabase) return;
+  const isApprover = (typeof window.isPaymentApprovalAdmin === 'function') ? window.isPaymentApprovalAdmin() : false;
+  const badge = document.getElementById('paymentPendingBadge');
+  const adminBadge = document.getElementById('pendingBadge');
+
+  if (!isApprover) {
+    if (badge) badge.classList.add('hidden');
+    if (adminBadge) adminBadge.classList.add('hidden');
+    return;
+  }
+
   try {
     const [{ count: expCnt }, { count: appCnt }] = await Promise.all([
       paymentSupabase.from('expense_reports').select('id', { count: 'exact', head: true }).eq('status', 'PENDING'),
@@ -71,12 +84,10 @@ export async function updatePaymentPendingBadge() {
     ]);
 
     const totalPending = (expCnt || 0) + (appCnt || 0);
-    const badge = document.getElementById('paymentPendingBadge');
     if (badge) {
       badge.textContent = `${totalPending}건`;
       badge.classList.toggle('hidden', totalPending === 0);
     }
-    const adminBadge = document.getElementById('pendingBadge');
     if (adminBadge) {
       adminBadge.textContent = totalPending;
       adminBadge.classList.toggle('hidden', totalPending === 0);
@@ -90,18 +101,11 @@ export async function updatePaymentPendingBadge() {
  * 2. 내부 서브탭 전환
  */
 export function switchPaymentSubTab(tab) {
-  // 관리자 탭 접근 검증 (결재 승인권자 세션, ERP Admin 세션 또는 PIN 인증)
+  // 관리자 탭 접근 검증: 지정된 결재 승인권자만 진입 허용 (비승인자는 아예 진입 불가)
   if (tab === 'admin') {
     const isApprover = (typeof window.isPaymentApprovalAdmin === 'function') ? window.isPaymentApprovalAdmin() : false;
-    const isErpAdmin = (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
-    const isPinAuthed = sessionStorage.getItem('IS_PAYMENT_ADMIN_AUTH') === 'true' || isPaymentAdminAuthed;
-
-    if (!isApprover && !isErpAdmin && !isPinAuthed) {
-      const pinInput = document.getElementById('adminPinInput');
-      if (pinInput) pinInput.value = '';
-      const modal = document.getElementById('adminAuthModal');
-      if (modal) modal.classList.remove('hidden');
-      setTimeout(() => pinInput && pinInput.focus(), 100);
+    if (!isApprover) {
+      alert('관리자 결재 메뉴에 접근할 권한이 없습니다.');
       return;
     }
     isPaymentAdminAuthed = true;
@@ -140,6 +144,9 @@ export function switchPaymentSubTab(tab) {
     document.getElementById('tabBtnAdmin')?.setAttribute('class', activeClass);
     loadAllAdminPaymentData();
   }
+
+  // 결재 권한 UI 초기화 (비인가자 관리자 버튼 숨김)
+  refreshAdminPaymentAuthUI();
 
   if (window.lucide) {
     try { lucide.createIcons(); } catch (e) {}
@@ -810,45 +817,52 @@ export async function loadAllAdminPaymentData() {
 }
 
 /**
- * 결재 승인권자 권한 UI 갱신 (timothy, tony, nathan 3계정 검증)
+ * 결재 승인권자 권한 UI 갱신 (지정 3계정 전용 검증 & 비승인자 완전 차단)
  */
 export function refreshAdminPaymentAuthUI() {
   const isApprover = (typeof window.isPaymentApprovalAdmin === 'function') ? window.isPaymentApprovalAdmin() : false;
-  const currentEmail = (typeof window.getCurrentUserEmail === 'function') ? window.getCurrentUserEmail() : null;
-  const badge = document.getElementById('adminApproverStatusBadge');
 
+  // 1. 관리자 결재 서브탭 버튼(#tabBtnAdmin): 승인권자가 아니면 화면에서 완전히 숨김
+  const adminTabBtn = document.getElementById('tabBtnAdmin');
+  if (adminTabBtn) {
+    adminTabBtn.classList.toggle('hidden', !isApprover);
+  }
+
+  // 2. 비승인자가 현재 admin 섹션에 머물러 있는 경우 즉시 register로 강제 이탈
+  const adminSection = document.getElementById('paymentSectionAdmin');
+  if (!isApprover && adminSection && !adminSection.classList.contains('hidden')) {
+    switchPaymentSubTab('register');
+  }
+
+  // 3. 상단 결재 권한 배지: 승인권자인 경우에만 심플하게 표시 (개인 이름 미노출)
+  const badge = document.getElementById('adminApproverStatusBadge');
   if (badge) {
     if (isApprover) {
       badge.className = "text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300";
-      badge.innerHTML = `🛡️ 결재 승인권자 (${currentEmail})`;
-    } else if (currentEmail) {
-      badge.className = "text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300";
-      badge.innerHTML = `🔒 조회 전용 (${currentEmail} - 결재 권한 없음)`;
+      badge.innerHTML = "🛡️ 관리자 결재 권한 확인됨";
     } else {
-      badge.className = "text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200";
-      badge.innerHTML = `🔒 비로그인 (승인권자: timothy, tony, nathan)`;
+      badge.className = "hidden";
+      badge.innerHTML = "";
     }
   }
 
-  if (allExpenses && allExpenses.length > 0) renderAdminExpenseTable();
-  if (allApprovals && allApprovals.length > 0) renderAdminApprovalTable();
+  updatePaymentPendingBadge();
+
+  if (isApprover) {
+    if (allExpenses && allExpenses.length > 0) renderAdminExpenseTable();
+    if (allApprovals && allApprovals.length > 0) renderAdminApprovalTable();
+  }
 }
 window.refreshAdminPaymentAuthUI = refreshAdminPaymentAuthUI;
 
 /**
- * 결재 승인/반려 권한 검증 헬퍼
+ * 결재 승인/반려 권한 검증 헬퍼 (개인 이름 미노출)
  */
 function checkApproverAuthority() {
   const isApprover = (typeof window.isPaymentApprovalAdmin === 'function') ? window.isPaymentApprovalAdmin() : false;
-  const currentEmail = (typeof window.getCurrentUserEmail === 'function') ? window.getCurrentUserEmail() : null;
 
   if (!isApprover) {
-    if (!currentEmail) {
-      alert("결재 승인 및 반려는 사내 인증된 결재권자(timothy@bigshine.co.kr, tony@bigshine.co.kr, nathan@bigshine.co.kr)만 가능합니다.\n\n먼저 상단에서 해당 관리자 계정으로 로그인해 주세요.");
-      document.getElementById('loginModal')?.classList.remove('hidden');
-    } else {
-      alert(`[결재 권한 오류]\n현재 로그인된 계정(${currentEmail})은 결재 승인/반려 권한이 없습니다.\n\n지정된 결재권자 3계정(timothy, tony, nathan)으로만 결재 처리가 가능합니다.`);
-    }
+    alert("결재 승인 및 반려 권한이 없습니다.");
     return false;
   }
   return true;
@@ -940,7 +954,7 @@ export function renderAdminExpenseTable() {
           isApprover ? `
             <button type="button" onclick="window.updateExpenseStatusAction(${item.id}, 'APPROVED')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">승인</button>
             <button type="button" onclick="window.updateExpenseStatusAction(${item.id}, 'REJECTED')" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">반려</button>
-          ` : `<span class="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-100 rounded border border-slate-200" title="결재 권한 없음 (지정 결재권자: timothy, tony, nathan)">권한 제한</span>`
+          ` : `<span class="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-100 rounded border border-slate-200" title="결재 권한 없음">권한 제한</span>`
         ) : `<span class="text-slate-400 text-[11px] mr-1 font-semibold">결재완료</span>`}
         ${isApprover ? `
           <button type="button" onclick="window.deleteExpenseAction(${item.id}, '${item.receipt_url || ''}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs cursor-pointer">삭제</button>
@@ -1051,7 +1065,7 @@ export function renderAdminApprovalTable() {
           isApprover ? `
             <button type="button" onclick="window.updateApprovalStatusAction(${doc.id}, 'APPROVED')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">승인</button>
             <button type="button" onclick="window.updateApprovalStatusAction(${doc.id}, 'REJECTED')" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">반려</button>
-          ` : `<span class="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-100 rounded border border-slate-200" title="결재 권한 없음 (지정 결재권자: timothy, tony, nathan)">권한 제한</span>`
+          ` : `<span class="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-100 rounded border border-slate-200" title="결재 권한 없음">권한 제한</span>`
         ) : `<span class="text-slate-400 text-[11px] mr-1 font-semibold">결재완료</span>`}
         ${isApprover ? `
           <button type="button" onclick="window.deleteApprovalDocAction(${doc.id})" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs cursor-pointer">삭제</button>

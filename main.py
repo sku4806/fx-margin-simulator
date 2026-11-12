@@ -374,7 +374,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
     if data.approver_email and data.approver_email.lower().strip() not in ALLOWED_APPROVAL_ADMINS:
         raise HTTPException(
             status_code=403,
-            detail=f"결재 승인 권한이 없는 계정입니다: {data.approver_email} (승인 가능 계정: timothy, tony, nathan)"
+            detail=f"결재 승인 권한이 없는 계정입니다: {data.approver_email}"
         )
 
     headers = {
