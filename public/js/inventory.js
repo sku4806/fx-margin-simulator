@@ -315,11 +315,11 @@ export function renderInventoryHeaders(activeTab) {
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[5%]">KIND</th>
         <th class="py-2.5 px-2 text-left w-[13%]">CNAME / 입고일</th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">SALES</th>
-        <th class="py-2.5 px-2 text-left w-[20%]">PART# / MFG</th>
+        <th class="py-2.5 px-2 text-left w-[24%] min-w-[210px]">PART# / MFG</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">재고량 / 배정</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">원가(₩) / 가용</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">AMOUNT(₩)</th>
-        <th class="py-2.5 px-2 text-left w-[21%]">PONO</th>
+        <th class="py-2.5 px-2 text-left w-[17%]">PONO</th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">수금</th>
       </tr>
     `;
@@ -395,10 +395,10 @@ function generateLegacyMasterRow(item) {
         <div class="font-bold text-indigo-800">${sales}</div>
       </td>
       <td class="py-2.5 px-2 align-middle">
-        <div class="flex items-center gap-1.5 flex-wrap">
-          <span class="font-black text-indigo-950 truncate max-w-[180px]" title="${part}">${part}</span>
-          <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${part.replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer" title="품목별 과거 단가 & 마진 이력 추적">📈</button>
-          <button type="button" onclick="event.stopPropagation(); window.handleStockToOrder && window.handleStockToOrder('${item.id}')" class="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[10px] cursor-pointer whitespace-nowrap shadow-2xs flex items-center gap-0.5" title="해당 재고 품목으로 수주·출하 등록 진행 (CS 및 관리자 전용)">📦 수주</button>
+        <div class="flex items-center gap-1.5 whitespace-nowrap">
+          <span class="font-black text-indigo-950 truncate max-w-[170px]" title="${part}">${part}</span>
+          <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${part.replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer shrink-0" title="품목별 과거 단가 & 마진 이력 추적">📈</button>
+          <button type="button" onclick="event.stopPropagation(); window.handleStockToOrder && window.handleStockToOrder('${item.id}')" class="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[10px] cursor-pointer whitespace-nowrap shadow-2xs flex items-center gap-0.5 shrink-0" title="해당 재고 품목으로 수주·출하 등록 진행 (CS 및 관리자 전용)">📦 수주</button>
         </div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">MFG: <span class="font-bold text-slate-700">${mfg}</span></div>
       </td>
