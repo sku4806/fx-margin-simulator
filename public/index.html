@@ -621,8 +621,8 @@
 
         <!-- 모바일 카드 내부 스크롤 뷰 -->
         
-        <!-- 📊 레거시 Grand Summaries 합계 바 -->
-        <div id="grandSummariesBar" class="bg-amber-50/90 border border-amber-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-sm mb-3">
+        <!-- 📊 레거시 Grand Summaries 합계 바 (요청에 따라 비노출 처리) -->
+        <div id="grandSummariesBar" class="hidden bg-amber-50/90 border border-amber-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-sm mb-3">
 <style>@media (max-width: 640px) { .grand-summary-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 0.5rem !important; } .grand-summary-item { min-width: 0 !important; } }</style>
           <div class="flex items-center gap-2">
             <span class="text-amber-800 font-sans font-black">Grand Summaries</span>

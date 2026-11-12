@@ -396,9 +396,8 @@ function generateLegacyMasterRow(item) {
       </td>
       <td class="py-2.5 px-2 align-middle">
         <div class="flex items-center gap-1.5 flex-wrap">
-          <span class="font-black text-indigo-950 truncate max-w-[170px]" title="${part}">${part}</span>
-          <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${part.replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer" title="과거 매입·판매·견적 단가 이력 추적">📈</button>
-          <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer whitespace-nowrap" title="상단 고객사 제시 견적 계산기에 품목 단가/수량 즉시 반영">🧮 견적계산</button>
+          <span class="font-black text-indigo-950 truncate max-w-[180px]" title="${part}">${part}</span>
+          <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${part.replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer" title="품목별 과거 단가 & 마진 이력 추적">📈</button>
           <button type="button" onclick="event.stopPropagation(); window.handleStockToOrder && window.handleStockToOrder('${item.id}')" class="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[10px] cursor-pointer whitespace-nowrap shadow-2xs flex items-center gap-0.5" title="해당 재고 품목으로 수주·출하 등록 진행 (CS 및 관리자 전용)">📦 수주</button>
         </div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">MFG: <span class="font-bold text-slate-700">${mfg}</span></div>
