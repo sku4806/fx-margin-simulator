@@ -91,7 +91,6 @@ def sync_inventory(conn, sb):
     rows = cur.fetchall()
 
     items = []
-    ship_fx = 1350.0
 
     for r in rows:
         part = clean_val(r['PARTNO'])
@@ -102,8 +101,13 @@ def sync_inventory(conn, sb):
         indt_str = r['INDT'].strftime('%Y-%m-%d') if r['INDT'] else '2026-01-01'
         owner_val = clean_val(r['RealSales']) or 'BSK'
         
-        krw_cost = float(r['WOUP']) if r['WOUP'] else (float(r['Wup']) if r['Wup'] else 0.0)
-        unit_usd = krw_cost / ship_fx if krw_cost > 0 else 0.0
+        # 사내 ERP 원장의 실제 입고/선적 환율(InRate) 및 원화/외화 단가 반영
+        raw_in_rate = float(r['InRate']) if r.get('InRate') and float(r['InRate']) > 500 else 1350.0
+        sl_up = float(r['Slup']) if r.get('Slup') and float(r['Slup']) > 0 else 0.0
+        krw_cost = float(r['WOUP']) if r.get('WOUP') else (float(r['Wup']) if r.get('Wup') else 0.0)
+        
+        unit_usd = sl_up if sl_up > 0 else (krw_cost / raw_in_rate if krw_cost > 0 else 0.0)
+        ship_fx = raw_in_rate
 
         record = {
             "part_name": part,
