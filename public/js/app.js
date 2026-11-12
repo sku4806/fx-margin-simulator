@@ -663,8 +663,8 @@ function bindTabSwitch() {
   const paymentSection = document.getElementById('paymentSection');
   const csHeaderDesc = document.getElementById('csHeaderDesc');
 
-  const activeStyle = "py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0";
-  const inactiveStyle = "py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0";
+  const activeStyle = "py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0";
+  const inactiveStyle = "py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0";
 
   function setTabs(active) {
     if (tabSales) tabSales.className = (active === 'sales') ? activeStyle : inactiveStyle;

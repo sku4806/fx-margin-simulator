@@ -99,33 +99,39 @@
       </div>
     </header>
 
-    <!-- 2. 비즈니스 탭 스위처 바 (가로 1열 6단 통합 탭) -->
+    <!-- 2. 비즈니스 탭 스위처 바 (가로 1열 콤팩트 통합 탭) -->
     <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-2 relative">
       <div id="mainTabScrollContainer" class="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none py-0.5 scroll-smooth" style="-webkit-overflow-scrolling: touch;">
-        <button id="tabSales" class="py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0">
-          <span>💼</span> 영업 견적·재고
+        <!-- [영업·물류 부문] -->
+        <button id="tabSales" class="py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0" title="영업 견적 시뮬레이터 및 보유 재고 관리">
+          <span>💼</span> 견적·재고
         </button>
-        <button id="tabFulfillment" class="py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0">
-          <span>📋</span> 수주·출하 관리
+        <button id="tabFulfillment" class="py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0" title="실시간 수주 확정 및 배정·출하 처리">
+          <span>📋</span> 수주·출하
         </button>
-        <button id="tabShipments" class="py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0">
-          <span>🚚</span> 출하·수주 이력
+        <button id="tabShipments" class="py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0" title="출하 완료 및 과거 수주 이력 조회">
+          <span>🚚</span> 출하 이력
         </button>
-        <button id="tabQuotations" class="py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0">
+        <button id="tabQuotations" class="py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0" title="발행된 영업 견적서 조회 및 재출력">
           <span>📄</span> 견적 이력
         </button>
-        <button id="tabUnpaid" class="py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0">
-          <span>💰</span> 미수금·결제예정
+
+        <!-- 업무 그룹 구분선 (Desktop) -->
+        <div class="h-4 w-px bg-slate-200 mx-0.5 shrink-0 hidden md:block"></div>
+
+        <!-- [경영·관리 부문] -->
+        <button id="tabUnpaid" class="py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0" title="거래처별 미수금 현황 및 결제 예정일 관리">
+          <span>💰</span> 미수금
         </button>
-        <button id="tabAnalytics" class="py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0" title="매출·수주 실적 분석 (Book & Bill)">
-          <span>📊</span> 매출 실적 분석
+        <button id="tabAnalytics" class="py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0" title="월별 수주(Booking) vs 매출(Billing) 및 다차원 실적 분석">
+          <span>📊</span> 실적 분석
         </button>
-        <button id="tabPayment" onclick="window.switchToPaymentTab && window.switchToPaymentTab()" class="py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0 cursor-pointer" title="내부 경비 정산 및 전자결재 (지출·구매·출장 품의)">
-          <span>📑</span> 전자결재·품의
+        <button id="tabPayment" onclick="window.switchToPaymentTab && window.switchToPaymentTab()" class="py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0 cursor-pointer" title="사내 경비 정산 및 전자결재 (지출·구매·출장 품의)">
+          <span>📑</span> 전자결재
           <span id="paymentPendingBadge" class="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold hidden">0</span>
         </button>
       </div>
-      <span id="csHeaderDesc" class="text-[11px] text-slate-400 font-medium hidden xl:block px-2 shrink-0 text-right">영업 협의 수주 현황 및 실판매가를 확인합니다.</span>
+      <span id="csHeaderDesc" class="text-[11px] text-slate-400 font-medium hidden 2xl:block px-2 shrink-0 text-right">영업 협의 수주 현황 및 실판매가를 확인합니다.</span>
     </div>
 
     <div id="inventoryMainArea" class="space-y-3 sm:space-y-5">
