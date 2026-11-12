@@ -229,19 +229,19 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
       
       <!-- 1. 헤더 바 (다크 인디고/골드 테마) -->
       <div class="rounded-xl overflow-hidden shadow-sm border border-indigo-900/30">
-        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div class="flex items-center gap-2.5">
-            <span class="text-2xl">💰</span>
+        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-3.5 sm:px-4 py-3 flex flex-wrap items-center justify-between gap-2.5">
+          <div class="flex items-center gap-2 sm:gap-2.5">
+            <span class="text-xl sm:text-2xl shrink-0">💰</span>
             <div>
-              <div class="flex items-center gap-2">
-                <h2 class="text-base sm:text-lg font-black tracking-wide uppercase font-sans text-white">결제예정 및 미수금 관리</h2>
-                <span class="text-[10px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.5 rounded shadow-xs">FrmUnpaidCustList</span>
+              <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h2 class="text-sm sm:text-lg font-black tracking-wide uppercase font-sans text-white break-keep">결제예정 및 미수금 관리</h2>
+                <span class="text-[9px] sm:text-[10px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.5 rounded shadow-xs shrink-0">FrmUnpaidCustList</span>
               </div>
-              <p class="text-[11px] text-indigo-200 font-medium">세일즈 마스터 MS-SQL 연동 채권 에이징(Aging) 및 자금 회수 대시보드</p>
+              <p class="text-[10px] sm:text-[11px] text-indigo-200 font-medium">세일즈 마스터 MS-SQL 연동 채권 에이징(Aging) 및 자금 회수 대시보드</p>
             </div>
           </div>
 
-          <div class="flex items-center gap-2 text-xs">
+          <div class="flex items-center gap-2 text-xs w-full sm:w-auto justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-indigo-900/60">
             <!-- 엑셀 내보내기 -->
             <button id="btnUnpaidExcelExport" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer">
               <span>📥</span> Excel 다운로드
@@ -303,32 +303,32 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
 
       <!-- 3. 레거시 세일즈 마스터 4단계 에이징(Aging) 색상 필터 탭 -->
       <div class="bg-slate-100/70 p-2 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5 flex-wrap text-xs font-bold select-none" id="unpaidAgingFilters">
-          <span class="text-[11px] font-bold text-slate-500 mr-1 flex items-center gap-1">
+        <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5 text-xs font-bold select-none w-full sm:w-auto scroll-smooth" id="unpaidAgingFilters" style="-webkit-overflow-scrolling: touch;">
+          <span class="text-[11px] font-bold text-slate-500 mr-1 flex items-center gap-1 shrink-0">
             <span>🎨</span> 미수일 구분:
           </span>
           <button type="button" data-aging="all" 
-                  class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === 'all' ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}">
+                  class="aging-btn shrink-0 px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === 'all' ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}">
             전체 (${cntAll})
           </button>
           <button type="button" data-aging="upcoming" 
-                  class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === 'upcoming' ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs' : 'bg-emerald-50/70 text-emerald-800 border-emerald-200 hover:bg-emerald-100'}">
+                  class="aging-btn shrink-0 px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === 'upcoming' ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs' : 'bg-emerald-50/70 text-emerald-800 border-emerald-200 hover:bg-emerald-100'}">
             결제예정 (${cntUpcoming})
           </button>
           <button type="button" data-aging="1_30" 
-                  class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '1_30' ? 'bg-amber-500 text-white border-amber-600 shadow-xs' : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'}">
+                  class="aging-btn shrink-0 px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '1_30' ? 'bg-amber-500 text-white border-amber-600 shadow-xs' : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'}">
             +1 ~ 29일 연체 (${cnt1_30})
           </button>
           <button type="button" data-aging="30_45" 
-                  class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '30_45' ? 'bg-orange-500 text-white border-orange-600 shadow-xs' : 'bg-orange-50 text-orange-900 border-orange-200 hover:bg-orange-100'}">
+                  class="aging-btn shrink-0 px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '30_45' ? 'bg-orange-500 text-white border-orange-600 shadow-xs' : 'bg-orange-50 text-orange-900 border-orange-200 hover:bg-orange-100'}">
             30 ~ 44일 연체 (${cnt30_45})
           </button>
           <button type="button" data-aging="45_60" 
-                  class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '45_60' ? 'bg-rose-500 text-white border-rose-600 shadow-xs' : 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100'}">
+                  class="aging-btn shrink-0 px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '45_60' ? 'bg-rose-500 text-white border-rose-600 shadow-xs' : 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100'}">
             45 ~ 59일 연체 (${cnt45_60})
           </button>
           <button type="button" data-aging="60_plus" 
-                  class="aging-btn px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '60_plus' ? 'bg-red-700 text-white border-red-800 shadow-xs' : 'bg-red-100 text-red-950 border-red-300 hover:bg-red-200'}">
+                  class="aging-btn shrink-0 px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${activeAgingFilter === '60_plus' ? 'bg-red-700 text-white border-red-800 shadow-xs' : 'bg-red-100 text-red-950 border-red-300 hover:bg-red-200'}">
             ★ 60일 이상 (${cnt60Plus})
           </button>
         </div>
@@ -346,18 +346,18 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
       </div>
 
       <!-- 4. 실시간 검색 및 필터 툴바 -->
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
-        <!-- 검색창 -->
-        <div class="md:col-span-2 relative">
+      <div class="bg-slate-50/70 p-2.5 rounded-xl border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-2 items-center">
+        <!-- 검색창 (모바일 2열 전체) -->
+        <div class="col-span-2 relative">
           <input type="text" id="unpaidLiveFilter" value="${activeSearchTerm}" placeholder="고객사명, 품번(Part#), PO번호, 담당자, 영업담당 검색..." 
-                 class="w-full pl-7 pr-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-600 outline-none">
+                 class="w-full pl-7 pr-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-600 outline-none">
           <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
         </div>
 
         <!-- 영업담당자 드롭다운 필터 -->
         <div class="flex items-center gap-1 text-xs">
-          <span class="text-slate-500 font-bold whitespace-nowrap text-[11px]">담당:</span>
-          <select id="unpaidSalesRepSelect" class="w-full bg-white text-slate-800 text-[11px] px-2 py-1.5 rounded-lg border border-slate-300 font-semibold outline-none cursor-pointer">
+          <span class="text-slate-500 font-bold whitespace-nowrap text-[11px] shrink-0">담당:</span>
+          <select id="unpaidSalesRepSelect" class="w-full bg-white text-slate-800 text-[11px] px-2 py-1.5 rounded-lg border border-slate-300 font-semibold outline-none cursor-pointer truncate">
             <option value="ALL" ${activeSalesRep === 'ALL' ? 'selected' : ''}>(전체 영업사원)</option>
             ${cachedSalesReps.map(rep => `<option value="${rep}" ${activeSalesRep === rep ? 'selected' : ''}>${rep}</option>`).join('')}
           </select>
@@ -365,8 +365,8 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
 
         <!-- 정렬 순서 -->
         <div class="flex items-center gap-1 text-xs">
-          <span class="text-slate-500 font-bold whitespace-nowrap text-[11px]">정렬:</span>
-          <select id="unpaidSortSelect" class="w-full bg-white text-slate-800 text-[11px] px-2 py-1.5 rounded-lg border border-slate-300 font-semibold outline-none cursor-pointer">
+          <span class="text-slate-500 font-bold whitespace-nowrap text-[11px] shrink-0">정렬:</span>
+          <select id="unpaidSortSelect" class="w-full bg-white text-slate-800 text-[11px] px-2 py-1.5 rounded-lg border border-slate-300 font-semibold outline-none cursor-pointer truncate">
             <option value="out_date_desc" ${activeSortBy === 'out_date_desc' ? 'selected' : ''}>출하일자 최근순</option>
             <option value="due_date_asc" ${activeSortBy === 'due_date_asc' ? 'selected' : ''}>결제예정일 빠른순</option>
             <option value="overdue_desc" ${activeSortBy === 'overdue_desc' ? 'selected' : ''}>연체일수 높은순</option>
@@ -375,8 +375,11 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
         </div>
       </div>
 
-      <!-- 5. 미수금 데이터 테이블 -->
-      <div class="overflow-x-auto max-h-[66vh] overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
+      <!-- 5. 미수금 데이터: 모바일 카드 뷰 (md:hidden) -->
+      <div id="unpaidCardContainer" class="block md:hidden space-y-2.5 max-h-[66vh] overflow-y-auto pr-0.5"></div>
+
+      <!-- 5. 미수금 데이터: 데스크탑 테이블 뷰 (hidden md:block) -->
+      <div class="hidden md:block overflow-x-auto max-h-[66vh] overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
         <table class="w-full text-left text-xs border-collapse">
           <thead class="bg-[#1e293b] text-white border-b border-slate-700 uppercase font-bold sticky top-0 z-10 shadow-xs text-[11px]">
             <tr>
@@ -410,9 +413,6 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
   // 페이지 렌더링
   updateUnpaidCurrentPage();
 
-  // 페이지 렌더링
-  updateUnpaidCurrentPage();
-
   // 이벤트 바인딩
   bindUnpaidEvents();
 }
@@ -436,7 +436,117 @@ function updateUnpaidCurrentPage() {
     tbody.innerHTML = generateUnpaidTableRows(pagedItems, offset);
   }
 
+  const cardContainer = document.getElementById("unpaidCardContainer");
+  if (cardContainer) {
+    cardContainer.innerHTML = generateUnpaidMobileCards(pagedItems, offset);
+  }
+
   renderUnpaidPagination(total, totalPages);
+}
+
+/**
+ * 모바일 미수금 카드 HTML 생성
+ */
+function generateUnpaidMobileCards(items, offset = 0) {
+  if (!items || items.length === 0) {
+    let reason = "조회 조건에 일치하는 미수금 내역이 없습니다.";
+    if (activeAgingFilter === '30_45' || activeAgingFilter === '45_60') {
+      reason = "현재 해당 연체 구간(30 ~ 59일)의 미수 채권은 0건으로 없습니다. (정상 관리 중)";
+    }
+    return `
+      <div class="p-6 text-center text-xs text-slate-500 bg-white rounded-xl border border-slate-200 space-y-1.5">
+        <span class="text-2xl block">📋</span>
+        <p class="font-bold text-sm text-slate-700">${reason}</p>
+        <p class="text-xs text-slate-400">상단의 다른 미수일 구분 또는 영업담당자를 선택해 보세요.</p>
+      </div>
+    `;
+  }
+
+  return items.map((u, idx) => {
+    const realIdx = offset + idx;
+    const ovd = u.overdue_days;
+
+    let badgeHtml = "";
+    let borderClass = "border-slate-200";
+
+    if (ovd <= 0) {
+      const dDayText = ovd === 0 ? "D-Day (오늘)" : `D${ovd}`;
+      badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">${dDayText}</span>`;
+      borderClass = "border-emerald-200 bg-emerald-50/20";
+    } else if (ovd < 30) {
+      badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">+${ovd}일 연체</span>`;
+      borderClass = "border-amber-200 bg-amber-50/30";
+    } else if (ovd < 45) {
+      badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-950 border border-orange-300">+${ovd}일 (경고)</span>`;
+      borderClass = "border-orange-200 bg-orange-50/30";
+    } else if (ovd < 60) {
+      badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-950 border border-rose-300">+${ovd}일 (심각)</span>`;
+      borderClass = "border-rose-200 bg-rose-50/40";
+    } else {
+      badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-200 text-red-950 border border-red-400">★ +${ovd}일 (고위험)</span>`;
+      borderClass = "border-red-300 bg-red-50/50";
+    }
+
+    const amtDisplay = Math.round(Number(u.amount_vat) || 0).toLocaleString();
+
+    return `
+      <div class="p-3.5 bg-white rounded-xl border ${borderClass} shadow-sm space-y-2.5">
+        <!-- 1) 상단: 고객사명, 연체뱃지, 미수금액 -->
+        <div class="flex items-start justify-between gap-1.5">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              ${badgeHtml}
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${u.pay_status === '수금완료' ? 'bg-emerald-100 text-emerald-800' : (u.pay_status === '부분입금' ? 'bg-blue-100 text-blue-800' : (u.pay_status === '결제약속' ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-800'))}">
+                ${u.pay_status || '미결제'}
+              </span>
+            </div>
+            <h4 class="font-black text-sm text-slate-900 mt-1 truncate" title="${u.cname || '-'}">
+              <span class="text-indigo-600 font-mono text-xs">#${realIdx + 1}</span> ${u.cname || '-'}
+            </h4>
+          </div>
+          <div class="text-right shrink-0">
+            <span class="text-[9px] text-slate-400 block font-semibold">미수금액(VAT포함)</span>
+            <span class="font-black text-slate-900 font-mono text-sm text-rose-700">₩ ${amtDisplay}</span>
+          </div>
+        </div>
+
+        <!-- 2) 중단: 부품 정보 & 일정 그리드 -->
+        <div class="grid grid-cols-2 gap-1.5 text-xs bg-slate-50/80 p-2.5 rounded-lg border border-slate-100">
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">품번 / 제조사</span>
+            <div class="font-bold text-indigo-950 font-mono text-[11px] truncate" title="${u.part_no || '-'}">${u.part_no || '-'}</div>
+            <span class="text-[10px] text-slate-500">${u.mfg || '-'} (${(u.qty || 0).toLocaleString()} EA)</span>
+          </div>
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">출하일자 / 결제예정일</span>
+            <div class="font-bold text-slate-700 text-[11px] font-mono">출하: ${u.out_dt || '-'}</div>
+            <div class="font-black text-slate-900 text-[11px] font-mono">만기: ${u.due_date || '-'}</div>
+          </div>
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">고객 담당자</span>
+            <span class="text-[11px] font-medium text-slate-700">${u.contact || '-'}</span>
+          </div>
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">영업담당 / PO</span>
+            <span class="text-[11px] font-bold text-indigo-900">${u.sales || '-'}</span>
+            <span class="text-[10px] text-slate-400 font-mono block truncate" title="${u.po_no || '-'}">${u.po_no ? 'PO: ' + u.po_no : ''}</span>
+          </div>
+        </div>
+
+        <!-- 3) 하단: 수금/약속 관리 액션 버튼 -->
+        <div class="flex items-center gap-1.5 pt-1">
+          <button type="button" onclick="window.openPaymentSettlementModal && window.openPaymentSettlementModal(${realIdx})" 
+                  class="flex-1 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1 cursor-pointer">
+            <span>💰</span> 수금 / 부분입금 / 일정연기
+          </button>
+          <button type="button" onclick="window.openStatementOfAccount && window.openStatementOfAccount('${(u.cname || '').replace(/'/g, "\\'")}')" 
+                  class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-lg border border-rose-200 shadow-2xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer" title="청구서 발행">
+            <span>📄</span> 청구서
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 /**

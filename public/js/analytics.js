@@ -215,116 +215,121 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     <div class="space-y-4">
       
       <!-- 1. 최상단 헤더 바 -->
-      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-700/60 flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-xl shrink-0">
+      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3.5 sm:p-5 rounded-2xl shadow-sm border border-slate-700/60 flex flex-wrap items-center justify-between gap-2.5">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-lg sm:text-xl shrink-0">
             📊
           </div>
           <div>
-            <div class="flex items-center gap-2">
-              <h2 class="text-base sm:text-lg font-black tracking-wide text-white">매출 장부 & 다차원 실적 분석 (Book & Bill)</h2>
-              <span class="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-full">실시간 MS-SQL 연동</span>
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <h2 class="text-sm sm:text-lg font-black tracking-wide text-white break-keep">매출 장부 & 실적 분석 (Book & Bill)</h2>
+              <span class="text-[9px] sm:text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.5 rounded-full shrink-0">실시간 연동</span>
             </div>
-            <p class="text-xs text-slate-300 font-medium mt-0.5">FrmSalesBKBL & FrmSalesGraph 기반 연간·월별 수주/매출/마진 분석</p>
+            <p class="text-[10px] sm:text-xs text-slate-300 font-medium mt-0.5">FrmSalesBKBL & FrmSalesGraph 기반 연간·월별 실적 분석</p>
           </div>
         </div>
 
-        <div class="flex items-center gap-2 text-xs">
-          <span class="text-slate-300 font-bold">기준 연도:</span>
-          <select id="analyticsYearSelect" onchange="window.switchAnalyticsYear(this.value)" class="bg-slate-800 text-amber-300 border border-slate-600 rounded-lg px-2.5 py-1.5 font-bold outline-none cursor-pointer">
+        <div class="flex items-center gap-2 text-xs w-full sm:w-auto justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+          <span class="text-slate-300 font-bold text-[11px] sm:text-xs shrink-0">기준 연도:</span>
+          <select id="analyticsYearSelect" onchange="window.switchAnalyticsYear(this.value)" class="bg-slate-800 text-amber-300 border border-slate-600 rounded-lg px-2 sm:px-2.5 py-1 sm:py-1.5 font-bold outline-none cursor-pointer text-xs">
             <option value="2026" ${currentYear === '2026' ? 'selected' : ''}>2026년</option>
             <option value="2025" ${currentYear === '2025' ? 'selected' : ''}>2025년</option>
             <option value="2024" ${currentYear === '2024' ? 'selected' : ''}>2024년</option>
           </select>
-          <button type="button" onclick="window.refreshSalesAnalytics()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer">
+          <button type="button" onclick="window.refreshSalesAnalytics()" class="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer text-xs shrink-0">
             🔄 새로고침
           </button>
         </div>
       </div>
 
-      <!-- 2. 핵심 KPI 4단 카드 -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <!-- 2. 핵심 KPI 4단 카드 (모바일 2x2 그리드) -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <!-- 1) 연간 누적 매출액 -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
-            <span>${currentYear}년 누적 매출액 (Billing)</span>
-            <span class="text-indigo-600">📈 YTD</span>
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div class="text-[10px] sm:text-[11px] font-bold text-slate-500 flex items-center justify-between">
+            <span class="truncate">${currentYear}년 누적 매출</span>
+            <span class="text-indigo-600 font-mono text-[9px] sm:text-xs shrink-0">📈 YTD</span>
           </div>
-          <div class="text-lg sm:text-xl font-black text-slate-900 mt-1 font-mono">
+          <div class="text-sm sm:text-xl font-black text-slate-900 mt-1 font-mono truncate">
             ₩${Math.round(billingYtd).toLocaleString()}
           </div>
-          <div class="text-[10px] text-slate-400 mt-0.5">
-            총 출하 건수: <strong class="text-slate-700">${monthly.reduce((acc, m) => acc + m.bill_count, 0).toLocaleString()}건</strong>
+          <div class="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
+            출하: <strong class="text-slate-700">${monthly.reduce((acc, m) => acc + m.bill_count, 0).toLocaleString()}건</strong>
           </div>
         </div>
 
         <!-- 2) 연간 누적 매출이익 (Margin) -->
-        <div class="bg-white p-4 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm relative overflow-hidden">
-          <div class="text-[11px] font-bold text-emerald-800 flex items-center justify-between">
-            <span>${currentYear}년 누적 매출이익 (Margin)</span>
-            <span class="text-emerald-600 font-black">${marginRate}%</span>
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div class="text-[10px] sm:text-[11px] font-bold text-emerald-800 flex items-center justify-between">
+            <span class="truncate">${currentYear}년 누적 마진</span>
+            <span class="text-emerald-600 font-black text-[9px] sm:text-xs shrink-0">${marginRate}%</span>
           </div>
-          <div class="text-lg sm:text-xl font-black text-emerald-900 mt-1 font-mono">
+          <div class="text-sm sm:text-xl font-black text-emerald-900 mt-1 font-mono truncate">
             ₩${Math.round(marginYtd).toLocaleString()}
           </div>
-          <div class="text-[10px] text-emerald-700 mt-0.5">
-            평균 마진율: <strong class="text-emerald-900 font-bold">${marginRate}% 달성</strong>
+          <div class="text-[9px] sm:text-[10px] text-emerald-700 mt-0.5 truncate">
+            평균: <strong class="text-emerald-900 font-bold">${marginRate}% 달성</strong>
           </div>
         </div>
 
         <!-- 3) 연간 누적 수주액 (Booking) -->
-        <div class="bg-white p-4 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm relative overflow-hidden">
-          <div class="text-[11px] font-bold text-amber-800 flex items-center justify-between">
-            <span>${currentYear}년 누적 수주액 (Booking)</span>
-            <span class="text-amber-600 font-bold">🛒 PO</span>
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div class="text-[10px] sm:text-[11px] font-bold text-amber-800 flex items-center justify-between">
+            <span class="truncate">${currentYear}년 누적 수주</span>
+            <span class="text-amber-600 font-bold text-[9px] sm:text-xs shrink-0">🛒 PO</span>
           </div>
-          <div class="text-lg sm:text-xl font-black text-amber-950 mt-1 font-mono">
+          <div class="text-sm sm:text-xl font-black text-amber-950 mt-1 font-mono truncate">
             ₩${Math.round(bookingYtd).toLocaleString()}
           </div>
-          <div class="text-[10px] text-amber-700 mt-0.5">
-            수주 건수: <strong class="text-amber-900">${monthly.reduce((acc, m) => acc + m.book_count, 0).toLocaleString()}건</strong>
+          <div class="text-[9px] sm:text-[10px] text-amber-700 mt-0.5 truncate">
+            수주: <strong class="text-amber-900">${monthly.reduce((acc, m) => acc + m.book_count, 0).toLocaleString()}건</strong>
           </div>
         </div>
 
         <!-- 4) 당월 매출액 -->
-        <div class="bg-white p-4 rounded-xl border border-indigo-200 bg-indigo-50/30 shadow-sm relative overflow-hidden">
-          <div class="text-[11px] font-bold text-indigo-800 flex items-center justify-between">
-            <span>당월 매출액 (${currentMonthItem.month || 'Current'})</span>
-            <span class="text-indigo-600 font-bold">📅 당월</span>
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-indigo-200 bg-indigo-50/30 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div class="text-[10px] sm:text-[11px] font-bold text-indigo-800 flex items-center justify-between">
+            <span class="truncate">당월 매출 (${currentMonthItem.month || 'Current'})</span>
+            <span class="text-indigo-600 font-bold text-[9px] sm:text-xs shrink-0">📅 당월</span>
           </div>
-          <div class="text-lg sm:text-xl font-black text-indigo-950 mt-1 font-mono">
+          <div class="text-sm sm:text-xl font-black text-indigo-950 mt-1 font-mono truncate">
             ₩${Math.round(currentMonthBill).toLocaleString()}
           </div>
-          <div class="text-[10px] text-indigo-700 mt-0.5">
-            당월 출하: <strong class="text-indigo-900">${(currentMonthItem.bill_count || 0)}건 진행</strong>
+          <div class="text-[9px] sm:text-[10px] text-indigo-700 mt-0.5 truncate">
+            진행: <strong class="text-indigo-900">${(currentMonthItem.bill_count || 0)}건 출하</strong>
           </div>
         </div>
       </div>
 
       <!-- 3. 월별 매출 실적 (Billing) 및 마진율 추이 차트 -->
-      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+      <div class="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <h3 class="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <h3 class="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
               <span>📈</span>
               <span>월별 매출 실적 (Billing) 및 마진율 추이</span>
             </h3>
-            <span class="text-[10px] text-slate-400 font-medium">${currentYear}년 월별 출하 확정 매출 및 마진율</span>
+            <span class="text-[9px] sm:text-[10px] text-slate-400 font-medium">${currentYear}년 월별 출하 확정 매출 및 마진율</span>
           </div>
           <!-- 범례 -->
-          <div class="flex items-center gap-4 text-xs font-bold">
-            <span class="flex items-center gap-1.5 text-indigo-900">
-              <span class="w-3.5 h-3.5 rounded bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-xs inline-block"></span>
-              매출액 (Billing)
+          <div class="flex items-center gap-3 sm:gap-4 text-[11px] sm:text-xs font-bold">
+            <span class="flex items-center gap-1 text-indigo-900">
+              <span class="w-3 h-3 rounded bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-xs inline-block"></span>
+              매출액
             </span>
-            <span class="flex items-center gap-1.5 text-emerald-700">
+            <span class="flex items-center gap-1 text-emerald-700">
               <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
-              실현 마진율 (%)
+              마진율 (%)
             </span>
           </div>
         </div>
 
-        <div class="w-full overflow-x-auto pt-1">
+        <!-- 모바일 가로 스와이프 안내 힌트 -->
+        <div class="sm:hidden flex items-center justify-center gap-1.5 text-[10px] text-indigo-700 bg-indigo-50/80 border border-indigo-200/60 py-1 px-2.5 rounded-lg font-bold">
+          <span class="animate-pulse">👈</span> 좌우로 밀어서 1월~11월 전체 실적 확인 <span class="animate-pulse">👉</span>
+        </div>
+
+        <div class="w-full overflow-x-auto pt-1 scroll-smooth" style="-webkit-overflow-scrolling: touch;">
           <svg viewBox="0 0 ${chartWidth} ${chartHeight}" class="w-full h-52 select-none min-w-[700px]">
             <defs>
               <linearGradient id="billingBarGradient" x1="0" y1="0" x2="0" y2="1">

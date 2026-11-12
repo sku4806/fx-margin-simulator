@@ -477,8 +477,12 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
         </div>
       </div>
 
-      <!-- 3. 견적 데이터 테이블 -->
-      <div class="overflow-x-auto max-h-[68vh] overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
+      <!-- 3-A. 모바일 전용 카드 뷰 (md:hidden) -->
+      <div id="quoteCardContainer" class="block md:hidden space-y-2.5 max-h-[66vh] overflow-y-auto pr-0.5">
+      </div>
+
+      <!-- 3-B. 데스크톱 견적 데이터 테이블 (hidden md:block) -->
+      <div class="hidden md:block overflow-x-auto max-h-[68vh] overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
         <table class="w-full text-left text-xs border-collapse">
           <thead class="bg-[#f2f4ec] text-[#33401e] border-b border-slate-200 uppercase font-bold sticky top-0 z-10 shadow-xs text-[11px]">
             <tr>
@@ -537,6 +541,11 @@ function updateQuoteCurrentPage() {
   const tbody = document.getElementById("quotationTableBody");
   if (tbody) {
     tbody.innerHTML = generateTableRows(pagedItems, offset);
+  }
+
+  const cardContainer = document.getElementById("quoteCardContainer");
+  if (cardContainer) {
+    cardContainer.innerHTML = generateQuoteMobileCards(pagedItems, offset);
   }
 
   renderQuotePagination(total, totalPages);
@@ -710,6 +719,104 @@ function generateTableRows(items, offset = 0) {
 }
 
 /**
+ * 모바일 전용 견적 카드 뷰 HTML 생성
+ */
+function generateQuoteMobileCards(items, offset = 0) {
+  if (!items || items.length === 0) {
+    const rangeText = (currentStartDate && currentEndDate) ? `${currentStartDate} ~ ${currentEndDate}` : '전체 기간';
+    return `
+      <div class="p-6 text-center text-slate-500 bg-white rounded-xl border border-slate-200 text-xs">
+        <span class="text-2xl block mb-1">🔍</span>
+        <p class="font-bold text-slate-800">해당 조건에 일치하는 견적이 없습니다.</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">조회 기간: ${rangeText}</p>
+      </div>
+    `;
+  }
+
+  return items.map((q, idx) => {
+    const realIdx = offset + idx;
+    const isSelected = selectedQuoteIndexes.has(realIdx);
+    const isUsd = (q.qunit && q.qunit.includes('$')) || (q.quot_type && q.quot_type.includes('$'));
+    const isWon = (q.qunit && q.qunit.includes('\\')) || (q.quot_type && q.quot_type.includes('Won'));
+
+    let qpDisplay = "";
+    if (isUsd) {
+      qpDisplay = `$ ${Number(q.qp).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+    } else if (isWon) {
+      qpDisplay = `₩ ${Math.round(Number(q.qp)).toLocaleString()}`;
+    } else {
+      qpDisplay = `${q.qp}`;
+    }
+
+    const amountVal = Number(q.amount) || 0;
+    const amountDisplay = isUsd
+      ? `$ ${amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : `₩ ${Math.round(amountVal).toLocaleString()}`;
+    const qtyStr = q.qty_str || (q.qty_int ? q.qty_int.toLocaleString() : '-');
+
+    return `
+      <div class="p-3.5 bg-white rounded-xl border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-200'} shadow-sm space-y-2.5" data-quote-idx="${realIdx}">
+        <div class="flex items-start justify-between gap-1.5">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[9px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">#${realIdx + 1}</span>
+              <span class="text-[9px] font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">${q.quote_dt || '-'}</span>
+              <span class="text-[9px] font-bold text-lime-900 bg-lime-100 px-1.5 py-0.5 rounded border border-lime-200">${q.mfg || '-'}</span>
+            </div>
+            <h4 class="font-black text-sm text-slate-900 mt-1 truncate" title="${q.cname || '-'}">
+              ${q.cname || '-'}
+            </h4>
+          </div>
+          <div class="text-right shrink-0">
+            <span class="text-[9px] text-slate-400 block font-semibold">견적 총액</span>
+            <span class="font-black text-indigo-950 font-mono text-sm">${amountDisplay}</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1.5 text-xs bg-slate-50/80 p-2.5 rounded-lg border border-slate-100">
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">품번 (Part No)</span>
+            <div class="font-black text-slate-900 font-mono text-[11px] truncate tracking-tight" title="${q.part_no || '-'}">${q.part_no || '-'}</div>
+            <span class="text-[10px] text-slate-500 font-medium">수량: ${qtyStr} EA</span>
+          </div>
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">견적단가 / 납기</span>
+            <div class="font-bold text-emerald-700 text-[11px] font-mono">${qpDisplay}</div>
+            <span class="text-[10px] text-slate-500 font-mono">납기: ${q.delivery || '-'}</span>
+          </div>
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">고객 담당자</span>
+            <span class="text-[11px] font-medium text-slate-700 truncate block">${q.contact || '-'}</span>
+          </div>
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">영업담당 / 결제조건</span>
+            <span class="text-[11px] font-bold text-indigo-900">${q.sales || '-'}</span>
+            <span class="text-[10px] text-slate-500 truncate block">${q.payment || '-'}</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
+          <label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer" onclick="event.stopPropagation()">
+            <input type="checkbox" class="quote-row-chk rounded text-[#5b6f3c] focus:ring-0" data-idx="${realIdx}" ${isSelected ? 'checked' : ''}>
+            <span>선택</span>
+          </label>
+          <div class="flex items-center gap-1.5">
+            <button type="button" class="btn-quote-to-order px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold transition-colors shadow-2xs flex items-center gap-1 cursor-pointer"
+                    data-idx="${realIdx}">
+              <span>📦</span> 수주 등록
+            </button>
+            <button type="button" class="btn-single-quote-print px-2 py-1 bg-slate-100 hover:bg-lime-600 hover:text-white text-slate-700 rounded-lg text-[10px] font-bold transition-colors shadow-2xs cursor-pointer"
+                    data-idx="${realIdx}">
+              인쇄
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
  * 이벤트 바인딩
  */
 function bindQuotationEvents() {
@@ -788,12 +895,53 @@ function bindQuotationEvents() {
     });
   });
 
-  // 4. 개별 행 체크박스
+  // 4. 개별 행/카드 체크박스
   tbody?.addEventListener("change", (e) => {
     if (e.target.classList.contains("quote-row-chk")) {
       const idx = parseInt(e.target.getAttribute("data-idx"), 10);
       if (e.target.checked) selectedQuoteIndexes.add(idx);
       else selectedQuoteIndexes.delete(idx);
+    }
+  });
+
+  const cardContainer = document.getElementById("quoteCardContainer");
+  cardContainer?.addEventListener("change", (e) => {
+    if (e.target.classList.contains("quote-row-chk")) {
+      const idx = parseInt(e.target.getAttribute("data-idx"), 10);
+      if (e.target.checked) selectedQuoteIndexes.add(idx);
+      else selectedQuoteIndexes.delete(idx);
+    }
+  });
+
+  // 5. 모바일 카드 클릭 이벤트
+  cardContainer?.addEventListener("click", (e) => {
+    const orderBtn = e.target.closest(".btn-quote-to-order");
+    if (orderBtn) {
+      e.stopPropagation();
+      const idx = parseInt(orderBtn.getAttribute("data-idx"), 10);
+      handleConvertQuoteToOrder(idx);
+      return;
+    }
+
+    const printBtn = e.target.closest(".btn-single-quote-print");
+    if (printBtn) {
+      e.stopPropagation();
+      const idx = parseInt(printBtn.getAttribute("data-idx"), 10);
+      const item = lastFilteredQuotes[idx] || cachedQuotations[idx];
+      if (item) {
+        openLegacyQuotationModal(item.quote_no, item);
+      }
+      return;
+    }
+
+    if (e.target.closest("input[type='checkbox']")) return;
+
+    const card = e.target.closest("[data-quote-idx]");
+    if (!card) return;
+    const idx = parseInt(card.getAttribute("data-quote-idx"), 10);
+    const item = lastFilteredQuotes[idx] || cachedQuotations[idx];
+    if (item) {
+      openLegacyQuotationModal(item.quote_no, item);
     }
   });
 

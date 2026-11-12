@@ -116,8 +116,13 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
         </div>
       </div>
 
-      <!-- 출하 테이블 (내부 스크롤 및 컴팩트 레이아웃) -->
-      <div class="overflow-x-auto max-h-[65vh] overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
+      <!-- 모바일 전용 카드 뷰 (md:hidden) -->
+      <div id="shipmentCardContainer" class="block md:hidden space-y-2.5 max-h-[65vh] overflow-y-auto pr-0.5">
+        ${generateShipmentMobileCards(getPagedShipments())}
+      </div>
+
+      <!-- 데스크톱 전용 테이블 (hidden md:block) -->
+      <div class="hidden md:block overflow-x-auto max-h-[65vh] overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
         <table class="w-full text-left text-xs border-collapse">
           <thead class="bg-slate-100/95 backdrop-blur-sm text-slate-600 border-b uppercase font-semibold sticky top-0 z-10 shadow-sm text-[11px]">
             <tr>
@@ -168,8 +173,12 @@ function getPagedShipments() {
 }
 
 function updateShipmentCurrentPage() {
+  const paged = getPagedShipments();
   const tbody = document.getElementById("shipmentTableBody");
-  if (tbody) tbody.innerHTML = generateTableRows(getPagedShipments());
+  if (tbody) tbody.innerHTML = generateTableRows(paged);
+
+  const cardContainer = document.getElementById("shipmentCardContainer");
+  if (cardContainer) cardContainer.innerHTML = generateShipmentMobileCards(paged);
   
   // 합계 업데이트
   const totalQty = lastFilteredShipments.reduce((sum, item) => sum + (item.qty || 0), 0);
@@ -383,4 +392,61 @@ function generateTableRows(items) {
       </td>
     </tr>
   `).join('');
+}
+
+/**
+ * 모바일 전용 출하/수주 카드 뷰 HTML 생성
+ */
+function generateShipmentMobileCards(items) {
+  if (!items || items.length === 0) {
+    return `<div class="p-6 text-center text-slate-400 bg-white rounded-xl border border-slate-200 text-xs font-bold">조회된 출하/수주 이력이 없습니다.</div>`;
+  }
+  return items.map((item, idx) => {
+    const isShipped = item.status === 'SHIPPED';
+    return `
+      <div class="p-3.5 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2.5">
+        <div class="flex items-start justify-between gap-1.5">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="inline-block px-2 py-0.5 text-[9px] font-bold rounded-full ${isShipped ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
+                ${isShipped ? '출하완료' : '진행중'}
+              </span>
+              <span class="text-[9px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">${item.order_date || '-'}</span>
+              <span class="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">${item.maker || '-'}</span>
+            </div>
+            <h4 class="font-black text-sm text-slate-900 mt-1 truncate" title="${item.part_name || '-'}">
+              ${item.part_name || '-'}
+            </h4>
+          </div>
+          <div class="text-right shrink-0">
+            <span class="text-[9px] text-slate-400 block font-semibold">총 매출액</span>
+            <span class="font-black text-rose-600 font-mono text-sm">₩${Math.round(item.total_sales_amount || 0).toLocaleString()}</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1.5 text-xs bg-slate-50/80 p-2.5 rounded-lg border border-slate-100">
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">수량 / 단가</span>
+            <div class="font-black text-slate-900 text-[11px]">${(item.qty || 0).toLocaleString()} EA</div>
+            <span class="text-[10px] text-slate-600 font-mono">단가: ₩${Math.round(item.unit_price || 0).toLocaleString()}</span>
+          </div>
+          <div>
+            <span class="text-[9px] text-slate-400 block font-semibold">발주번호 (PO)</span>
+            <div class="font-bold text-slate-800 text-[11px] font-mono truncate" title="${item.po_no || '-'}">${item.po_no || '-'}</div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-1.5 pt-1 border-t border-slate-100">
+          <button type="button" onclick="window.openTradeInvoice && window.openTradeInvoice(window.getShipmentByIndex(${idx}))" 
+                  class="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-2xs">
+            <span>📄</span> 거래명세서
+          </button>
+          <button type="button" onclick="window.openTradePacking && window.openTradePacking(window.getShipmentByIndex(${idx}))" 
+                  class="flex-1 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-300 text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-2xs">
+            <span>📦</span> 패킹리스트
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }

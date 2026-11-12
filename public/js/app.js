@@ -647,8 +647,8 @@ function bindTabSwitch() {
   const analyticsSection = document.getElementById('analyticsSection');
   const csHeaderDesc = document.getElementById('csHeaderDesc');
 
-  const activeStyle = "py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0";
-  const inactiveStyle = "py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0";
+  const activeStyle = "py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0";
+  const inactiveStyle = "py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0";
 
   function setTabs(active) {
     if (tabSales) tabSales.className = (active === 'sales') ? activeStyle : inactiveStyle;
@@ -657,6 +657,19 @@ function bindTabSwitch() {
     if (tabQuotations) tabQuotations.className = (active === 'quotations') ? activeStyle : inactiveStyle;
     if (tabUnpaid) tabUnpaid.className = (active === 'unpaid') ? activeStyle : inactiveStyle;
     if (tabAnalytics) tabAnalytics.className = (active === 'analytics') ? activeStyle : inactiveStyle;
+
+    const btnMap = {
+      'sales': tabSales,
+      'fulfillment': tabFulfillment,
+      'shipments': tabShipments,
+      'quotations': tabQuotations,
+      'unpaid': tabUnpaid,
+      'analytics': tabAnalytics
+    };
+    const activeBtn = btnMap[active];
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
   }
 
   // 1. [영업 견적·재고] 탭 클릭

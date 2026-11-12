@@ -749,32 +749,59 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
     const pono = (item.poNo || item.po_no || '').trim();
     const invNo = (item.invoiceNo || item.invoice_no || '').trim();
     const poStr = pono ? `PO: ${pono}` : (invNo && invNo.toUpperCase().startsWith('OTH') ? `실사재고 (${invNo})` : (invNo ? `INV: ${invNo}` : '-'));
+    const partName = item.partName || item.part_name || '-';
+    const arranged = Number(item.arrangedQty ?? item.arranged_qty) || 0;
+    const avail = Math.max(0, (item.stock || 0) - arranged);
+
     return `
-      <div class="p-3.5 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2 cursor-pointer" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
-        <div class="flex justify-between items-start">
-          <div>
-            <span class="text-[9px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">${item.maker}</span>
-            <span class="text-[10px] font-mono font-bold text-slate-500 ml-1">D/C: ${item.dateCode}</span>
-            <div class="font-black text-sm text-slate-900 mt-0.5">${item.partName}</div>
+      <div class="p-3.5 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2.5 active:bg-indigo-50/40 transition-colors cursor-pointer" onclick="window.loadFormFromItem && window.loadFormFromItem('${item.id}')">
+        <div class="flex justify-between items-start gap-1.5">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[9px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">${item.maker}</span>
+              <span class="text-[9px] font-mono font-bold text-slate-500">D/C: ${item.dateCode}</span>
+              <span class="text-[9px] font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">${item.kind || '내자'}</span>
+            </div>
+            <div class="font-black text-sm text-slate-900 mt-1 break-all tracking-tight">${partName}</div>
           </div>
-          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(item.orderStatus)}">${item.orderStatus}</span>
+          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${getStatusBadgeClass(item.orderStatus)}">${item.orderStatus}</span>
         </div>
-        <div class="grid grid-cols-2 gap-2 text-xs border-y py-2 border-slate-100">
+
+        <div class="grid grid-cols-2 gap-2 text-xs bg-slate-50/80 p-2.5 rounded-lg border border-slate-100">
           <div>
-            <span class="text-[10px] text-slate-400 block font-semibold">계약처</span>
-            <div class="font-bold text-slate-800">${item.customer}</div>
+            <span class="text-[9px] text-slate-400 block font-semibold">계약처 / 영업</span>
+            <div class="font-bold text-slate-800 text-[11px] truncate">${item.customer || '-'}</div>
+            <span class="text-[10px] text-indigo-700 font-bold font-mono">영업: ${item.owner || item.sales || '-'}</span>
           </div>
           <div>
-            <span class="text-[10px] text-slate-400 block font-semibold">발주/송장</span>
-            <div class="font-bold text-indigo-900 font-mono text-[11px] truncate" title="${poStr}">${poStr}</div>
+            <span class="text-[9px] text-slate-400 block font-semibold">보유 / 가용 재고</span>
+            <div class="font-black text-slate-900 text-[11px]">${item.stock.toLocaleString()} EA</div>
+            <span class="text-[10px] ${avail > 0 ? 'text-emerald-700 font-bold' : 'text-slate-400 font-medium'}">가용: ${avail.toLocaleString()} EA</span>
           </div>
           <div>
-            <span class="text-[10px] text-slate-400 block font-semibold">선적 매입가</span>
-            <div class="font-bold text-slate-800">₩${costKrw.toLocaleString()} ($${(Number(item.unitUsd) || 0).toFixed(3)})</div>
+            <span class="text-[9px] text-slate-400 block font-semibold">선적 매입가</span>
+            <div class="font-bold text-slate-800 text-[11px]">₩${costKrw.toLocaleString()}</div>
+            <span class="text-[10px] text-slate-500">($${(Number(item.unitUsd) || 0).toFixed(3)} / @${Math.round(item.shipFx || 1350)})</span>
           </div>
           <div>
-            <span class="text-[10px] text-slate-400 block font-semibold">수량</span>
-            <div class="font-black text-slate-900">${item.stock.toLocaleString()} EA</div>
+            <span class="text-[9px] text-slate-400 block font-semibold">발주/송장</span>
+            <div class="font-bold text-slate-700 font-mono text-[10px] truncate" title="${poStr}">${poStr}</div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-1 pt-1 border-t border-slate-100" onclick="event.stopPropagation()">
+          <span class="text-[10px] text-indigo-600 font-bold flex items-center gap-1">
+            <span>👆</span> 터치 시 상단 견적 계산기 연동
+          </span>
+          <div class="flex items-center gap-1.5">
+            <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${partName}')" class="px-2 py-1 bg-white hover:bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200 text-[10px] font-bold shadow-2xs cursor-pointer">
+              📈 단가이력
+            </button>
+            ${canEdit ? `
+              <button type="button" onclick="event.stopPropagation(); window.handleStockToOrder && window.handleStockToOrder('${item.id}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-2xs cursor-pointer">
+                📦 수주
+              </button>
+            ` : ''}
           </div>
         </div>
       </div>
