@@ -658,6 +658,7 @@ function generateTableRows(items, offset = 0) {
     `;
   }
 
+  const isCsAdmin = (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
   return items.map((q, idx) => {
     const realIdx = offset + idx;
     const isSelected = selectedQuoteIndexes.has(realIdx);
@@ -703,10 +704,12 @@ function generateTableRows(items, offset = 0) {
         <td class="py-1.5 px-2 text-slate-500 text-[10px] truncate max-w-[80px]" title="${q.application || '-'}">${q.application || '-'}</td>
         <td class="py-1.5 px-2 text-center whitespace-nowrap" onclick="event.stopPropagation()">
           <div class="flex items-center justify-center gap-1">
-            <button type="button" class="btn-quote-to-order px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[10px] font-bold transition-colors shadow-2xs flex items-center gap-0.5 cursor-pointer"
-                    data-idx="${realIdx}" title="해당 견적건을 수주 및 출하 등록으로 전환 (CS 및 관리자 전용)">
-              <span>📦</span> 수주
-            </button>
+            ${isCsAdmin ? `
+              <button type="button" class="btn-quote-to-order px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[10px] font-bold transition-colors shadow-2xs flex items-center gap-0.5 cursor-pointer"
+                      data-idx="${realIdx}" title="해당 견적건을 수주 및 출하 등록으로 전환 (CS 및 관리자 전용)">
+                <span>📦</span> 수주
+              </button>
+            ` : ''}
             <button type="button" class="btn-single-quote-print px-1.5 py-0.5 bg-slate-100 hover:bg-lime-600 hover:text-white text-slate-700 rounded text-[10px] font-bold transition-colors cursor-pointer"
                     data-idx="${realIdx}" title="BSK 표준 견적서 출력">
               인쇄
@@ -733,6 +736,7 @@ function generateQuoteMobileCards(items, offset = 0) {
     `;
   }
 
+  const isCsAdmin = (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
   return items.map((q, idx) => {
     const realIdx = offset + idx;
     const isSelected = selectedQuoteIndexes.has(realIdx);
@@ -801,10 +805,12 @@ function generateQuoteMobileCards(items, offset = 0) {
             <span>선택</span>
           </label>
           <div class="flex items-center gap-1.5">
-            <button type="button" class="btn-quote-to-order px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold transition-colors shadow-2xs flex items-center gap-1 cursor-pointer"
-                    data-idx="${realIdx}">
-              <span>📦</span> 수주 등록
-            </button>
+            ${isCsAdmin ? `
+              <button type="button" class="btn-quote-to-order px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold transition-colors shadow-2xs flex items-center gap-1 cursor-pointer"
+                      data-idx="${realIdx}">
+                <span>📦</span> 수주 등록
+              </button>
+            ` : ''}
             <button type="button" class="btn-single-quote-print px-2 py-1 bg-slate-100 hover:bg-lime-600 hover:text-white text-slate-700 rounded-lg text-[10px] font-bold transition-colors shadow-2xs cursor-pointer"
                     data-idx="${realIdx}">
               인쇄

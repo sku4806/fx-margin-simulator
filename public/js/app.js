@@ -326,7 +326,10 @@ function callRenderInventoryHeaders(tab) {
 function callRenderInventoryList(items) {
   const fn = InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default;
   if (typeof fn === 'function') {
-    fn(items, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, (typeof isCsOrAdminUser === 'function' ? isCsOrAdminUser() : false));
+    const canEdit = (typeof window.isCsOrAdminUser === 'function') 
+      ? window.isCsOrAdminUser() 
+      : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
+    fn(items, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, canEdit);
   }
 }
 
@@ -852,6 +855,11 @@ function updateFormVisibility(canEdit) {
   salesFields.forEach(el => el.classList.remove('hidden'));
   fulfillmentFields.forEach(el => el.classList.remove('hidden'));
 
+  const salesBtnOrder = document.getElementById('salesBtnOrder');
+  if (salesBtnOrder) {
+    salesBtnOrder.classList.toggle('hidden', !canEdit);
+  }
+
   if (!canEdit) {
     if (saveBtn) saveBtn.classList.add('hidden');
     document.querySelectorAll('#formSection input, #formSection select').forEach(inp => {
@@ -1230,6 +1238,8 @@ function renderSelectedStockCard(item) {
 
   const btnOrder = document.getElementById('salesBtnOrder');
   if (btnOrder) {
+    const isCsAdmin = typeof window.isCsOrAdminUser === 'function' ? window.isCsOrAdminUser() : false;
+    btnOrder.classList.toggle('hidden', !isCsAdmin);
     btnOrder.onclick = (e) => {
       e.stopPropagation();
       if (typeof window.handleStockToOrder === 'function') {

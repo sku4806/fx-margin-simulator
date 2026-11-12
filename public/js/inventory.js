@@ -341,7 +341,10 @@ export function renderInventoryHeaders(activeTab) {
   }
 }
 
-function generateLegacyMasterRow(item) {
+function generateLegacyMasterRow(item, canEdit) {
+  const isCsAdmin = (typeof canEdit !== 'undefined' && canEdit !== null) 
+    ? !!canEdit 
+    : (typeof window.isCsOrAdminUser === 'function' ? window.isCsOrAdminUser() : false);
   const stock = Number(item.stock) || 0;
   const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
   const amount = stock * unitUsd;
@@ -398,7 +401,9 @@ function generateLegacyMasterRow(item) {
         <div class="flex items-center gap-1.5 whitespace-nowrap">
           <span class="font-black text-indigo-950 truncate max-w-[170px]" title="${part}">${part}</span>
           <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${part.replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer shrink-0" title="품목별 과거 단가 & 마진 이력 추적">📈</button>
-          <button type="button" onclick="event.stopPropagation(); window.handleStockToOrder && window.handleStockToOrder('${item.id}')" class="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[10px] cursor-pointer whitespace-nowrap shadow-2xs flex items-center gap-0.5 shrink-0" title="해당 재고 품목으로 수주·출하 등록 진행 (CS 및 관리자 전용)">📦 수주</button>
+          ${isCsAdmin ? `
+            <button type="button" onclick="event.stopPropagation(); window.handleStockToOrder && window.handleStockToOrder('${item.id}')" class="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[10px] cursor-pointer whitespace-nowrap shadow-2xs flex items-center gap-0.5 shrink-0" title="해당 재고 품목으로 수주·출하 등록 진행 (CS 및 관리자 전용)">📦 수주</button>
+          ` : ''}
         </div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">MFG: <span class="font-bold text-slate-700">${mfg}</span></div>
       </td>
@@ -744,6 +749,10 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
     return;
   }
 
+  const isCsAdmin = (typeof canEdit !== 'undefined' && canEdit !== null) 
+    ? !!canEdit 
+    : (typeof window.isCsOrAdminUser === 'function' ? window.isCsOrAdminUser() : false);
+
   container.innerHTML = items.map(item => {
     const costKrw = Math.round(item.unitUsd * item.shipFx);
     const pono = (item.poNo || item.po_no || '').trim();
@@ -797,7 +806,7 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
             <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${partName}')" class="px-2 py-1 bg-white hover:bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200 text-[10px] font-bold shadow-2xs cursor-pointer">
               📈 단가이력
             </button>
-            ${canEdit ? `
+            ${isCsAdmin ? `
               <button type="button" onclick="event.stopPropagation(); window.handleStockToOrder && window.handleStockToOrder('${item.id}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-2xs cursor-pointer">
                 📦 수주
               </button>
