@@ -140,6 +140,135 @@
         </div>
       </div>
 
+      <!-- 선택 재고 안내 & 상세 카드 컨테이너 -->
+      <div id="salesStockCardContainer">
+        <!-- 1) 기본 안내 (미선택 상태) -->
+        <div id="salesStockEmptyState" class="p-3 sm:p-4 bg-gradient-to-r from-slate-50 via-indigo-50/20 to-slate-50 rounded-xl border border-dashed border-slate-300 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2.5 transition-all">
+          <div class="flex items-center gap-2.5 text-slate-600">
+            <span class="text-lg shrink-0">💡</span>
+            <div>
+              <span class="font-bold text-slate-800 text-xs sm:text-[13px]">아래 재고 목록에서 품목을 클릭해보세요!</span>
+              <p class="text-[11px] text-slate-500 mt-0.5">해당 부품의 <span class="text-indigo-700 font-semibold">매입원가·보유재고·선적환율</span>이 자동 로드되어 실시간 맞춤 견적 계산기가 활성화됩니다.</p>
+            </div>
+          </div>
+          <span class="text-[10px] text-indigo-700 font-bold bg-white px-2.5 py-1 rounded-lg border border-indigo-200 shadow-2xs shrink-0 flex items-center gap-1">
+            <span>🖱️</span> 재고 클릭 즉시 연동
+          </span>
+        </div>
+
+        <!-- 2) 품목 선택 시 활성화되는 상세 카드 & 인터랙티브 컨트롤 -->
+        <div id="salesStockDetailCard" class="hidden bg-gradient-to-br from-indigo-50/40 via-white to-slate-50/50 p-3 sm:p-4 rounded-xl border-2 border-indigo-300/80 shadow-xs space-y-3 transition-all">
+          <!-- 상단: 품번, 제조사, 배지 및 액션 버튼 -->
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-2.5">
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <span class="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 flex items-center gap-1">
+                <span>📦</span> 선택 재고
+              </span>
+              <span id="salesSelectedKindBadge" class="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-100 text-indigo-800 border border-indigo-200">내자</span>
+              <span id="salesSelectedMakerBadge" class="text-[10px] font-black bg-slate-800 text-white px-2 py-0.5 rounded">ESMT</span>
+              <h3 id="salesSelectedPartName" class="font-black text-sm sm:text-base text-slate-900 tracking-tight">F59L1G81LB-25BG2M (Tray)</h3>
+              <span id="salesSelectedDcBadge" class="text-[10px] font-mono font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">D/C: -</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+              <button type="button" id="salesBtnHistory" class="text-[11px] bg-white hover:bg-indigo-50 text-indigo-700 font-bold px-2.5 py-1 rounded-lg border border-indigo-200 shadow-2xs flex items-center gap-1 cursor-pointer transition-colors" title="품목별 과거 단가 & 마진 이력 추적">
+                <span>📈</span> 단가 이력
+              </button>
+              <button type="button" id="salesBtnOrder" class="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer transition-colors" title="이 재고 품목으로 수주·출하 등록 (CS 및 관리자 전용)">
+                <span>📦</span> 수주 등록
+              </button>
+              <button type="button" id="salesBtnClear" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold px-2 py-1 rounded-lg border border-slate-300 cursor-pointer transition-colors" title="선택 해제">
+                ✕ 해제
+              </button>
+            </div>
+          </div>
+
+          <!-- 중단: 5개 핵심 스펙 카드 -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+            <!-- 1. 선적 매입원가 -->
+            <div class="p-2 sm:p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs">
+              <span class="text-[10px] text-slate-500 block font-medium">선적 매입원가</span>
+              <div class="flex items-baseline gap-1 mt-0.5">
+                <span id="salesCardUnitUsd" class="font-black text-sm sm:text-base text-slate-900">$0.0000</span>
+              </div>
+              <div id="salesCardUnitKrw" class="text-[10px] font-semibold text-slate-500 mt-0.5">₩0 (@1,350)</div>
+            </div>
+
+            <!-- 2. 보유 / 가용 재고 -->
+            <div class="p-2 sm:p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs">
+              <span class="text-[10px] text-slate-500 block font-medium">보유 / 가용 재고</span>
+              <div class="flex items-baseline gap-1 mt-0.5">
+                <span id="salesCardStockQty" class="font-black text-sm sm:text-base text-indigo-900">0 EA</span>
+              </div>
+              <div class="text-[10px] font-semibold text-slate-500 mt-0.5 truncate">
+                배정 <span id="salesCardAssignedQty" class="text-amber-700 font-bold">0</span> / 가용 <span id="salesCardAvailQty" class="text-emerald-700 font-bold">0 EA</span>
+              </div>
+            </div>
+
+            <!-- 3. 선적 / 적용 환율 -->
+            <div class="p-2 sm:p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs">
+              <span class="text-[10px] text-slate-500 block font-medium">선적환율 / 현재환율</span>
+              <div class="flex items-baseline gap-1 mt-0.5">
+                <span id="salesCardShipFx" class="font-black text-xs sm:text-sm text-slate-800">₩1,350</span>
+                <span class="text-[9px] text-slate-400">/</span>
+                <span id="salesCardCurrentFx" class="font-bold text-xs text-indigo-600">₩1,380</span>
+              </div>
+              <div class="text-[10px] text-slate-400 mt-0.5 font-mono">환율 변동성 마진 방어</div>
+            </div>
+
+            <!-- 4. 계약처 / 영업담당 -->
+            <div class="p-2 sm:p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs">
+              <span class="text-[10px] text-slate-500 block font-medium">계약 고객사 / 영업</span>
+              <div id="salesCardCustomer" class="font-bold text-xs sm:text-sm text-slate-800 truncate mt-0.5" title="-">-</div>
+              <div class="text-[10px] text-indigo-800 font-bold mt-0.5 truncate">
+                영업: <span id="salesCardSales">-</span>
+              </div>
+            </div>
+
+            <!-- 5. 발주번호 / 입고일 -->
+            <div class="p-2 sm:p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs col-span-2 sm:col-span-1">
+              <span class="text-[10px] text-slate-500 block font-medium">발주번호 / 입고일</span>
+              <div id="salesCardPoNo" class="font-mono font-bold text-[11px] text-slate-800 truncate mt-0.5" title="-">-</div>
+              <div class="text-[10px] text-slate-400 mt-0.5 font-mono truncate">
+                입고: <span id="salesCardEntryDate">-</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 하단: 인터랙티브 견적 수량 & 목표 마진율 퀵 컨트롤 바 -->
+          <div class="p-2.5 sm:p-3 bg-indigo-50/60 rounded-xl border border-indigo-200/80 flex flex-wrap items-center justify-between gap-2.5">
+            <!-- 1) 견적 수량 직접 입력 및 빠른 수량 버튼 -->
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-[11px] font-bold text-indigo-950 flex items-center gap-1 shrink-0">
+                <span>🧮</span> 견적 수량:
+              </span>
+              <div class="relative w-28 shrink-0">
+                <input type="number" id="salesInteractiveQty" value="1000" min="1" step="1" class="w-full pl-2 pr-7 py-1 text-xs font-black text-indigo-950 bg-white border border-indigo-300 rounded-lg shadow-2xs outline-none focus:ring-2 focus:ring-indigo-500 text-right">
+                <span class="absolute right-2 top-1 text-[10px] text-slate-400 font-bold pointer-events-none">EA</span>
+              </div>
+              <div class="flex items-center gap-1 text-[10px] flex-wrap">
+                <button type="button" id="btnQuickQtyStock" class="px-2 py-0.5 bg-white hover:bg-indigo-100 text-indigo-800 rounded font-bold border border-indigo-200 shadow-2xs cursor-pointer transition-colors whitespace-nowrap">전량</button>
+                <button type="button" id="btnQuickQtyAvail" class="px-2 py-0.5 bg-white hover:bg-emerald-100 text-emerald-800 rounded font-bold border border-emerald-200 shadow-2xs cursor-pointer transition-colors whitespace-nowrap">가용분</button>
+                <button type="button" id="btnQuickQty1k" class="px-2 py-0.5 bg-white hover:bg-indigo-100 text-indigo-800 rounded font-bold border border-indigo-200 shadow-2xs cursor-pointer transition-colors whitespace-nowrap">1,000</button>
+                <button type="button" id="btnQuickQty5k" class="px-2 py-0.5 bg-white hover:bg-indigo-100 text-indigo-800 rounded font-bold border border-indigo-200 shadow-2xs cursor-pointer transition-colors whitespace-nowrap">5,000</button>
+                <button type="button" id="btnQuickQty10k" class="px-2 py-0.5 bg-white hover:bg-indigo-100 text-indigo-800 rounded font-bold border border-indigo-200 shadow-2xs cursor-pointer transition-colors whitespace-nowrap">10,000</button>
+              </div>
+            </div>
+
+            <!-- 2) 목표 마진율 퀵 프리셋 버튼 -->
+            <div class="flex items-center gap-1.5 flex-wrap ml-auto">
+              <span class="text-[11px] font-bold text-slate-700 shrink-0">목표 마진율:</span>
+              <div class="inline-flex rounded-lg shadow-2xs border border-slate-200 bg-white p-0.5" role="group">
+                <button type="button" data-margin="0.10" class="btn-margin-preset px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors">10%</button>
+                <button type="button" data-margin="0.15" class="btn-margin-preset px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors">15%</button>
+                <button type="button" data-margin="0.20" class="btn-margin-preset px-2.5 py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors">20%</button>
+                <button type="button" data-margin="0.25" class="btn-margin-preset px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors">25%</button>
+                <button type="button" data-margin="0.30" class="btn-margin-preset px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors">30%</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
           <div class="flex justify-between items-center">
@@ -177,6 +306,7 @@
           <div>
             <label class="text-[9px] text-slate-500 block mb-0.5">고객 희망단가($)</label>
             <input type="text" id="inputTargetOffer" placeholder="예: 3.10" step="0.001" class="w-full p-1.5 border rounded-lg bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
+            <div id="targetOfferKrwHint" class="text-[9px] text-indigo-700 font-mono mt-0.5 truncate"></div>
           </div>
           <div class="text-center sm:text-left">
             <span class="text-[9px] text-slate-500 block">예상 마진율</span>
