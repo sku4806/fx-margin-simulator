@@ -540,7 +540,7 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
         conn = get_db_connection()
         cur = conn.cursor(as_dict=True)
 
-        start_date = f"{int(year)-1}-11-01"
+        start_date = f"{year}-01-01"
         end_date = f"{year}-12-31"
 
         # 1. 월별 Book & Bill 추이

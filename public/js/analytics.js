@@ -309,7 +309,7 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
               <span>📈</span>
               <span>월별 매출 실적 (Billing) 및 마진율 추이</span>
             </h3>
-            <span class="text-[10px] text-slate-400 font-medium">최근 12개월 월별 출하 확정 매출</span>
+            <span class="text-[10px] text-slate-400 font-medium">${currentYear}년 월별 출하 확정 매출 및 마진율</span>
           </div>
           <!-- 범례 -->
           <div class="flex items-center gap-4 text-xs font-bold">
