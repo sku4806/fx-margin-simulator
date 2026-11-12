@@ -395,10 +395,11 @@ function generateLegacyMasterRow(item) {
         <div class="font-bold text-indigo-800">${sales}</div>
       </td>
       <td class="py-2.5 px-2 align-middle">
-        <div class="flex items-center gap-1.5">
-          <span class="font-black text-indigo-950 truncate max-w-[180px]" title="${part}">${part}</span>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span class="font-black text-indigo-950 truncate max-w-[170px]" title="${part}">${part}</span>
           <button type="button" onclick="event.stopPropagation(); window.openPriceHistoryModal && window.openPriceHistoryModal('${part.replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer" title="과거 매입·판매·견적 단가 이력 추적">📈</button>
           <button type="button" onclick="event.stopPropagation(); window.loadFormFromItem && window.loadFormFromItem('${item.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 font-bold text-[10px] cursor-pointer whitespace-nowrap" title="상단 고객사 제시 견적 계산기에 품목 단가/수량 즉시 반영">🧮 견적계산</button>
+          <button type="button" onclick="event.stopPropagation(); window.handleStockToOrder && window.handleStockToOrder('${item.id}')" class="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[10px] cursor-pointer whitespace-nowrap shadow-2xs flex items-center gap-0.5" title="해당 재고 품목으로 수주·출하 등록 진행 (CS 및 관리자 전용)">📦 수주</button>
         </div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">MFG: <span class="font-bold text-slate-700">${mfg}</span></div>
       </td>
@@ -805,3 +806,109 @@ window.togglePrecisionMode = function(checked) {
     window.loadAndRenderInventory();
   }
 };
+
+/**
+ * 📦 재고 목록에서 해당 품목으로 수주 및 출하 등록 진행 (CS / 관리자 전용)
+ */
+export function handleStockToOrder(itemId) {
+  // 1. 권한 확인: CS 및 관리자만 가능
+  const canEdit = (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
+  if (!canEdit) {
+    alert("⚠️ [수주 및 출하 등록 권한 제한]\n\n세일즈(영업) 계정은 견적 계산 및 조회만 가능하며, 수주·출하 등록은 CS 및 관리자 권한 계정(CS Master / Admin)만 가능합니다.\n\n수주 및 출하 등록이 필요하신 경우 CS 담당자에게 문의해 주세요.");
+    return;
+  }
+
+  const item = getCachedItem(itemId);
+  if (!item) {
+    alert("품목 정보를 찾을 수 없습니다.");
+    return;
+  }
+
+  const part = item.partName || item.part_name || '-';
+  const mfg = item.maker || '-';
+  const stock = Number(item.stock) || 0;
+  const unitUsd = Number(item.unitUsd ?? item.unit_usd) || 0;
+  const shipFx = Number(item.shipFx ?? item.ship_fx) || 1350;
+
+  const confirmMsg = 
+    `[📦 재고 ➔ 수주/출하 등록 전환]\n\n` +
+    `• 품번(Part#): ${part}\n` +
+    `• 제조사: ${mfg}\n` +
+    `• 보유재고: ${stock.toLocaleString()} EA\n` +
+    `• 매입원가: $${unitUsd.toFixed(3)} (₩${Math.round(unitUsd * shipFx).toLocaleString()})\n\n` +
+    `해당 재고 품목으로 수주 및 출하 등록을 진행하시겠습니까?`;
+
+  if (!confirm(confirmMsg)) return;
+
+  // 2. Tab 2 (수주·출하 관리)로 이동
+  const tabFulfillment = document.getElementById('tabFulfillment');
+  if (tabFulfillment) {
+    tabFulfillment.click();
+  }
+
+  // 3. 폼에 재고 정보 자동 주입
+  setTimeout(() => {
+    if (typeof window.resetCurrentForm === 'function') {
+      window.resetCurrentForm();
+    }
+
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = (val !== null && val !== undefined) ? val : '';
+    };
+
+    setVal('inputPartName', part);
+    setVal('inputStock', (typeof window.formatNumberWithMask === 'function') ? window.formatNumberWithMask(stock, 0) : stock);
+    setVal('inputUsd', (typeof window.formatNumberWithMask === 'function') ? window.formatNumberWithMask(unitUsd, 4) : unitUsd);
+    setVal('inputShipFx', (typeof window.formatNumberWithMask === 'function') ? window.formatNumberWithMask(shipFx, 0) : shipFx);
+    setVal('inputDateCode', item.dateCode || item.date_code || '');
+    setVal('inputApplication', item.application || '');
+    setVal('selectBizType', item.bizType || item.biz_type || 'DOMESTIC');
+
+    if (item.customer && !/bigshine/i.test(item.customer)) {
+      setVal('inputCustomer', item.customer);
+      setVal('inputRealCustomer', item.realCustomer || item.real_customer || item.customer);
+    }
+
+    if (typeof window.setSelectValue === 'function') {
+      window.setSelectValue('selectMaker', 'inputCustomMaker', mfg, '__CUSTOM_MAKER__');
+      window.setSelectValue('selectOwner', 'inputCustomOwner', item.owner || '', '__CUSTOM_OWNER__');
+    }
+
+    // 타이틀 및 배너 표시
+    const titleEl = document.getElementById('selectedPartTitle');
+    if (titleEl) {
+      titleEl.innerText = `📦 신규 수주 등록: [${mfg}] ${part} (보유재고: ${stock.toLocaleString()} EA)`;
+    }
+
+    // 폼 아코디언 펼치기
+    if (typeof window.toggleFormSection === 'function') {
+      window.toggleFormSection(true);
+    }
+
+    // 수주 폼 위치로 스크롤
+    const formSection = document.getElementById('formSection');
+    if (formSection) {
+      formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // 알림 배너 표출
+    const banner = document.getElementById('editingBanner');
+    const bannerText = document.getElementById('editingBannerText');
+    if (banner && bannerText) {
+      banner.className = "p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-950 text-xs flex items-center justify-between shadow-xs mb-3";
+      bannerText.innerHTML = `
+        <div class="flex items-center gap-2">
+          <span class="text-base">📦</span>
+          <div>
+            <strong>재고 품목 신규 수주 등록:</strong> [${mfg}] ${part} (보유재고: ${stock.toLocaleString()} EA)
+            <div class="text-[11px] text-emerald-700">고객사(CNAME), 수주수량, 판매단가(Sold Price)를 입력한 뒤 저장하세요.</div>
+          </div>
+        </div>
+      `;
+      banner.classList.remove('hidden');
+    }
+  }, 120);
+}
+window.handleStockToOrder = handleStockToOrder;
+window.getCachedItem = getCachedItem;
