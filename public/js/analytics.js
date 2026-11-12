@@ -50,38 +50,166 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
   const currentMonthItem = monthly.length > 0 ? monthly[monthly.length - 1] : { billing: 0, booking: 0 };
   const currentMonthBill = currentMonthItem.billing || 0;
 
-  // 월별 차트 최대값 계산 (SVG 스케일링용)
-  const maxBill = Math.max(...monthly.map(m => Math.max(m.billing, m.booking)), 1000000);
+  // 1. 월별 매출 차트 스케일 계산 (매출액 전용 + Y축 눈금선)
+  const maxBill = Math.max(...monthly.map(m => m.billing || 0), 100000000);
+  
+  // 가독성 좋은 Y축 눈금(억 단위) 스케일 계산
+  let step = 500000000; // 기본 5억 단위
+  if (maxBill > 2500000000) step = 1000000000; // 10억
+  else if (maxBill < 800000000) step = 200000000; // 2억
+  else if (maxBill < 400000000) step = 100000000; // 1억
+  const yCeiling = Math.max(step * 2, Math.ceil((maxBill * 1.15) / step) * step); // 상단 수치 라벨 여유 확보(1.15배)
 
-  // SVG 차트 막대 생성
-  const chartHeight = 180;
-  const chartWidth = 720;
-  const barGroupWidth = monthly.length > 0 ? Math.floor((chartWidth - 60) / monthly.length) : 50;
-  const barWidth = Math.max(8, Math.floor(barGroupWidth * 0.38));
+  // SVG 차트 좌표 설정
+  const chartHeight = 230;
+  const chartWidth = 840;
+  const plotLeft = 65;
+  const plotRight = chartWidth - 25;
+  const plotWidth = plotRight - plotLeft;
+  const plotTop = 38;
+  const plotBottom = chartHeight - 32;
+  const plotHeight = plotBottom - plotTop;
+
+  // Y축 그리드 라인 & 눈금 라벨 생성
+  const yTicks = [];
+  for (let val = 0; val <= yCeiling; val += step) {
+    const yPos = plotBottom - Math.round((val / yCeiling) * plotHeight);
+    const label = val === 0 ? '0' : `${(val / 100000000).toFixed(0)}억`;
+    yTicks.push({ val, yPos, label });
+  }
+
+  const yGridSvg = yTicks.map(t => `
+    <g class="y-tick">
+      <line x1="${plotLeft}" y1="${t.yPos}" x2="${plotRight}" y2="${t.yPos}" stroke="${t.val === 0 ? '#94a3b8' : '#f1f5f9'}" stroke-width="${t.val === 0 ? '1.5' : '1'}" stroke-dasharray="${t.val === 0 ? '' : '3 3'}" />
+      <text x="${plotLeft - 10}" y="${t.yPos + 4}" text-anchor="end" font-size="10" font-weight="bold" fill="#64748b" class="font-mono">${t.label}</text>
+    </g>
+  `).join('');
+
+  // X축 및 매출 단일 막대 생성 (상단 금액 & 마진율 수치 직접 표기)
+  const slotCount = monthly.length;
+  const slotWidth = slotCount > 0 ? plotWidth / slotCount : 60;
+  const barWidth = Math.min(38, Math.max(16, Math.floor(slotWidth * 0.58)));
 
   const chartSvgBars = monthly.map((m, idx) => {
-    const x = 50 + idx * barGroupWidth;
-    const billH = Math.max(2, Math.round((m.billing / maxBill) * (chartHeight - 40)));
-    const bookH = Math.max(2, Math.round((m.booking / maxBill) * (chartHeight - 40)));
-    const billY = chartHeight - 25 - billH;
-    const bookY = chartHeight - 25 - bookH;
-    const monthLabel = m.month.slice(5); // '01', '02', ...
+    const bill = m.billing || 0;
+    const mgn = m.margin || 0;
+    const mgnRate = m.margin_rate || 0;
+    const billCount = m.bill_count || 0;
+
+    const slotCenter = plotLeft + idx * slotWidth + slotWidth / 2;
+    const barX = Math.round(slotCenter - barWidth / 2);
+    const barHeight = bill > 0 ? Math.max(4, Math.round((bill / yCeiling) * plotHeight)) : 2;
+    const barY = plotBottom - barHeight;
+
+    // 월 라벨 (연도가 다른 경우 25.11 형태, 당해 연도는 01월)
+    const isOtherYear = !m.month.startsWith(currentYear);
+    const monthLabel = isOtherYear ? `${m.month.slice(2, 4)}.${m.month.slice(5)}` : `${m.month.slice(5)}월`;
+
+    // 억/천만 단위 가독성 텍스트
+    let eokText = '-';
+    if (bill >= 100000000) {
+      eokText = `${(bill / 100000000).toFixed(1)}억`;
+    } else if (bill >= 10000000) {
+      eokText = `${Math.round(bill / 10000).toLocaleString()}만`;
+    } else if (bill > 0) {
+      eokText = `${Math.round(bill / 10000).toLocaleString()}만`;
+    }
 
     return `
       <g class="chart-group cursor-pointer group" data-idx="${idx}">
-        <!-- Booking Bar (Amber) -->
-        <rect x="${x}" y="${bookY}" width="${barWidth}" height="${bookH}" rx="3" fill="#f59e0b" class="opacity-90 group-hover:opacity-100 transition-opacity">
-          <title>${m.month} 수주: ₩${Math.round(m.booking).toLocaleString()}</title>
+        <!-- 호버 시 배경 슬롯 하이라이트 -->
+        <rect x="${Math.round(slotCenter - slotWidth / 2 + 2)}" y="${plotTop - 15}" width="${Math.round(slotWidth - 4)}" height="${plotHeight + 25}" fill="#f8fafc" rx="8" class="opacity-0 group-hover:opacity-100 transition-opacity" pointer-events="none"></rect>
+
+        <!-- 막대 상단 1: 매출액 수치 직접 표기 (굵은 남색) -->
+        <text x="${slotCenter}" y="${barY - 14}" text-anchor="middle" font-size="10.5" font-weight="900" fill="#1e1b4b" class="font-mono tracking-tight select-none">
+          ${bill > 0 ? eokText : ''}
+        </text>
+
+        <!-- 막대 상단 2: 실현 마진율 수치 직접 표기 (에메랄드) -->
+        <text x="${slotCenter}" y="${barY - 3}" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#059669" class="font-mono select-none">
+          ${bill > 0 ? `${mgnRate}%` : ''}
+        </text>
+
+        <!-- 매출 단일 바 (그라디언트 + 모던 라운딩) -->
+        <rect x="${barX}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="4" fill="url(#billingBarGradient)" class="filter drop-shadow-xs transition-all duration-150 group-hover:brightness-110">
+          <title>${m.month} 실적
+• 매출액: ₩${Math.round(bill).toLocaleString()}
+• 매출이익: ₩${Math.round(mgn).toLocaleString()}
+• 실현마진율: ${mgnRate}%
+• 출하건수: ${billCount}건</title>
         </rect>
-        <!-- Billing Bar (Indigo) -->
-        <rect x="${x + barWidth + 2}" y="${billY}" width="${barWidth}" height="${billH}" rx="3" fill="#4f46e5" class="opacity-90 group-hover:opacity-100 transition-opacity">
-          <title>${m.month} 매출: ₩${Math.round(m.billing).toLocaleString()} (마진: ${m.margin_rate}%)</title>
-        </rect>
-        <!-- X-axis Label -->
-        <text x="${x + barWidth + 1}" y="${chartHeight - 8}" text-anchor="middle" font-size="10" font-weight="bold" fill="#64748b">${monthLabel}월</text>
+
+        <!-- X축 월 라벨 -->
+        <text x="${slotCenter}" y="${plotBottom + 18}" text-anchor="middle" font-size="11" font-weight="${idx >= slotCount - 2 ? '900' : 'bold'}" fill="${idx >= slotCount - 2 ? '#4338ca' : '#64748b'}" class="select-none">
+          ${monthLabel}
+        </text>
       </g>
     `;
   }).join('');
+
+  // 하단 월별 정확한 수치 상세 테이블 HTML 생성
+  const monthlySummaryTableHtml = `
+    <div class="overflow-x-auto border-t border-slate-100 mt-2 pt-2.5">
+      <table class="w-full text-xs text-center border-collapse">
+        <thead>
+          <tr class="text-[11px] font-bold text-slate-500 bg-slate-50 border-y border-slate-200">
+            <th class="py-1.5 px-3 text-left sticky left-0 bg-slate-50 z-10 shadow-xs">지표</th>
+            ${monthly.map(m => {
+              const isOtherYear = !m.month.startsWith(currentYear);
+              const mLabel = isOtherYear ? `${m.month.slice(2, 4)}.${m.month.slice(5)}` : `${m.month.slice(5)}월`;
+              return `<th class="py-1.5 px-2 font-mono text-slate-700 whitespace-nowrap">${mLabel}</th>`;
+            }).join('')}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-[11px]">
+          <!-- 1. 매출액 -->
+          <tr class="hover:bg-indigo-50/30 transition-colors">
+            <td class="py-1.5 px-3 text-left font-black text-slate-800 sticky left-0 bg-white z-10 shadow-xs flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-indigo-600 inline-block shrink-0"></span>
+              <span>매출액</span>
+            </td>
+            ${monthly.map(m => {
+              const bill = m.billing || 0;
+              const eokStr = bill >= 100000000 ? `${(bill / 100000000).toFixed(1)}억` : `${Math.round(bill / 10000).toLocaleString()}만`;
+              return `<td class="py-1.5 px-2 font-mono font-black text-indigo-950 whitespace-nowrap" title="₩${Math.round(bill).toLocaleString()}">₩${eokStr}</td>`;
+            }).join('')}
+          </tr>
+          <!-- 2. 매출이익 (마진) -->
+          <tr class="hover:bg-emerald-50/30 transition-colors">
+            <td class="py-1.5 px-3 text-left font-bold text-emerald-900 sticky left-0 bg-white z-10 shadow-xs flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0"></span>
+              <span>매출이익</span>
+            </td>
+            ${monthly.map(m => {
+              const mgn = m.margin || 0;
+              const eokStr = mgn >= 100000000 ? `${(mgn / 100000000).toFixed(1)}억` : `${Math.round(mgn / 10000).toLocaleString()}만`;
+              return `<td class="py-1.5 px-2 font-mono font-bold text-emerald-800 whitespace-nowrap" title="₩${Math.round(mgn).toLocaleString()}">₩${eokStr}</td>`;
+            }).join('')}
+          </tr>
+          <!-- 3. 실현 마진율 -->
+          <tr class="hover:bg-slate-50/50 transition-colors">
+            <td class="py-1.5 px-3 text-left font-bold text-slate-700 sticky left-0 bg-white z-10 shadow-xs flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-teal-500 inline-block shrink-0"></span>
+              <span>마진율</span>
+            </td>
+            ${monthly.map(m => `
+              <td class="py-1.5 px-2 whitespace-nowrap">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${m.margin_rate || 0}%</span>
+              </td>
+            `).join('')}
+          </tr>
+          <!-- 4. 출하 건수 -->
+          <tr class="hover:bg-slate-50/50 transition-colors">
+            <td class="py-1.5 px-3 text-left font-medium text-slate-500 sticky left-0 bg-white z-10 shadow-xs flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-slate-400 inline-block shrink-0"></span>
+              <span>출하건수</span>
+            </td>
+            ${monthly.map(m => `<td class="py-1.5 px-2 font-mono text-slate-500 text-[10px] whitespace-nowrap">${m.bill_count || 0}건</td>`).join('')}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
 
   container.innerHTML = `
     <div class="space-y-4">
@@ -173,32 +301,46 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
         </div>
       </div>
 
-      <!-- 3. 월별 Book & Bill 추이 차트 -->
+      <!-- 3. 월별 매출 실적 (Billing) 및 마진율 추이 차트 -->
       <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
-            <h3 class="font-bold text-sm text-slate-900">월별 수주(Booking) vs 매출(Billing) 추이</h3>
-            <span class="text-[10px] text-slate-400 font-medium">최근 12개월 월별 비교</span>
+            <h3 class="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+              <span>📈</span>
+              <span>월별 매출 실적 (Billing) 및 마진율 추이</span>
+            </h3>
+            <span class="text-[10px] text-slate-400 font-medium">최근 12개월 월별 출하 확정 매출</span>
           </div>
           <!-- 범례 -->
-          <div class="flex items-center gap-3 text-xs font-bold">
-            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-indigo-600 inline-block"></span> 매출 (Billing)</span>
-            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-500 inline-block"></span> 수주 (Booking)</span>
+          <div class="flex items-center gap-4 text-xs font-bold">
+            <span class="flex items-center gap-1.5 text-indigo-900">
+              <span class="w-3.5 h-3.5 rounded bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-xs inline-block"></span>
+              매출액 (Billing)
+            </span>
+            <span class="flex items-center gap-1.5 text-emerald-700">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+              실현 마진율 (%)
+            </span>
           </div>
         </div>
 
-        <div class="w-full overflow-x-auto pt-2">
-          <svg viewBox="0 0 ${chartWidth} ${chartHeight}" class="w-full h-48 select-none">
-            <!-- 기준선 그리드 -->
-            <line x1="40" y1="20" x2="${chartWidth}" y2="20" stroke="#f1f5f9" stroke-width="1" />
-            <line x1="40" y1="70" x2="${chartWidth}" y2="70" stroke="#f1f5f9" stroke-width="1" />
-            <line x1="40" y1="120" x2="${chartWidth}" y2="120" stroke="#f1f5f9" stroke-width="1" />
-            <line x1="40" y1="${chartHeight - 25}" x2="${chartWidth}" y2="${chartHeight - 25}" stroke="#cbd5e1" stroke-width="1.5" />
-            
-            <!-- 막대 렌더링 -->
+        <div class="w-full overflow-x-auto pt-1">
+          <svg viewBox="0 0 ${chartWidth} ${chartHeight}" class="w-full h-52 select-none min-w-[700px]">
+            <defs>
+              <linearGradient id="billingBarGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#6366f1" />
+                <stop offset="100%" stop-color="#4338ca" />
+              </linearGradient>
+            </defs>
+            <!-- Y축 그리드 라인 & 눈금 라벨 -->
+            ${yGridSvg}
+            <!-- 막대 렌더링 & 수치 라벨 -->
             ${chartSvgBars}
           </svg>
         </div>
+
+        <!-- 하단 월별 정확한 수치 상세 테이블 -->
+        ${monthlySummaryTableHtml}
       </div>
 
       <!-- 4. 하단 3개 분석 컬럼 (고객사 Top 10 / 제조사 점유율 / 영업사원 기여도) -->
