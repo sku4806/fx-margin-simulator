@@ -9,6 +9,8 @@
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     input, select, button { -webkit-tap-highlight-color: transparent; }
     .word-keep { word-break: keep-all; }
@@ -117,6 +119,10 @@
         </button>
         <button id="tabAnalytics" class="py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0" title="매출·수주 실적 분석 (Book & Bill)">
           <span>📊</span> 매출 실적 분석
+        </button>
+        <button id="tabPayment" onclick="window.switchToPaymentTab && window.switchToPaymentTab()" class="py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0 cursor-pointer" title="내부 경비 정산 및 전자결재 (지출·구매·출장 품의)">
+          <span>📑</span> 전자결재·품의
+          <span id="paymentPendingBadge" class="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold hidden">0</span>
         </button>
       </div>
       <span id="csHeaderDesc" class="text-[11px] text-slate-400 font-medium hidden xl:block px-2 shrink-0 text-right">영업 협의 수주 현황 및 실판매가를 확인합니다.</span>
@@ -797,6 +803,547 @@
   <!-- 9. 레거시 세일즈 마스터 [FrmSalesBKBL & FrmSalesGraph] 매출 장부 & 다차원 실적 분석 섹션 (max-w-6xl) -->
   <div id="analyticsSection" class="hidden space-y-3 sm:space-y-4"></div>
 
+  <!-- 10. 전자결재 및 경비 정산 통합 섹션 (Tab 7) -->
+  <div id="paymentSection" class="hidden space-y-4 sm:space-y-6">
+    
+    <!-- 10-1. 서브탭 네비게이션 헤더 -->
+    <div class="bg-white p-2 sm:p-2.5 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-1.5 overflow-x-auto py-0.5">
+        <button id="tabBtnRegister" onclick="window.switchPaymentSubTab('register')" class="nav-tab px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white shadow-xs flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer">
+          <span>💳</span> 경비등록
+        </button>
+        <button id="tabBtnApproval" onclick="window.switchPaymentSubTab('approval')" class="nav-tab px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer">
+          <span>✍️</span> 품의작성
+        </button>
+        <button id="tabBtnMy" onclick="window.switchPaymentSubTab('my')" class="nav-tab px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer">
+          <span>📂</span> 내 문서함
+        </button>
+        <button id="tabBtnAdmin" onclick="window.switchPaymentSubTab('admin')" class="nav-tab px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer">
+          <span>🛡️</span> 관리자 결재
+          <span id="pendingBadge" class="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold hidden">0</span>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs">
+        <span class="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+          <span id="connStatusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block ring-2 ring-emerald-200"></span>
+          <span class="text-[11px] font-medium text-slate-600">결재 DB 연동 (Project 2)</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- 10-2. 서브뷰 1: 카드 결제 영수증 정산 등록 (OCR 스마트 분석) -->
+    <div id="paymentSectionRegister" class="space-y-4">
+      <div class="bg-gradient-to-r from-blue-50/50 via-white to-slate-50 p-4 sm:p-5 rounded-2xl border border-blue-100 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+            <span>💳</span> 법인/개인카드 영수증 경비 정산 등록
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">영수증 사진/캡처본을 올리면 Tesseract AI OCR이 가맹점, 일자, 금액, 승인번호를 자동 추출합니다.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
+        <!-- 좌측: 영수증 업로드 & OCR 프리뷰 -->
+        <div class="lg:col-span-5 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <span>📷</span> 영수증 이미지 첨부
+            </span>
+            <span class="text-[11px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-bold">스마트 자동 OCR</span>
+          </div>
+
+          <div id="dropZone" class="relative border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-4 text-center cursor-pointer transition flex flex-col items-center justify-center min-h-[220px] bg-slate-50/60">
+            <input type="file" id="receiptFileInput" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" onchange="window.handleReceiptFileSelect(event)">
+            <div id="uploadPlaceholder" class="space-y-2 pointer-events-none">
+              <div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto text-xl shadow-xs">
+                📸
+              </div>
+              <p class="text-xs font-bold text-slate-700">영수증 사진 / 카드 전표 이미지 선택</p>
+              <p class="text-[11px] text-slate-400">클릭하거나 모바일 캡처본/JPG/PNG 끌어놓기</p>
+            </div>
+            <div id="imagePreviewContainer" class="hidden relative w-full flex justify-center">
+              <img id="imagePreview" src="" alt="영수증 미리보기" class="max-h-72 rounded-lg object-contain shadow-xs border border-slate-200">
+              <button type="button" onclick="window.clearReceiptFile(event)" class="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition z-20 cursor-pointer font-bold text-xs" title="이미지 삭제">
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- OCR 상태 바 -->
+          <div id="ocrStatusArea" class="hidden space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+            <div class="flex items-center justify-between font-medium">
+              <span id="ocrStatusText" class="flex items-center gap-1.5 text-slate-700">분석 중...</span>
+              <span id="ocrProgressNum" class="font-mono text-blue-600 font-bold">0%</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+              <div id="ocrProgressBar" class="bg-blue-600 h-1.5 rounded-full transition-all duration-300 w-0"></div>
+            </div>
+          </div>
+
+          <button type="button" onclick="window.runReceiptOCR()" class="w-full py-2.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer">
+            <span>🔄</span> OCR 텍스트 자동 인식 재실행
+          </button>
+
+          <details class="text-[11px] text-slate-500">
+            <summary class="cursor-pointer hover:text-slate-800 select-none font-medium">OCR 추출 원문 텍스트 확인</summary>
+            <pre id="rawOcrText" class="mt-2 p-2.5 bg-slate-100 rounded-lg max-h-32 overflow-y-auto whitespace-pre-wrap font-mono text-[10px] text-slate-600 border border-slate-200"></pre>
+          </details>
+        </div>
+
+        <!-- 우측: 결제 정보 입력 폼 -->
+        <div class="lg:col-span-7 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              <span>📝</span> 정산 전표 상세 입력
+            </h3>
+            <button type="button" onclick="window.loadApprovedApprovalsForSelect()" class="text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition inline-flex items-center gap-1 self-start cursor-pointer">
+              <span>🔗</span> 승인된 사전 품의서 불러오기
+            </button>
+          </div>
+
+          <!-- 사전 승인 품의 연결 박스 -->
+          <div id="linkedApprovalBox" class="hidden bg-indigo-50/80 border border-indigo-200 rounded-xl p-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold text-indigo-900">연결할 사전 승인 품의서 선택</label>
+              <button type="button" onclick="window.clearLinkedApproval()" class="text-[11px] text-slate-500 hover:text-slate-700 underline cursor-pointer">연결 해제</button>
+            </div>
+            <select id="approvedApprovalSelect" onchange="window.applyLinkedApproval()" class="w-full px-3 py-2 text-xs border border-indigo-300 rounded-lg bg-white font-medium">
+              <option value="">-- 선택 --</option>
+            </select>
+          </div>
+
+          <form id="expenseForm" onsubmit="window.submitExpense(event)" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">신청 사원명 *</label>
+                <input type="text" id="employeeName" required placeholder="예: 김남천" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">결제일자 *</label>
+                <input type="date" id="paymentDate" required class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none font-mono">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">가맹점 / 거래처명</label>
+                <input type="text" id="merchantName" placeholder="예: 스타벅스, SK에너지" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">카드 승인번호 *</label>
+                <input type="text" id="approvalNumber" required placeholder="영수증 8자리 숫자" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono focus:border-blue-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">결제 금액 (원화 ₩) *</label>
+                <input type="number" id="amount" required placeholder="예: 25000" min="1" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold text-slate-900 focus:border-blue-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">비용 계정 구분 *</label>
+                <select id="expenseCategory" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:border-blue-500 focus:outline-none font-medium">
+                  <option value="교통비 (주유/통행료)">교통비 (주유 / 통행료 / KTX)</option>
+                  <option value="식대 (영업 활동비)">식대 (영업 활동비)</option>
+                  <option value="접대비 / 미팅비">접대비 / 고객 미팅비</option>
+                  <option value="사무용품 / 소모품비">사무용품 / 소모품비</option>
+                  <option value="출장 숙박/여비">출장 숙박/여비</option>
+                  <option value="부품 매입/재고비">부품 매입 / 안전재고비</option>
+                  <option value="기타 업무비">기타 업무비</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">지출 목적 및 상세 내용 *</label>
+              <textarea id="purpose" rows="3" required placeholder="예: 고객사 기술 지원 미팅 이동 주유비 및 식대 정산" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none"></textarea>
+            </div>
+
+            <button type="submit" id="submitBtn" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer">
+              <span>💳</span> 경비 정산 결재 신청
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 10-3. 서브뷰 2: 내부 결재서류 품의 작성 (구매품의 ERP 자동연동 지원) -->
+    <div id="paymentSectionApproval" class="space-y-4 hidden">
+      <div class="bg-gradient-to-r from-indigo-50/50 via-white to-slate-50 p-4 sm:p-5 rounded-2xl border border-indigo-100 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+            <span>✍️</span> 내부 전자결재 품의서 상신
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">사전 지출, 물품/부품 구매, 출장 기안 및 일반 업무 기안서를 작성합니다. <strong class="text-indigo-700">[구매품의서]</strong>는 승인 시 ERP 재고관리(발주·입고예정)로 자동 연동됩니다.</p>
+        </div>
+      </div>
+
+      <div class="bg-white p-5 sm:p-7 rounded-2xl border border-slate-200 shadow-xs max-w-4xl mx-auto">
+        <form id="approvalForm" onsubmit="window.submitApproval(event)" class="space-y-4 sm:space-y-5">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">품의 구분 *</label>
+              <select id="appDocType" onchange="window.toggleApprovalAmountField()" class="w-full px-3 py-2 text-xs border border-indigo-300 rounded-xl bg-indigo-50/30 font-bold text-indigo-950 focus:border-indigo-500 focus:outline-none">
+                <option value="구매품의서">📦 부품/물품 구매 품의서 (ERP 연동)</option>
+                <option value="지출품의서">사전 지출 품의서</option>
+                <option value="출장기안서">국내/외 출장 기안서</option>
+                <option value="일반업무기안">일반 업무 기안 (금액 없음)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">기안자명 *</label>
+              <input type="text" id="appDrafterName" required placeholder="예: 김남천" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-indigo-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">소속 부서</label>
+              <input type="text" id="appDepartment" value="영업/기술지원팀" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-indigo-500 focus:outline-none">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">예상 소요 금액 (원화 ₩)</label>
+              <input type="number" id="appExpectedAmount" required placeholder="0" min="0" value="0" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold text-slate-900 focus:border-indigo-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">관련 비용 계정</label>
+              <select id="appCategory" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:border-indigo-500 focus:outline-none font-medium">
+                <option value="부품 매입/재고비">부품 매입 / 안전재고 확보</option>
+                <option value="접대비 / 미팅비">접대비 / 고객 미팅비</option>
+                <option value="출장 숙박/여비">출장 숙박/여비</option>
+                <option value="교통비 (주유/통행료)">교통비 (주유 / 통행료 / KTX)</option>
+                <option value="사무용품 / 소모품비">사무용품 / 소모품비</option>
+                <option value="일반행정 / 해당없음">일반행정 / 해당없음</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">시행 / 입고 예정일 (ETA)</label>
+              <input type="date" id="appTargetDate" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono focus:border-indigo-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- 1) 지출품의서 필드 -->
+          <fieldset id="appFieldsExpense" disabled class="hidden space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <legend class="px-2 text-xs font-bold text-slate-700">지출 산출 내역</legend>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">항목 및 산출 근거 *</label>
+              <textarea id="appExpenseBreakdown" rows="3" placeholder="예: 고객 미팅 식대 4명 × 25,000원 = 100,000원" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white"></textarea>
+            </div>
+          </fieldset>
+
+          <!-- 2) 구매품의서 전용 스마트 구조화 필드 (ERP 재고연동) -->
+          <fieldset id="appFieldsPurchase" class="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
+            <div class="flex items-center justify-between border-b border-indigo-200/60 pb-2">
+              <span class="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                <span>📦</span> ERP 재고 관리 자동 연동 정보
+              </span>
+              <span class="text-[10px] text-indigo-700 bg-white border border-indigo-200 px-2 py-0.5 rounded-full font-bold">승인 시 발주(PO) 생성</span>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">부품 품번 (Part#) *</label>
+                <input id="appPurchasePartNo" type="text" placeholder="예: IS25LP128F-JBLE-TR" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-mono font-bold text-indigo-900">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">제조사 (Maker)</label>
+                <input id="appPurchaseMaker" type="text" placeholder="예: ISSI, Winbond" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">공급업체 (Vendor)</label>
+                <input id="appPurchaseVendor" type="text" placeholder="예: ISSI Hong Kong" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">발주 수량 (Qty EA) *</label>
+                <input id="appPurchaseQty" type="number" min="1" placeholder="예: 5000" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-mono font-bold">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">매입 단가 & 통화</label>
+                <div class="flex gap-1.5">
+                  <select id="appPurchaseCurrency" class="w-20 px-2 py-2 text-xs border border-slate-300 rounded-xl bg-white font-bold">
+                    <option value="USD">USD ($)</option>
+                    <option value="KRW">KRW (₩)</option>
+                  </select>
+                  <input id="appPurchaseUnitPrice" type="number" step="0.0001" min="0" placeholder="예: 1.15" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-mono">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">실수요처 / 배정 고객사</label>
+                <input id="appPurchaseCustomer" type="text" placeholder="예: 본사 일반재고, 또는 고객사명" value="본사 일반재고" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">구매 사유 및 견적 조건 상세</label>
+              <textarea id="appPurchaseItems" rows="2" placeholder="예: 고객사 양산 프로젝트 수주 대비 안전재고 확보 (리드타임 6주, 홍콩 선적)" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white"></textarea>
+            </div>
+          </fieldset>
+
+          <!-- 3) 출장기안서 필드 -->
+          <fieldset id="appFieldsTravel" disabled class="hidden space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <legend class="px-2 text-xs font-bold text-slate-700">출장 상세</legend>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">출장 목적지 *</label>
+                <input id="appTravelDestination" type="text" placeholder="예: 부산 고객사 연구소" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">출장 시작일 *</label>
+                <input id="appTravelStartDate" type="date" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-mono">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">출장 종료일 *</label>
+                <input id="appTravelEndDate" type="date" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-mono">
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">방문 일정 및 업무 목표 *</label>
+              <textarea id="appTravelSchedule" rows="3" placeholder="예: 1일차 장비 테스트 지원, 2일차 기술 미팅 및 세미나 진행" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white"></textarea>
+            </div>
+          </fieldset>
+
+          <!-- 4) 일반업무기안 필드 -->
+          <fieldset id="appFieldsGeneral" disabled class="hidden space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <legend class="px-2 text-xs font-bold text-slate-700">업무 기안 상세</legend>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">기대 효과 및 완료 기준 *</label>
+              <textarea id="appGeneralOutcome" rows="3" placeholder="업무 완료 후 기대하는 정량적/정성적 성과를 입력해 주세요." class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white"></textarea>
+            </div>
+          </fieldset>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">기안 제목 *</label>
+            <input type="text" id="appTitle" required placeholder="예: [안전재고 확보] IS25LP128F 5,000 EA 발주 및 입고 품의의 건" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-indigo-500 focus:outline-none font-semibold text-slate-900">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">기안 배경 및 종합 품의 설명 *</label>
+            <textarea id="appContent" rows="4" required placeholder="기안 배경, 도입 필요성, 단가 협의 내용, 납품 일정 등을 상세히 입력해 주세요." class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl leading-relaxed focus:border-indigo-500 focus:outline-none"></textarea>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">첨부 파일 (견적서, 일정표 등 - 선택)</label>
+            <input type="file" id="appAttachmentInput" accept="image/*,.pdf,.xlsx,.csv" class="w-full text-xs text-slate-500 border border-slate-300 rounded-xl p-1.5 bg-slate-50">
+          </div>
+
+          <button type="submit" id="appSubmitBtn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer">
+            <span>📤</span> 전자결재 품의서 상신하기
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 10-4. 서브뷰 3: 내 문서함 (품의 및 경비 조회) -->
+    <div id="paymentSectionMy" class="space-y-4 hidden">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+            <span>📂</span> 내 문서함 (품의 및 경비 신청 조회)
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">본인이 상신한 품의서와 경비 정산의 최종 결재 상태 및 반려 사유를 실시간 확인합니다.</p>
+        </div>
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+          <input type="text" id="myLookupName" placeholder="사원명 입력" class="px-3 py-1.5 text-xs border border-slate-300 rounded-xl w-36 sm:w-44 focus:border-blue-500 focus:outline-none">
+          <button type="button" onclick="window.loadMyAllDocs()" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1 cursor-pointer">
+            <span>🔍</span> 조회
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <button id="mySubTabExpense" onclick="window.switchMySubTab('expense')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white shadow-xs transition cursor-pointer">
+          경비 정산 내역
+        </button>
+        <button id="mySubTabApproval" onclick="window.switchMySubTab('approval')" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition cursor-pointer">
+          내부 품의 내역
+        </button>
+      </div>
+
+      <!-- 내 경비 목록 테이블 -->
+      <div id="myExpensePanel" class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[760px] text-left border-collapse text-xs whitespace-nowrap">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                <th class="py-3 px-3">결제일</th>
+                <th class="py-3 px-3">연결 품의</th>
+                <th class="py-3 px-3">가맹점명</th>
+                <th class="py-3 px-3">승인번호</th>
+                <th class="py-3 px-3">금액</th>
+                <th class="py-3 px-3">지출 목적</th>
+                <th class="py-3 px-3 text-center">영수증</th>
+                <th class="py-3 px-3 text-center">결재 상태</th>
+              </tr>
+            </thead>
+            <tbody id="myExpenseTableBody" class="divide-y divide-slate-100 text-slate-700">
+              <tr>
+                <td colspan="8" class="text-center py-12 text-slate-400">사원명을 입력하고 [조회]를 눌러주세요.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 내 품의 목록 테이블 -->
+      <div id="myApprovalPanel" class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[760px] text-left border-collapse text-xs whitespace-nowrap">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                <th class="py-3 px-3">문서번호</th>
+                <th class="py-3 px-3">구분</th>
+                <th class="py-3 px-3">기안 제목</th>
+                <th class="py-3 px-3">예상 금액</th>
+                <th class="py-3 px-3">기안일</th>
+                <th class="py-3 px-3 text-center">기안서 보기</th>
+                <th class="py-3 px-3 text-center">결재 상태</th>
+              </tr>
+            </thead>
+            <tbody id="myApprovalTableBody" class="divide-y divide-slate-100 text-slate-700">
+              <tr>
+                <td colspan="7" class="text-center py-12 text-slate-400">사원명을 입력하고 [조회]를 눌러주세요.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 10-5. 서브뷰 4: 관리자 통합 결재 대시보드 (D.I.Lee 대표 승인) -->
+    <div id="paymentSectionAdmin" class="space-y-4 sm:space-y-6 hidden">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+            <span>🛡️</span> 관리자 통합 결재 대시보드
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">사원들의 카드 경비 청구 전표와 내부 품의서를 심사하고 최종 승인·반려 처리합니다.</p>
+        </div>
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+          <button type="button" onclick="window.loadAllAdminPaymentData()" class="p-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 transition cursor-pointer" title="새로고침">
+            <span>🔄</span>
+          </button>
+          <button type="button" onclick="window.exportPaymentExpensesToCSV()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition cursor-pointer">
+            <span>📥</span> 경비 내역 CSV 다운로드
+          </button>
+        </div>
+      </div>
+
+      <!-- 모드 스위처 (경비 심사 vs 품의 심사) -->
+      <div class="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 w-fit">
+        <button id="adminModeExpenseBtn" onclick="window.switchAdminPaymentMode('expense')" class="px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer">
+          <span>💳</span> 경비 정산 심사 (<span id="adminExpPendingCnt">0</span>)
+        </button>
+        <button id="adminModeApprovalBtn" onclick="window.switchAdminPaymentMode('approval')" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition flex items-center gap-1.5 cursor-pointer">
+          <span>📋</span> 내부 품의 심사 (<span id="adminAppPendingCnt">0</span>)
+        </button>
+      </div>
+
+      <!-- 1) 관리자 경비 정산 패널 -->
+      <div id="adminExpensePanel" class="space-y-4 sm:space-y-5">
+        <!-- 4대 KPI 요약 카드 -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <span class="text-xs text-slate-500 font-semibold">결재 대기</span>
+            <div class="mt-2 flex items-baseline justify-between">
+              <span id="statPendingCount" class="text-lg sm:text-2xl font-black text-amber-500">0건</span>
+              <span id="statPendingAmount" class="text-[11px] font-mono font-bold text-slate-600">₩0</span>
+            </div>
+          </div>
+          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <span class="text-xs text-slate-500 font-semibold">승인 완료</span>
+            <div class="mt-2 flex items-baseline justify-between">
+              <span id="statApprovedCount" class="text-lg sm:text-2xl font-black text-emerald-600">0건</span>
+              <span id="statApprovedAmount" class="text-[11px] font-mono font-bold text-slate-600">₩0</span>
+            </div>
+          </div>
+          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <span class="text-xs text-slate-500 font-semibold">반려</span>
+            <div class="mt-2 flex items-baseline justify-between">
+              <span id="statRejectedCount" class="text-lg sm:text-2xl font-black text-rose-500">0건</span>
+              <span id="statRejectedAmount" class="text-[11px] font-mono font-bold text-slate-600">₩0</span>
+            </div>
+          </div>
+          <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <span class="text-xs text-slate-500 font-semibold">총 청구 합계</span>
+            <div class="mt-2 flex items-baseline justify-between">
+              <span id="statTotalCount" class="text-lg sm:text-2xl font-black text-slate-900">0건</span>
+              <span id="statTotalAmount" class="text-[11px] font-mono font-black text-slate-900">₩0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden space-y-4 p-4">
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-1.5 self-start">
+              <button onclick="window.filterAdminExpenseStatus('ALL')" class="status-tab px-3 py-1 rounded-lg text-xs font-bold bg-slate-900 text-white shadow-xs cursor-pointer" data-status="ALL">전체보기</button>
+              <button onclick="window.filterAdminExpenseStatus('PENDING')" class="status-tab px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 cursor-pointer" data-status="PENDING">대기중</button>
+              <button onclick="window.filterAdminExpenseStatus('APPROVED')" class="status-tab px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 cursor-pointer" data-status="APPROVED">승인됨</button>
+              <button onclick="window.filterAdminExpenseStatus('REJECTED')" class="status-tab px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 cursor-pointer" data-status="REJECTED">반려됨</button>
+            </div>
+            <div class="w-full sm:w-64">
+              <input type="text" id="adminSearchInput" oninput="window.renderAdminExpenseTable && window.renderAdminExpenseTable()" placeholder="사원명 또는 가맹점 검색..." class="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none">
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[840px] text-left border-collapse text-xs whitespace-nowrap">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                  <th class="py-3 px-3">결제일</th>
+                  <th class="py-3 px-3">사원명</th>
+                  <th class="py-3 px-3">연결 품의</th>
+                  <th class="py-3 px-3">가맹점명</th>
+                  <th class="py-3 px-3">승인번호</th>
+                  <th class="py-3 px-3">결제 금액</th>
+                  <th class="py-3 px-3">용도</th>
+                  <th class="py-3 px-3 text-center">영수증</th>
+                  <th class="py-3 px-3 text-center">상태</th>
+                  <th class="py-3 px-3 text-right">결재 처리</th>
+                </tr>
+              </thead>
+              <tbody id="expenseTableBody" class="divide-y divide-slate-100 text-slate-700"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2) 관리자 내부 품의 심사 패널 -->
+      <div id="adminApprovalPanel" class="space-y-4 hidden">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden space-y-4 p-4">
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-1.5 self-start">
+              <button onclick="window.filterAdminApprovalStatus('ALL')" class="app-status-tab px-3 py-1 rounded-lg text-xs font-bold bg-slate-900 text-white shadow-xs cursor-pointer" data-status="ALL">전체보기</button>
+              <button onclick="window.filterAdminApprovalStatus('PENDING')" class="app-status-tab px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 cursor-pointer" data-status="PENDING">결재대기</button>
+              <button onclick="window.filterAdminApprovalStatus('APPROVED')" class="app-status-tab px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 cursor-pointer" data-status="APPROVED">승인완료</button>
+              <button onclick="window.filterAdminApprovalStatus('REJECTED')" class="app-status-tab px-3 py-1 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 cursor-pointer" data-status="REJECTED">반려됨</button>
+            </div>
+            <div class="w-full sm:w-64">
+              <input type="text" id="adminAppSearchInput" oninput="window.renderAdminApprovalTable && window.renderAdminApprovalTable()" placeholder="기안자 또는 품의 제목 검색..." class="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:border-indigo-500 focus:outline-none">
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[840px] text-left border-collapse text-xs whitespace-nowrap">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                  <th class="py-3 px-3">문서번호</th>
+                  <th class="py-3 px-3">구분</th>
+                  <th class="py-3 px-3">기안자</th>
+                  <th class="py-3 px-3">기안 제목</th>
+                  <th class="py-3 px-3">예상 금액</th>
+                  <th class="py-3 px-3">기안일</th>
+                  <th class="py-3 px-3 text-center">기안서 인쇄</th>
+                  <th class="py-3 px-3 text-center">상태</th>
+                  <th class="py-3 px-3 text-right">결재 처리</th>
+                </tr>
+              </thead>
+              <tbody id="adminApprovalTableBody" class="divide-y divide-slate-100 text-slate-700"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
   </div>
 
   <!-- 📜 모달 9: 전체 변경 이력 조회 모달 -->
@@ -1382,8 +1929,9 @@
     }
     @media print {
       body * { visibility: hidden !important; }
-      #quotationPrintArea, #quotationPrintArea * { visibility: visible !important; }
-      #quotationPrintArea {
+      #quotationPrintArea, #quotationPrintArea *,
+      #printDocArea, #printDocArea * { visibility: visible !important; }
+      #quotationPrintArea, #printDocArea {
         position: absolute !important;
         left: 0 !important;
         top: 0 !important;
@@ -1576,7 +2124,136 @@
     </div>
   </div>
 
-    <!-- 스크립트 로드 (모든 모달 및 드로어 DOM 생성 후) -->
+    <!-- 📑 모달: 전자결재 관리자 PIN 인증 모달 -->
+  <div id="adminAuthModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[99992] flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 border border-slate-200">
+      <div class="flex items-center justify-between">
+        <h4 class="font-bold text-slate-900 flex items-center gap-2 text-sm">
+          <span>🛡️</span> 관리자 PIN 인증
+        </h4>
+        <button type="button" onclick="window.closePaymentModal('adminAuthModal')" class="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer">✕</button>
+      </div>
+      <p class="text-xs text-slate-500">최종 결재 권한이 있는 관리자(D.I.Lee)만 접근할 수 있습니다. PIN 번호를 입력하세요.</p>
+      <form onsubmit="window.verifyPaymentAdminPin(event)" class="space-y-4">
+        <input type="password" id="adminPinInput" maxlength="10" placeholder="••••" required class="w-full px-3 py-2 text-center text-lg tracking-widest border border-slate-300 rounded-xl font-mono focus:border-blue-500 focus:outline-none">
+        <div class="flex gap-2">
+          <button type="button" onclick="window.closePaymentModal('adminAuthModal')" class="flex-1 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer">취소</button>
+          <button type="submit" class="flex-1 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs transition cursor-pointer">확인</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 📑 모달: 내부 결재 기안서 미리보기 및 인쇄/PDF 저장 모달 -->
+  <div id="approvalDocModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[99990] flex items-center justify-center p-2 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-slate-300">
+      <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between no-print bg-slate-50">
+        <h4 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+          <span>📄</span> 내부 전자결재 기안서 미리보기
+        </h4>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="window.print()" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer">
+            <span>🖨️</span> 인쇄 / PDF 저장
+          </button>
+          <button type="button" onclick="window.closePaymentModal('approvalDocModal')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 flex items-center justify-center font-bold text-base cursor-pointer">
+            ✕
+          </button>
+        </div>
+      </div>
+      <div id="printDocArea" class="p-6 sm:p-8 overflow-y-auto flex-1 bg-white space-y-5 text-slate-900">
+        <div class="flex items-start justify-between border-b-2 border-slate-900 pb-4">
+          <div>
+            <span class="text-[11px] font-bold text-slate-500 tracking-wider">BIGSHINE KOREA CO., LTD.</span>
+            <h2 id="docViewType" class="text-xl sm:text-2xl font-black tracking-tight text-slate-950 mt-1">사전 지출 품의서</h2>
+          </div>
+          <table class="border-collapse border border-slate-400 text-xs text-center">
+            <tr>
+              <th rowspan="2" class="border border-slate-400 bg-slate-100 px-2 py-1 font-bold w-8">결<br>재</th>
+              <th class="border border-slate-400 bg-slate-100 px-4 py-1 font-semibold">기안</th>
+              <th class="border border-slate-400 bg-slate-100 px-4 py-1 font-semibold">최종승인</th>
+            </tr>
+            <tr class="h-14">
+              <td id="docViewDrafterSign" class="border border-slate-400 px-3 font-bold text-slate-800">-</td>
+              <td id="docViewAdminSign" class="border border-slate-400 px-3 font-bold text-amber-600">결재대기</td>
+            </tr>
+          </table>
+        </div>
+
+        <table class="w-full border-collapse border border-slate-300 text-xs">
+          <tr>
+            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left w-24 sm:w-28 font-bold">문서번호</th>
+            <td id="docViewNo" class="border border-slate-300 px-3 py-2 font-mono font-bold text-indigo-700">-</td>
+            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left w-24 sm:w-28 font-bold">기안일자</th>
+            <td id="docViewDate" class="border border-slate-300 px-3 py-2 font-mono">-</td>
+          </tr>
+          <tr>
+            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">소속부서</th>
+            <td id="docViewDept" class="border border-slate-300 px-3 py-2">-</td>
+            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">시행/입고예정일</th>
+            <td id="docViewTargetDate" class="border border-slate-300 px-3 py-2 font-mono">-</td>
+          </tr>
+          <tr>
+            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">비용계정</th>
+            <td id="docViewCategory" class="border border-slate-300 px-3 py-2">-</td>
+            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">예상금액</th>
+            <td id="docViewAmount" class="border border-slate-300 px-3 py-2 font-mono font-bold text-slate-900">₩0</td>
+          </tr>
+          <tr>
+            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">제 목</th>
+            <td id="docViewTitle" colspan="3" class="border border-slate-300 px-3 py-2 font-bold text-sm text-slate-950">-</td>
+          </tr>
+        </table>
+
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 mb-1.5">[품의 상세 내용]</h4>
+          <div class="border border-slate-300 rounded-lg p-4 min-h-[180px] text-xs leading-relaxed whitespace-pre-wrap font-mono text-slate-800 bg-slate-50/30" id="docViewContent"></div>
+        </div>
+
+        <div id="docViewRejectBox" class="hidden bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 space-y-1">
+          <strong class="font-bold flex items-center gap-1"><span>⚠️</span> [관리자 반려 사유]</strong>
+          <p id="docViewRejectReason" class="pl-4 font-medium"></p>
+        </div>
+
+        <div id="docViewAttachBox" class="hidden no-print pt-1">
+          <a id="docViewAttachLink" href="#" target="_blank" class="text-xs font-bold text-indigo-600 hover:underline inline-flex items-center gap-1">
+            <span>📎</span> 첨부파일 열기 (새 탭)
+          </a>
+        </div>
+
+        <div class="pt-6 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
+          <div>
+            <div class="font-bold text-slate-900">주식회사 빅샤인코리아 (BIGSHINE KOREA CO., LTD.)</div>
+            <div>대표이사: D.I.Lee (이동일)</div>
+          </div>
+          <div class="w-16 h-16 flex items-center justify-center">
+            <img src="/BSK.jpg" alt="BSK 직인" class="w-14 h-14 object-contain opacity-90">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 📑 모달: 영수증 원본 증빙 팝업 -->
+  <div id="receiptModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[99991] flex items-center justify-center p-2 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-300">
+      <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <h4 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+          <span>🧾</span> 카드 매출전표 / 영수증 원본 증빙
+        </h4>
+        <button type="button" onclick="window.closePaymentModal('receiptModal')" class="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer">✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto flex items-center justify-center bg-slate-100/70 flex-1 min-h-[300px]">
+        <img id="receiptModalImg" src="" alt="영수증 원본" class="max-w-full max-h-[68vh] rounded-lg shadow-sm object-contain border border-slate-200">
+      </div>
+      <div class="px-5 py-3 border-t border-slate-100 bg-white flex justify-end">
+        <a id="receiptDownloadLink" href="#" target="_blank" download class="text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1">
+          <span>🔗</span> 원본 새 탭에서 열기 / 다운로드
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 스크립트 로드 (모든 모달 및 드로어 DOM 생성 후) -->
     <script src="/js/mask.js"></script>
     <script type="module" src="/js/app.js?v=20261111_1100"></script>
 </body>

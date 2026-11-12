@@ -345,6 +345,81 @@ def price_history(part_no: str):
     except Exception as e:
         return {"status": "error", "message": str(e), "data": {}}
 
+# ========================================================
+# 📑 전자결재 구매품의서 -> ERP 재고(inventory_items) 자동 브릿지 API
+# ========================================================
+class PurchaseBridgeInput(BaseModel):
+    doc_no: str
+    part_name: str
+    maker: Optional[str] = "기타"
+    vendor: Optional[str] = None
+    qty: int = 1
+    unit_price: float = 0.0
+    currency: Optional[str] = "USD"
+    customer: Optional[str] = "본사 일반재고"
+    drafter_name: Optional[str] = "본사 일반재고"
+    memo: Optional[str] = ""
+    target_date: Optional[str] = None
+
+@app.post("/api/approvals/bridge-purchase-order")
+def bridge_purchase_order(data: PurchaseBridgeInput):
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+
+    # 1. 중복 체크 (동일 po_no 존재 여부 확인)
+    check_url = f"{SUPABASE_URL}/rest/v1/inventory_items?po_no=eq.{data.doc_no}&select=id"
+    check_res = requests.get(check_url, headers=headers, timeout=5)
+    if check_res.status_code == 200 and check_res.json():
+        return {
+            "status": "already_exists",
+            "message": f"이미 ERP 재고에 등록된 발주번호입니다: {data.doc_no}",
+            "item": check_res.json()[0]
+        }
+
+    # 2. USD 환산 단가 계산
+    today_str = datetime.date.today().isoformat()
+    entry_date = data.target_date or today_str
+    unit_usd = data.unit_price if data.currency == "USD" else round(data.unit_price / 1350.0, 4)
+
+    payload = {
+        "maker": data.maker or "기타",
+        "part_name": data.part_name,
+        "date_code": "-",
+        "owner": data.drafter_name or "본사 일반재고",
+        "customer": data.customer or "본사 일반재고",
+        "real_customer": data.customer or "본사 일반재고",
+        "po_no": data.doc_no,
+        "application": "품의승인 발주 (PO)",
+        "biz_type": "외자" if data.currency == "USD" else "내자",
+        "entry_date": entry_date,
+        "stock": max(1, data.qty),
+        "unit_usd": unit_usd,
+        "sold_price_usd": 0,
+        "ship_fx": 1350,
+        "margin": 20,
+        "order_status": "배정요청",
+        "payment_terms": "Net 30",
+        "payment_status": "미수",
+        "currency": data.currency or "USD",
+        "memo": f"[전자결재 승인 발주] 문서번호: {data.doc_no} / 기안자: {data.drafter_name} / 승인일: {today_str} | {data.memo or ''}".strip()
+    }
+
+    ins_url = f"{SUPABASE_URL}/rest/v1/inventory_items"
+    ins_res = requests.post(ins_url, headers=headers, json=[payload], timeout=5)
+    if ins_res.status_code not in (200, 201):
+        raise HTTPException(status_code=ins_res.status_code, detail=f"ERP 재고 삽입 실패: {ins_res.text}")
+
+    inserted = ins_res.json() if ins_res.text else [payload]
+    return {
+        "status": "success",
+        "message": f"구매품의서({data.doc_no})가 ERP 재고관리에 성공적으로 등록되었습니다.",
+        "item": inserted[0] if inserted else payload
+    }
+
 # 정적 파일 서빙 (UI 및 SPA 리소스 서빙)
 app.mount("/", StaticFiles(directory="public", html=True), name="public")
 

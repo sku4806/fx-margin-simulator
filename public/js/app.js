@@ -33,6 +33,10 @@ window.fetchPurchaseOrdersSummary = fetchPurchaseOrdersSummary;
 import { openPriceHistoryModal } from './price-history.js';
 window.openPriceHistoryModal = openPriceHistoryModal;
 
+import { initPaymentModule, updatePaymentPendingBadge, switchPaymentSubTab } from './expense-approval.js';
+window.initPaymentModule = initPaymentModule;
+window.updatePaymentPendingBadge = updatePaymentPendingBadge;
+
 // ========================================================
 // 🛡️ 견적서 필수 입력값 검증 및 인쇄 실행
 // ========================================================
@@ -451,6 +455,15 @@ export async function bootstrap() {
   const entryDateEl = document.getElementById('inputEntryDate');
   if (entryDateEl) entryDateEl.value = new Date().toISOString().slice(0, 10);
 
+  // 1. UI 이벤트 및 탭 바인딩 즉시 활성화 (네트워크 비동기 대기 전)
+  bindTabSwitch();
+  bindInputs();
+  setupInputMasks();
+  setupSalesCalculatorControls();
+  bindModals();
+  initManualViewer();
+  initCustomerMasterAutocomplete();
+
   try {
     const fxRes = await fetch('/api/fx-rate');
     const fxData = await fxRes.json();
@@ -473,13 +486,11 @@ export async function bootstrap() {
     console.warn("PO 요약 로드 예외 무시", e);
   }
 
-  bindTabSwitch();
-  bindInputs();
-  setupInputMasks();
-  setupSalesCalculatorControls();
-  bindModals();
-  initManualViewer();
-  initCustomerMasterAutocomplete();
+  try {
+    await updatePaymentPendingBadge();
+  } catch (e) {
+    console.warn("전자결재 대기건 로드 예외 무시", e);
+  }
 
   initAuth(async (session, canEdit) => {
     updateFormVisibility(canEdit);
@@ -640,6 +651,7 @@ function bindTabSwitch() {
   const tabQuotations = document.getElementById('tabQuotations');
   const tabUnpaid = document.getElementById('tabUnpaid');
   const tabAnalytics = document.getElementById('tabAnalytics');
+  const tabPayment = document.getElementById('tabPayment');
 
   const invMain = document.getElementById('inventoryMainArea');
   const salesPanel = document.getElementById('salesQuotationPanel');
@@ -648,6 +660,7 @@ function bindTabSwitch() {
   const quotationsSection = document.getElementById('quotationsSection');
   const unpaidSection = document.getElementById('unpaidSection');
   const analyticsSection = document.getElementById('analyticsSection');
+  const paymentSection = document.getElementById('paymentSection');
   const csHeaderDesc = document.getElementById('csHeaderDesc');
 
   const activeStyle = "py-2 sm:py-1.5 px-3 sm:px-3 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0";
@@ -660,6 +673,7 @@ function bindTabSwitch() {
     if (tabQuotations) tabQuotations.className = (active === 'quotations') ? activeStyle : inactiveStyle;
     if (tabUnpaid) tabUnpaid.className = (active === 'unpaid') ? activeStyle : inactiveStyle;
     if (tabAnalytics) tabAnalytics.className = (active === 'analytics') ? activeStyle : inactiveStyle;
+    if (tabPayment) tabPayment.className = (active === 'payment') ? activeStyle : inactiveStyle;
 
     const btnMap = {
       'sales': tabSales,
@@ -667,7 +681,8 @@ function bindTabSwitch() {
       'shipments': tabShipments,
       'quotations': tabQuotations,
       'unpaid': tabUnpaid,
-      'analytics': tabAnalytics
+      'analytics': tabAnalytics,
+      'payment': tabPayment
     };
     const activeBtn = btnMap[active];
     if (activeBtn) {
@@ -684,6 +699,7 @@ function bindTabSwitch() {
     if (quotationsSection) quotationsSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
     if (analyticsSection) analyticsSection.classList.add('hidden');
+    if (paymentSection) paymentSection.classList.add('hidden');
     if (invMain) invMain.classList.remove('hidden');
     if (salesPanel) salesPanel.classList.remove('hidden');
     if (formSection) formSection.classList.add('hidden');
@@ -701,6 +717,7 @@ function bindTabSwitch() {
     if (quotationsSection) quotationsSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
     if (analyticsSection) analyticsSection.classList.add('hidden');
+    if (paymentSection) paymentSection.classList.add('hidden');
     if (invMain) invMain.classList.remove('hidden');
     if (salesPanel) salesPanel.classList.add('hidden');
     if (formSection) formSection.classList.remove('hidden');
@@ -719,6 +736,7 @@ function bindTabSwitch() {
     if (quotationsSection) quotationsSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
     if (analyticsSection) analyticsSection.classList.add('hidden');
+    if (paymentSection) paymentSection.classList.add('hidden');
     if (shipmentsSection) {
       shipmentsSection.classList.remove('hidden'); // 이력 섹션 단독 표시
       await fetchShipments();
@@ -738,6 +756,7 @@ function bindTabSwitch() {
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
     if (analyticsSection) analyticsSection.classList.add('hidden');
+    if (paymentSection) paymentSection.classList.add('hidden');
     if (quotationsSection) {
       quotationsSection.classList.remove('hidden');
       quotationsSection.innerHTML = `
@@ -764,6 +783,7 @@ function bindTabSwitch() {
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
     if (analyticsSection) analyticsSection.classList.add('hidden');
+    if (paymentSection) paymentSection.classList.add('hidden');
     if (unpaidSection) {
       unpaidSection.classList.remove('hidden');
       unpaidSection.innerHTML = `
@@ -793,6 +813,7 @@ function bindTabSwitch() {
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
+    if (paymentSection) paymentSection.classList.add('hidden');
     if (analyticsSection) {
       analyticsSection.classList.remove('hidden');
       await fetchSalesAnalytics();
@@ -802,6 +823,26 @@ function bindTabSwitch() {
 
     if (csHeaderDesc) csHeaderDesc.innerText = "세일즈 마스터 연동 월별 수주(Booking) vs 매출(Billing) 및 다차원 실적 분석을 관리합니다.";
   });
+
+  // 7. [전자결재·품의] 탭 클릭 (경비 정산 & 구매/지출/출장 품의)
+  window.switchToPaymentTab = async () => {
+    activeTab = 'payment';
+    setTabs('payment');
+
+    if (invMain) invMain.classList.add('hidden');
+    if (shipmentsSection) shipmentsSection.classList.add('hidden');
+    if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (unpaidSection) unpaidSection.classList.add('hidden');
+    if (analyticsSection) analyticsSection.classList.add('hidden');
+    if (paymentSection) {
+      paymentSection.classList.remove('hidden');
+      await initPaymentModule();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    if (csHeaderDesc) csHeaderDesc.innerText = "임직원 법인/개인카드 경비 정산 영수증 및 내부 결재 품의서를 통합 관리합니다.";
+  };
+  tabPayment?.addEventListener('click', window.switchToPaymentTab);
 }
 
 // 📦 수주등록 폼 접이식(Accordion) 토글
