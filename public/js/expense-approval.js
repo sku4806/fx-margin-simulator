@@ -23,6 +23,82 @@ let selectedReceiptFile = null;
 let linkedApprovalId = null;
 let linkedApprovalDocNo = null;
 
+// 사내 계정 이메일 -> 사원명 매핑 테이블
+const EMAIL_TO_EMP_NAME = {
+  'nathan@bigshine.co.kr': '김남천',
+  'timothy@bigshine.co.kr': '이동일',
+  'tony@bigshine.co.kr': 'Tony',
+  'jane@bigshine.co.kr': 'Jane',
+  'jamie@bigshine.co.kr': 'Jamie',
+  'lily@bigshine.co.kr': 'Lily',
+  'raina@bigshine.co.kr': 'Raina',
+  'susan@bigshine.co.kr': 'Susan',
+  'trisha@bigshine.co.kr': 'Trisha',
+  'william@bigshine.co.kr': 'William',
+  'joey@bigshine.co.kr': 'Joey',
+  'steve@bigshine.co.kr': 'Steve',
+  'kelly@bigshine.co.kr': 'Kelly',
+  'eric@bigshine.co.kr': 'Eric',
+  'logan@bigshine.co.kr': 'Logan',
+  'paul@bigshine.co.kr': 'Paul',
+  'dustin@bigshine.co.kr': 'Dustin',
+  'allenpark@bigshine.co.kr': '박정훈'
+};
+
+/**
+ * ERP 로그인 세션 동기화 (비로그인 시 내 문서함 데이터 완전 잠금)
+ */
+export function syncPaymentAuthSession(session) {
+  const isAuth = !!(session && session.user);
+  const userEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : null;
+  const mappedName = userEmail ? (EMAIL_TO_EMP_NAME[userEmail] || userEmail.split('@')[0]) : '';
+
+  const lockedOverlay = document.getElementById('paymentMyLockedOverlay');
+  const contentArea = document.getElementById('paymentMyContentArea');
+  const myLookup = document.getElementById('myLookupName');
+  const empInput = document.getElementById('employeeName');
+  const drafterInput = document.getElementById('appDrafterName');
+
+  if (!isAuth) {
+    // 🔒 비로그인: 내 문서함 데이터 완전 초기화 & 잠금 화면 활성화
+    if (lockedOverlay) lockedOverlay.classList.remove('hidden');
+    if (contentArea) contentArea.classList.add('hidden');
+    if (myLookup) myLookup.value = '';
+    if (empInput) empInput.value = '';
+    if (drafterInput) drafterInput.value = '';
+
+    // 테이블 목록 즉시 비우기 (데이터 잔여 방지)
+    const expTbody = document.getElementById('myExpenseTableBody');
+    if (expTbody) expTbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-slate-400">사원명을 입력하고 [조회]를 눌러주세요.</td></tr>`;
+    const appTbody = document.getElementById('myApprovalTableBody');
+    if (appTbody) appTbody.innerHTML = `<tr><td colspan="7" class="text-center py-12 text-slate-400">사원명을 입력하고 [조회]를 눌러주세요.</td></tr>`;
+
+    myApprovalDocsCache = [];
+    localStorage.removeItem('LAST_EMP_NAME');
+  } else {
+    // 🔓 로그인: 내 문서함 잠금 해제 & 본인 사원명 연동
+    if (lockedOverlay) lockedOverlay.classList.add('hidden');
+    if (contentArea) contentArea.classList.remove('hidden');
+
+    const empName = mappedName || localStorage.getItem('LAST_EMP_NAME') || '';
+    if (empName) {
+      if (myLookup) myLookup.value = empName;
+      if (empInput && !empInput.value) empInput.value = empName;
+      if (drafterInput && !drafterInput.value) drafterInput.value = empName;
+      localStorage.setItem('LAST_EMP_NAME', empName);
+
+      // 내 문서함 서브탭이 활성화되어 있는 상태라면 본인 문서 자동 조회
+      const mySection = document.getElementById('paymentSectionMy');
+      if (mySection && !mySection.classList.contains('hidden')) {
+        loadMyAllDocs();
+      }
+    }
+  }
+
+  refreshAdminPaymentAuthUI();
+}
+window.syncPaymentAuthSession = syncPaymentAuthSession;
+
 /**
  * 1. 초기화 및 모듈 로드
  */
@@ -33,14 +109,18 @@ export async function initPaymentModule() {
   if (pDate && !pDate.value) pDate.value = today;
   if (aDate && !aDate.value) aDate.value = today;
 
-  const savedName = localStorage.getItem('LAST_EMP_NAME');
-  if (savedName) {
-    const empInput = document.getElementById('employeeName');
-    const drafterInput = document.getElementById('appDrafterName');
-    const myLookup = document.getElementById('myLookupName');
-    if (empInput && !empInput.value) empInput.value = savedName;
-    if (drafterInput && !drafterInput.value) drafterInput.value = savedName;
-    if (myLookup && !myLookup.value) myLookup.value = savedName;
+  // 비로그인 상태에서는 localStorage의 사원명을 자동 기입/조회하지 않음!
+  const isAuth = !!(typeof window.getCurrentUserEmail === 'function' && window.getCurrentUserEmail());
+  if (isAuth) {
+    const savedName = localStorage.getItem('LAST_EMP_NAME');
+    if (savedName) {
+      const empInput = document.getElementById('employeeName');
+      const drafterInput = document.getElementById('appDrafterName');
+      const myLookup = document.getElementById('myLookupName');
+      if (empInput && !empInput.value) empInput.value = savedName;
+      if (drafterInput && !drafterInput.value) drafterInput.value = savedName;
+      if (myLookup && !myLookup.value) myLookup.value = savedName;
+    }
   }
 
   // 연결 상태 도트 업데이트
@@ -134,10 +214,20 @@ export function switchPaymentSubTab(tab) {
   } else if (tab === 'my') {
     document.getElementById('paymentSectionMy')?.classList.remove('hidden');
     document.getElementById('tabBtnMy')?.setAttribute('class', activeClass);
-    const lookupName = document.getElementById('myLookupName')?.value || localStorage.getItem('LAST_EMP_NAME') || '';
-    if (lookupName) {
-      document.getElementById('myLookupName').value = lookupName;
-      loadMyAllDocs();
+    const isAuth = !!(typeof window.getCurrentUserEmail === 'function' && window.getCurrentUserEmail());
+    const lockedOverlay = document.getElementById('paymentMyLockedOverlay');
+    const contentArea = document.getElementById('paymentMyContentArea');
+
+    if (!isAuth) {
+      if (lockedOverlay) lockedOverlay.classList.remove('hidden');
+      if (contentArea) contentArea.classList.add('hidden');
+    } else {
+      if (lockedOverlay) lockedOverlay.classList.add('hidden');
+      if (contentArea) contentArea.classList.remove('hidden');
+      const lookupName = document.getElementById('myLookupName')?.value || '';
+      if (lookupName) {
+        loadMyAllDocs();
+      }
     }
   } else if (tab === 'admin') {
     document.getElementById('paymentSectionAdmin')?.classList.remove('hidden');
@@ -430,6 +520,12 @@ export function clearLinkedApproval() {
 
 export async function submitExpense(e) {
   if (e) e.preventDefault();
+  const isAuth = !!(typeof window.getCurrentUserEmail === 'function' && window.getCurrentUserEmail());
+  if (!isAuth) {
+    alert('경비 정산 신청을 위해 먼저 상단에서 사내 계정으로 로그인해 주세요.');
+    document.getElementById('loginModal')?.classList.remove('hidden');
+    return;
+  }
   if (!selectedReceiptFile) {
     alert('영수증 사진 또는 카드 매출전표 캡처본을 등록해 주세요.');
     return;
@@ -590,6 +686,12 @@ export function buildApprovalContent(docType) {
 
 export async function submitApproval(e) {
   if (e) e.preventDefault();
+  const isAuth = !!(typeof window.getCurrentUserEmail === 'function' && window.getCurrentUserEmail());
+  if (!isAuth) {
+    alert('전자결재 품의서를 상신하려면 먼저 상단에서 사내 계정으로 로그인해 주세요.');
+    document.getElementById('loginModal')?.classList.remove('hidden');
+    return;
+  }
   const btn = document.getElementById('appSubmitBtn');
   const docType = document.getElementById('appDocType')?.value || '지출품의서';
 
@@ -679,6 +781,12 @@ export function switchMySubTab(sub) {
 }
 
 export function loadMyAllDocs() {
+  const isAuth = !!(typeof window.getCurrentUserEmail === 'function' && window.getCurrentUserEmail());
+  if (!isAuth) {
+    alert('내 문서함을 조회하려면 먼저 상단에서 사내 계정으로 로그인해 주세요.');
+    document.getElementById('loginModal')?.classList.remove('hidden');
+    return;
+  }
   const name = document.getElementById('myLookupName')?.value.trim();
   if (!name) {
     alert('조회할 사원명을 입력해 주세요.');

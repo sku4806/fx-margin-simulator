@@ -498,7 +498,9 @@ export async function bootstrap() {
   initAuth(async (session, canEdit) => {
     updateFormVisibility(canEdit);
     await refreshInventory();
-    if (typeof window.refreshAdminPaymentAuthUI === 'function') {
+    if (typeof window.syncPaymentAuthSession === 'function') {
+      window.syncPaymentAuthSession(session);
+    } else if (typeof window.refreshAdminPaymentAuthUI === 'function') {
       window.refreshAdminPaymentAuthUI();
     }
   });
