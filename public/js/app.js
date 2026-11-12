@@ -4,8 +4,11 @@ import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaid
 import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js';
 import { supabase, sbClient } from './supabase.js';
 import * as InventoryModule from './inventory.js';
-import { initAuth, isCsOrAdminUser } from './modules/auth.js';
+import { initAuth, isCsOrAdminUser, isPaymentApprovalAdmin, getCurrentUserEmail, APPROVAL_ADMIN_EMAILS } from './modules/auth.js';
 window.isCsOrAdminUser = isCsOrAdminUser;
+window.isPaymentApprovalAdmin = isPaymentApprovalAdmin;
+window.getCurrentUserEmail = getCurrentUserEmail;
+window.APPROVAL_ADMIN_EMAILS = APPROVAL_ADMIN_EMAILS;
 import { initManualViewer } from './modules/manual.js';
 import {
   evaluatePackaging,
@@ -495,6 +498,9 @@ export async function bootstrap() {
   initAuth(async (session, canEdit) => {
     updateFormVisibility(canEdit);
     await refreshInventory();
+    if (typeof window.refreshAdminPaymentAuthUI === 'function') {
+      window.refreshAdminPaymentAuthUI();
+    }
   });
 
   runEngine();

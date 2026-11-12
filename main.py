@@ -348,6 +348,12 @@ def price_history(part_no: str):
 # ========================================================
 # 📑 전자결재 구매품의서 -> ERP 재고(inventory_items) 자동 브릿지 API
 # ========================================================
+ALLOWED_APPROVAL_ADMINS = {
+    "timothy@bigshine.co.kr",
+    "tony@bigshine.co.kr",
+    "nathan@bigshine.co.kr"
+}
+
 class PurchaseBridgeInput(BaseModel):
     doc_no: str
     part_name: str
@@ -360,9 +366,17 @@ class PurchaseBridgeInput(BaseModel):
     drafter_name: Optional[str] = "본사 일반재고"
     memo: Optional[str] = ""
     target_date: Optional[str] = None
+    approver_email: Optional[str] = None
 
 @app.post("/api/approvals/bridge-purchase-order")
 def bridge_purchase_order(data: PurchaseBridgeInput):
+    # 0. 결재 승인권자 검증 (timothy, tony, nathan 3계정 전용)
+    if data.approver_email and data.approver_email.lower().strip() not in ALLOWED_APPROVAL_ADMINS:
+        raise HTTPException(
+            status_code=403,
+            detail=f"결재 승인 권한이 없는 계정입니다: {data.approver_email} (승인 가능 계정: timothy, tony, nathan)"
+        )
+
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
@@ -385,6 +399,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
     entry_date = data.target_date or today_str
     unit_usd = data.unit_price if data.currency == "USD" else round(data.unit_price / 1350.0, 4)
 
+    approver_info = f"승인자: {data.approver_email}" if data.approver_email else "승인자: 지정 결재권자"
     payload = {
         "maker": data.maker or "기타",
         "part_name": data.part_name,
@@ -405,7 +420,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
         "payment_terms": "Net 30",
         "payment_status": "미수",
         "currency": data.currency or "USD",
-        "memo": f"[전자결재 승인 발주] 문서번호: {data.doc_no} / 기안자: {data.drafter_name} / 승인일: {today_str} | {data.memo or ''}".strip()
+        "memo": f"[전자결재 승인 발주] 문서번호: {data.doc_no} / {approver_info} / 기안자: {data.drafter_name} / 승인일: {today_str} | {data.memo or ''}".strip()
     }
 
     ins_url = f"{SUPABASE_URL}/rest/v1/inventory_items"

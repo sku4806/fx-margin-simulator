@@ -12,6 +12,13 @@ export const ADMIN_EMAILS = [
   'trisha@bigshine.co.kr'
 ];
 
+// 📑 전자결재·품의 관리자 결재 승인/반려 권한 계정 (3계정 전용)
+export const APPROVAL_ADMIN_EMAILS = [
+  'timothy@bigshine.co.kr',
+  'tony@bigshine.co.kr',
+  'nathan@bigshine.co.kr'
+];
+
 let currentSession = null;
 
 export function getSession() {
@@ -22,6 +29,19 @@ export function isCsOrAdminUser() {
   if (!currentSession || !currentSession.user || !currentSession.user.email) return false;
   return ADMIN_EMAILS.includes(currentSession.user.email.toLowerCase().trim());
 }
+
+export function isPaymentApprovalAdmin() {
+  if (!currentSession || !currentSession.user || !currentSession.user.email) return false;
+  return APPROVAL_ADMIN_EMAILS.includes(currentSession.user.email.toLowerCase().trim());
+}
+
+export function getCurrentUserEmail() {
+  return currentSession?.user?.email ? currentSession.user.email.toLowerCase().trim() : null;
+}
+
+window.APPROVAL_ADMIN_EMAILS = APPROVAL_ADMIN_EMAILS;
+window.isPaymentApprovalAdmin = isPaymentApprovalAdmin;
+window.getCurrentUserEmail = getCurrentUserEmail;
 
 export function initAuth(onAuthStateChange) {
   bindAuthModals();

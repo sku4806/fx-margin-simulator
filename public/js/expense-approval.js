@@ -90,12 +90,13 @@ export async function updatePaymentPendingBadge() {
  * 2. 내부 서브탭 전환
  */
 export function switchPaymentSubTab(tab) {
-  // 관리자 탭 접근 검증 (ERP Admin 세션 또는 PIN 인증)
+  // 관리자 탭 접근 검증 (결재 승인권자 세션, ERP Admin 세션 또는 PIN 인증)
   if (tab === 'admin') {
+    const isApprover = (typeof window.isPaymentApprovalAdmin === 'function') ? window.isPaymentApprovalAdmin() : false;
     const isErpAdmin = (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
     const isPinAuthed = sessionStorage.getItem('IS_PAYMENT_ADMIN_AUTH') === 'true' || isPaymentAdminAuthed;
 
-    if (!isErpAdmin && !isPinAuthed) {
+    if (!isApprover && !isErpAdmin && !isPinAuthed) {
       const pinInput = document.getElementById('adminPinInput');
       if (pinInput) pinInput.value = '';
       const modal = document.getElementById('adminAuthModal');
@@ -804,7 +805,53 @@ export async function loadAllAdminPaymentData() {
   if (expCntEl) expCntEl.innerText = expPending;
   if (appCntEl) appCntEl.innerText = appPending;
 
+  refreshAdminPaymentAuthUI();
   await updatePaymentPendingBadge();
+}
+
+/**
+ * 결재 승인권자 권한 UI 갱신 (timothy, tony, nathan 3계정 검증)
+ */
+export function refreshAdminPaymentAuthUI() {
+  const isApprover = (typeof window.isPaymentApprovalAdmin === 'function') ? window.isPaymentApprovalAdmin() : false;
+  const currentEmail = (typeof window.getCurrentUserEmail === 'function') ? window.getCurrentUserEmail() : null;
+  const badge = document.getElementById('adminApproverStatusBadge');
+
+  if (badge) {
+    if (isApprover) {
+      badge.className = "text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300";
+      badge.innerHTML = `🛡️ 결재 승인권자 (${currentEmail})`;
+    } else if (currentEmail) {
+      badge.className = "text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300";
+      badge.innerHTML = `🔒 조회 전용 (${currentEmail} - 결재 권한 없음)`;
+    } else {
+      badge.className = "text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200";
+      badge.innerHTML = `🔒 비로그인 (승인권자: timothy, tony, nathan)`;
+    }
+  }
+
+  if (allExpenses && allExpenses.length > 0) renderAdminExpenseTable();
+  if (allApprovals && allApprovals.length > 0) renderAdminApprovalTable();
+}
+window.refreshAdminPaymentAuthUI = refreshAdminPaymentAuthUI;
+
+/**
+ * 결재 승인/반려 권한 검증 헬퍼
+ */
+function checkApproverAuthority() {
+  const isApprover = (typeof window.isPaymentApprovalAdmin === 'function') ? window.isPaymentApprovalAdmin() : false;
+  const currentEmail = (typeof window.getCurrentUserEmail === 'function') ? window.getCurrentUserEmail() : null;
+
+  if (!isApprover) {
+    if (!currentEmail) {
+      alert("결재 승인 및 반려는 사내 인증된 결재권자(timothy@bigshine.co.kr, tony@bigshine.co.kr, nathan@bigshine.co.kr)만 가능합니다.\n\n먼저 상단에서 해당 관리자 계정으로 로그인해 주세요.");
+      document.getElementById('loginModal')?.classList.remove('hidden');
+    } else {
+      alert(`[결재 권한 오류]\n현재 로그인된 계정(${currentEmail})은 결재 승인/반려 권한이 없습니다.\n\n지정된 결재권자 3계정(timothy, tony, nathan)으로만 결재 처리가 가능합니다.`);
+    }
+    return false;
+  }
+  return true;
 }
 
 export function switchAdminPaymentMode(mode) {
@@ -872,6 +919,8 @@ export function renderAdminExpenseTable() {
       ? `<button type="button" onclick="window.openPaymentDocModal(${item.approval_id}, 'admin')" class="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded text-[10px] font-mono underline border border-indigo-200 cursor-pointer">${item.approval_doc_no}</button>`
       : '<span class="text-slate-300">-</span>';
 
+    const isApprover = (typeof window.isPaymentApprovalAdmin === 'function') ? window.isPaymentApprovalAdmin() : false;
+
     tr.innerHTML = `
       <td class="py-3 px-3 font-mono whitespace-nowrap">${item.payment_date}</td>
       <td class="py-3 px-3 font-bold text-slate-900 whitespace-nowrap">${item.employee_name}</td>
@@ -887,11 +936,15 @@ export function renderAdminExpenseTable() {
       </td>
       <td class="py-3 px-3 text-center whitespace-nowrap">${getStatusBadgeHtml(item.status, item.reject_reason)}</td>
       <td class="py-3 px-3 text-right space-x-1 whitespace-nowrap">
-        ${item.status === 'PENDING' ? `
-          <button type="button" onclick="window.updateExpenseStatusAction(${item.id}, 'APPROVED')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">승인</button>
-          <button type="button" onclick="window.updateExpenseStatusAction(${item.id}, 'REJECTED')" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">반려</button>
-        ` : `<span class="text-slate-400 text-[11px] mr-1 font-semibold">결재완료</span>`}
-        <button type="button" onclick="window.deleteExpenseAction(${item.id}, '${item.receipt_url || ''}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs cursor-pointer">삭제</button>
+        ${item.status === 'PENDING' ? (
+          isApprover ? `
+            <button type="button" onclick="window.updateExpenseStatusAction(${item.id}, 'APPROVED')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">승인</button>
+            <button type="button" onclick="window.updateExpenseStatusAction(${item.id}, 'REJECTED')" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">반려</button>
+          ` : `<span class="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-100 rounded border border-slate-200" title="결재 권한 없음 (지정 결재권자: timothy, tony, nathan)">권한 제한</span>`
+        ) : `<span class="text-slate-400 text-[11px] mr-1 font-semibold">결재완료</span>`}
+        ${isApprover ? `
+          <button type="button" onclick="window.deleteExpenseAction(${item.id}, '${item.receipt_url || ''}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs cursor-pointer">삭제</button>
+        ` : ''}
       </td>
     `;
     tbody.appendChild(tr);
@@ -899,6 +952,8 @@ export function renderAdminExpenseTable() {
 }
 
 export async function updateExpenseStatus(id, newStatus) {
+  if (!checkApproverAuthority()) return;
+
   let rejectReason = null;
   if (newStatus === 'REJECTED') {
     rejectReason = prompt('경비 반려 사유를 입력해 주세요:');
@@ -917,6 +972,7 @@ export async function updateExpenseStatus(id, newStatus) {
 }
 
 export async function deleteExpense(id, receiptUrl) {
+  if (!checkApproverAuthority()) return;
   if (!confirm('이 경비 내역과 등록된 영수증 증빙을 영구 삭제하시겠습니까?')) return;
   if (receiptUrl && receiptUrl.includes('/receipts/')) {
     const fileName = receiptUrl.split('/receipts/').pop();
@@ -968,6 +1024,8 @@ export function renderAdminApprovalTable() {
   }
 
   tbody.innerHTML = '';
+  const isApprover = (typeof window.isPaymentApprovalAdmin === 'function') ? window.isPaymentApprovalAdmin() : false;
+
   list.forEach(doc => {
     const tr = document.createElement('tr');
     tr.className = "hover:bg-slate-50/80 transition border-b border-slate-100";
@@ -989,11 +1047,15 @@ export function renderAdminApprovalTable() {
       </td>
       <td class="py-3 px-3 text-center whitespace-nowrap">${getStatusBadgeHtml(doc.status, doc.reject_reason)}</td>
       <td class="py-3 px-3 text-right space-x-1 whitespace-nowrap">
-        ${doc.status === 'PENDING' ? `
-          <button type="button" onclick="window.updateApprovalStatusAction(${doc.id}, 'APPROVED')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">승인</button>
-          <button type="button" onclick="window.updateApprovalStatusAction(${doc.id}, 'REJECTED')" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">반려</button>
-        ` : `<span class="text-slate-400 text-[11px] mr-1 font-semibold">결재완료</span>`}
-        <button type="button" onclick="window.deleteApprovalDocAction(${doc.id})" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs cursor-pointer">삭제</button>
+        ${doc.status === 'PENDING' ? (
+          isApprover ? `
+            <button type="button" onclick="window.updateApprovalStatusAction(${doc.id}, 'APPROVED')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">승인</button>
+            <button type="button" onclick="window.updateApprovalStatusAction(${doc.id}, 'REJECTED')" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer">반려</button>
+          ` : `<span class="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-100 rounded border border-slate-200" title="결재 권한 없음 (지정 결재권자: timothy, tony, nathan)">권한 제한</span>`
+        ) : `<span class="text-slate-400 text-[11px] mr-1 font-semibold">결재완료</span>`}
+        ${isApprover ? `
+          <button type="button" onclick="window.deleteApprovalDocAction(${doc.id})" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs cursor-pointer">삭제</button>
+        ` : ''}
       </td>
     `;
     tbody.appendChild(tr);
@@ -1004,6 +1066,8 @@ export function renderAdminApprovalTable() {
  * ⚡ 핵심 연동: 품의서 승인/반려 및 [구매품의서 -> ERP 재고/PO 자동 브릿지]
  */
 export async function updateApprovalStatus(id, newStatus) {
+  if (!checkApproverAuthority()) return;
+
   let rejectReason = null;
   if (newStatus === 'REJECTED') {
     rejectReason = prompt('품의 반려 사유를 입력해 주세요:');
@@ -1052,6 +1116,7 @@ async function bridgePurchaseRequisitionToInventory(doc) {
     const customer = meta.customer || '본사 일반재고';
     const today = new Date().toISOString().split('T')[0];
     const targetDate = doc.target_date || today;
+    const currentEmail = (typeof window.getCurrentUserEmail === 'function') ? window.getCurrentUserEmail() : '';
 
     // 1. 서버 전용 백엔드 브릿지 API 호출 (RLS 권한 제약 없이 안전 실행)
     try {
@@ -1069,7 +1134,8 @@ async function bridgePurchaseRequisitionToInventory(doc) {
           customer: customer,
           drafter_name: doc.drafter_name,
           memo: meta.memo || '',
-          target_date: targetDate
+          target_date: targetDate,
+          approver_email: currentEmail
         })
       });
       const data = await resp.json();
@@ -1110,7 +1176,7 @@ async function bridgePurchaseRequisitionToInventory(doc) {
         payment_terms: 'Net 30',
         payment_status: '미수',
         currency: currency,
-        memo: `[전자결재 승인 발주] 문서번호: ${doc.doc_no} / 기안자: ${doc.drafter_name} / 승인일: ${today}`
+        memo: `[전자결재 승인 발주] 문서번호: ${doc.doc_no} / 승인자: ${currentEmail || '지정 결재권자'} / 기안자: ${doc.drafter_name} / 승인일: ${today}`
       };
 
       const { error: insErr } = await sbClient.from('inventory_items').insert([payload]);
@@ -1127,6 +1193,7 @@ async function bridgePurchaseRequisitionToInventory(doc) {
 }
 
 export async function deleteApprovalDoc(id) {
+  if (!checkApproverAuthority()) return;
   if (!confirm('이 품의 문서를 영구 삭제하시겠습니까?')) return;
   const { error } = await paymentSupabase.from('approval_requests').delete().eq('id', id);
   if (error) return alert('삭제 실패: ' + error.message);
