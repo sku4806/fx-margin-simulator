@@ -10,6 +10,7 @@
 
 import { paymentSupabase, PAYMENT_SUPABASE_URL, PAYMENT_SUPABASE_KEY, ADMIN_PIN } from './payment-client.js';
 import { sbClient } from './supabase.js';
+import { USER_PROFILES, EMAIL_TO_EMP_NAME, getUserProfile } from './modules/auth.js';
 
 // 전역 캐시
 let allExpenses = [];
@@ -22,28 +23,6 @@ let isPaymentAdminAuthed = false;
 let selectedReceiptFile = null;
 let linkedApprovalId = null;
 let linkedApprovalDocNo = null;
-
-// 사내 계정 이메일 -> 사원명 매핑 테이블
-const EMAIL_TO_EMP_NAME = {
-  'nathan@bigshine.co.kr': '김남천',
-  'timothy@bigshine.co.kr': '이동일',
-  'tony@bigshine.co.kr': 'Tony',
-  'jane@bigshine.co.kr': 'Jane',
-  'jamie@bigshine.co.kr': 'Jamie',
-  'lily@bigshine.co.kr': 'Lily',
-  'raina@bigshine.co.kr': 'Raina',
-  'susan@bigshine.co.kr': 'Susan',
-  'trisha@bigshine.co.kr': 'Trisha',
-  'william@bigshine.co.kr': 'William',
-  'joey@bigshine.co.kr': 'Joey',
-  'steve@bigshine.co.kr': 'Steve',
-  'kelly@bigshine.co.kr': 'Kelly',
-  'eric@bigshine.co.kr': 'Eric',
-  'logan@bigshine.co.kr': 'Logan',
-  'paul@bigshine.co.kr': 'Paul',
-  'dustin@bigshine.co.kr': 'Dustin',
-  'allenpark@bigshine.co.kr': '박정훈'
-};
 
 /**
  * ERP 로그인 세션 동기화 (비로그인 시 내 문서함 데이터 완전 잠금)
@@ -1808,10 +1787,11 @@ export async function loadMyExpenses(name) {
   tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-400">경비 정산 내역 조회 중...</td></tr>`;
 
   try {
+    const baseName = name.split(' ')[0].trim();
     const { data, error } = await paymentSupabase
       .from('expense_reports')
       .select('*')
-      .ilike('employee_name', `%${name}%`)
+      .or(`employee_name.ilike.%${name}%,employee_name.ilike.%${baseName}%`)
       .order('payment_date', { ascending: false });
     if (error) throw error;
     const myData = data || [];
@@ -1859,10 +1839,11 @@ export async function loadMyApprovals(name) {
   tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-400">품의서 내역 조회 중...</td></tr>`;
 
   try {
+    const baseName = name.split(' ')[0].trim();
     const { data, error } = await paymentSupabase
       .from('approval_requests')
       .select('*')
-      .ilike('drafter_name', `%${name}%`)
+      .or(`drafter_name.ilike.%${name}%,drafter_name.ilike.%${baseName}%`)
       .order('created_at', { ascending: false });
     if (error) throw error;
     myApprovalDocsCache = data || [];
@@ -2421,11 +2402,13 @@ export function openApprovalDocModal(docId, source) {
   const adminStampEl = document.getElementById('docViewAdminStamp');
   if (adminStampEl) {
     if (doc.status === 'APPROVED') {
+      const approverEmail = doc.approved_by || '';
+      const approverProfile = getUserProfile(approverEmail) || { name: '이동일', position: '부사장', fullTitle: '이동일 부사장' };
       adminStampEl.innerHTML = `
         <div class="relative inline-flex flex-col items-center justify-center w-14 h-14 rounded-full border-2 border-red-600 text-red-600 font-black text-center p-0.5 select-none mx-auto shadow-xs transform -rotate-3" style="border-style: double; border-width: 3px;">
           <div class="text-[7.5px] leading-none tracking-tighter">(주)빅샤인</div>
-          <div class="text-[9.5px] leading-tight font-extrabold">대표이사</div>
-          <div class="text-[11px] leading-none font-black tracking-wider">이동일</div>
+          <div class="text-[9.5px] leading-tight font-extrabold">${approverProfile.position || '결재'}</div>
+          <div class="text-[11px] leading-none font-black tracking-wider">${approverProfile.name}</div>
           <div class="text-[7px] leading-none tracking-widest text-red-500 mt-0.5 font-bold">[ 印 ]</div>
         </div>
         <div class="text-[9px] text-red-600 font-mono font-bold mt-0.5">${docDate}</div>
@@ -2583,6 +2566,8 @@ export function openApprovalDocModal(docId, source) {
   // 4. 결재권자 종합 검토 의견 및 지시사항 렌더링
   const execReviewEl = document.getElementById('docViewExecutiveReview');
   if (execReviewEl) {
+    const approverEmail = doc.approved_by || '';
+    const approverProfile = getUserProfile(approverEmail) || { name: '이동일', position: '부사장', fullTitle: '이동일 부사장' };
     if (doc.status === 'APPROVED') {
       const comment = (doc.reject_reason || '').replace('[승인의견]', '').trim() || '정상 검토 완료되어 최종 승인합니다. 관련 규정에 의거하여 후속 업무를 진행해 주시기 바랍니다.';
       execReviewEl.innerHTML = `
@@ -2591,7 +2576,7 @@ export function openApprovalDocModal(docId, source) {
           <div class="space-y-1">
             <div class="font-bold flex items-center gap-2 text-xs text-emerald-900">
               <span class="px-1.5 py-0.5 bg-emerald-200 text-emerald-950 rounded text-[10px] font-black">최종 승인 완료</span>
-              <span class="text-[11px] font-normal text-emerald-800">결재권자: 대표이사 이동일 (D.I.Lee) | 승인일: ${docDate}</span>
+              <span class="text-[11px] font-normal text-emerald-800">결재권자: ${approverProfile.fullTitle} | 승인일: ${docDate}</span>
             </div>
             <p class="text-xs text-emerald-950 whitespace-pre-wrap font-medium leading-relaxed">${escapeHtml(comment)}</p>
           </div>
@@ -2605,7 +2590,7 @@ export function openApprovalDocModal(docId, source) {
           <div class="space-y-1">
             <div class="font-bold flex items-center gap-2 text-xs text-rose-800">
               <span class="px-1.5 py-0.5 bg-rose-200 text-rose-950 rounded text-[10px] font-black">품의 반려 안내</span>
-              <span class="text-[11px] font-normal text-rose-700">결재권자: 대표이사 이동일 (D.I.Lee) | 반려일: ${docDate}</span>
+              <span class="text-[11px] font-normal text-rose-700">결재권자: ${approverProfile.fullTitle} | 반려일: ${docDate}</span>
             </div>
             <p class="text-xs text-rose-950 whitespace-pre-wrap font-semibold leading-relaxed">${escapeHtml(reason)}</p>
           </div>
