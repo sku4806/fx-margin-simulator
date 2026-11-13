@@ -134,6 +134,30 @@ export async function initPaymentModule() {
   // 결재 권한 UI 초기화 (비인가자 관리자 버튼 숨김)
   refreshAdminPaymentAuthUI();
 
+  // 동적 다중 품목 기본 1행 초기화 및 환율 동기화
+  const pTbody = document.getElementById('purchaseItemsTbody');
+  if (pTbody && pTbody.children.length === 0) {
+    addPurchaseItemRow({ part_no: 'IS25LP128F-JBLE-TR', maker: 'ISSI', qty: 5000, unit_price: 1.15, memo: '고객사 양산 프로젝트 안전재고 확보' });
+  }
+  const eTbody = document.getElementById('expenseItemsTbody');
+  if (eTbody && eTbody.children.length === 0) {
+    addExpenseItemRow({ item: '고객사 FAE 기술 미팅 식대', amount: 100000, note: '4인 참석 (시제품 기술지원)' });
+  }
+
+  try {
+    const fxResp = await fetch('/api/fx-rate');
+    const fxData = await fxResp.json();
+    if (fxData && fxData.current_rate) {
+      const fxEl = document.getElementById('appPurchaseFxRate');
+      if (fxEl) {
+        fxEl.value = Number(fxData.current_rate).toFixed(2);
+        updatePurchaseTableTotals();
+      }
+    }
+  } catch (e) {}
+
+  updateKoreanCurrencyPreview();
+
   if (window.lucide) {
     try { lucide.createIcons(); } catch (e) {}
   }
@@ -587,6 +611,265 @@ export async function submitExpense(e) {
 }
 
 /**
+ * HTML 특수문자 안전 이스케이프 유틸
+ */
+export function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * 🇰🇷 한글 금액 표기 유틸 (예: 4171875 -> 일금 사백일십칠만 일천팔백칠십오원정)
+ */
+export function numberToKoreanCurrency(amount) {
+  const num = Math.floor(Math.abs(Number(amount) || 0));
+  if (num === 0) return '일금 영원정';
+
+  const units = ['', '만', '억', '조'];
+  const smallDigits = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구'];
+  const posUnits = ['', '십', '백', '천'];
+
+  let n = num;
+  let result = '';
+  let unitIdx = 0;
+
+  while (n > 0) {
+    const chunk = n % 10000;
+    if (chunk > 0) {
+      let chunkStr = '';
+      let c = chunk;
+      for (let i = 0; i < 4; i++) {
+        const digit = c % 10;
+        if (digit > 0) {
+          const digitWord = (digit === 1 && i > 0) ? '' : smallDigits[digit];
+          chunkStr = digitWord + posUnits[i] + chunkStr;
+        }
+        c = Math.floor(c / 10);
+      }
+      result = chunkStr + (units[unitIdx] ? units[unitIdx] + ' ' : '') + result;
+    }
+    unitIdx++;
+    n = Math.floor(n / 10000);
+  }
+
+  return `일금 ${result.trim()}원정`;
+}
+
+/**
+ * 한글 금액 실시간 미리보기 업데이트
+ */
+export function updateKoreanCurrencyPreview() {
+  const val = Number(document.getElementById('appExpectedAmount')?.value || 0);
+  const textEl = document.getElementById('appExpectedAmountKoreanText');
+  if (textEl) {
+    textEl.innerText = numberToKoreanCurrency(val);
+  }
+}
+
+/**
+ * 📦 동적 부품 구매 품목 그리드 관리
+ */
+export function addPurchaseItemRow(data = {}) {
+  const tbody = document.getElementById('purchaseItemsTbody');
+  if (!tbody) return;
+  const defaultMaker = data.maker || 'ISSI';
+  const defaultPart = data.part_no || '';
+  const defaultQty = data.qty || 1000;
+  const defaultPrice = data.unit_price !== undefined ? data.unit_price : 1.25;
+  const defaultMemo = data.memo || '';
+
+  const tr = document.createElement('tr');
+  tr.className = 'border-b border-indigo-100 hover:bg-indigo-50/20 text-xs transition-colors';
+  tr.innerHTML = `
+    <td class="p-2 text-center text-slate-500 font-mono row-index font-bold"></td>
+    <td class="p-2">
+      <input type="text" name="part_no" value="${escapeHtml(defaultPart)}" placeholder="예: IS25LP128F-JBLE-TR" required class="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono font-bold text-indigo-950 focus:border-indigo-500 focus:outline-none">
+    </td>
+    <td class="p-2">
+      <input type="text" name="maker" value="${escapeHtml(defaultMaker)}" placeholder="예: ISSI, Winbond" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg focus:border-indigo-500 focus:outline-none">
+    </td>
+    <td class="p-2">
+      <input type="number" name="qty" min="1" value="${defaultQty}" required oninput="window.updatePurchaseTableTotals()" class="w-full px-2 py-1.5 text-right border border-slate-300 rounded-lg font-mono font-bold focus:border-indigo-500 focus:outline-none">
+    </td>
+    <td class="p-2">
+      <input type="number" name="unit_price" step="0.0001" min="0" value="${defaultPrice}" required oninput="window.updatePurchaseTableTotals()" class="w-full px-2 py-1.5 text-right border border-slate-300 rounded-lg font-mono focus:border-indigo-500 focus:outline-none">
+    </td>
+    <td class="p-2 text-right font-mono font-bold text-indigo-900 line-total whitespace-nowrap">
+      0
+    </td>
+    <td class="p-2">
+      <input type="text" name="memo" value="${escapeHtml(defaultMemo)}" placeholder="리드타임, 안전재고 등" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-[11px] focus:border-indigo-500 focus:outline-none">
+    </td>
+    <td class="p-2 text-center">
+      <button type="button" onclick="window.removePurchaseItemRow(this)" title="행 삭제" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 w-7 h-7 rounded-lg inline-flex items-center justify-center font-bold text-sm cursor-pointer transition">
+        ✕
+      </button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+  reindexPurchaseTableRows();
+  updatePurchaseTableTotals();
+}
+
+export function removePurchaseItemRow(btn) {
+  const tr = btn.closest('tr');
+  const tbody = document.getElementById('purchaseItemsTbody');
+  if (tbody && tbody.querySelectorAll('tr').length <= 1) {
+    alert('최소 1개 이상의 부품 품목이 등록되어야 합니다.');
+    return;
+  }
+  if (tr) tr.remove();
+  reindexPurchaseTableRows();
+  updatePurchaseTableTotals();
+}
+
+function reindexPurchaseTableRows() {
+  const rows = document.querySelectorAll('#purchaseItemsTbody tr');
+  rows.forEach((r, idx) => {
+    const idxEl = r.querySelector('.row-index');
+    if (idxEl) idxEl.innerText = idx + 1;
+  });
+}
+
+export function updatePurchaseTableTotals() {
+  const tbody = document.getElementById('purchaseItemsTbody');
+  if (!tbody) return;
+  const rows = tbody.querySelectorAll('tr');
+  const currency = document.getElementById('appPurchaseCurrency')?.value || 'USD';
+  const fxRate = parseFloat(document.getElementById('appPurchaseFxRate')?.value || '1334.18') || 1334.18;
+
+  let totalQty = 0;
+  let totalAmount = 0;
+
+  rows.forEach(r => {
+    const q = parseInt(r.querySelector('input[name="qty"]')?.value || '0', 10);
+    const p = parseFloat(r.querySelector('input[name="unit_price"]')?.value || '0');
+    const lineTotal = Math.round((q * p) * 10000) / 10000;
+    totalQty += q;
+    totalAmount += lineTotal;
+
+    const lineTotalEl = r.querySelector('.line-total');
+    if (lineTotalEl) {
+      lineTotalEl.innerText = currency === 'USD'
+        ? `$${lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+        : `₩${Math.round(lineTotal).toLocaleString()}`;
+    }
+  });
+
+  const totalQtyEl = document.getElementById('purchaseTotalQty');
+  const totalAmountEl = document.getElementById('purchaseTotalAmount');
+  const fxSummaryEl = document.getElementById('purchaseFxSummary');
+
+  if (totalQtyEl) totalQtyEl.innerText = `${totalQty.toLocaleString()} EA`;
+  if (totalAmountEl) {
+    totalAmountEl.innerText = currency === 'USD'
+      ? `$${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : `₩${Math.round(totalAmount).toLocaleString()}`;
+  }
+
+  const krwTotal = currency === 'USD' ? Math.round(totalAmount * fxRate) : Math.round(totalAmount);
+  if (fxSummaryEl) {
+    fxSummaryEl.innerText = currency === 'USD'
+      ? `원화 환산 합계: ₩${krwTotal.toLocaleString()} (환율: ${fxRate.toLocaleString()}원)`
+      : `원화 기준: ₩${krwTotal.toLocaleString()}`;
+  }
+
+  const docType = document.getElementById('appDocType')?.value;
+  if (docType === '구매품의서') {
+    const amountInput = document.getElementById('appExpectedAmount');
+    if (amountInput) {
+      amountInput.value = krwTotal;
+      updateKoreanCurrencyPreview();
+    }
+  }
+}
+
+/**
+ * 💳 동적 지출 항목 그리드 관리
+ */
+export function addExpenseItemRow(data = {}) {
+  const tbody = document.getElementById('expenseItemsTbody');
+  if (!tbody) return;
+  const defaultItem = data.item || '';
+  const defaultAmount = data.amount !== undefined ? data.amount : 0;
+  const defaultNote = data.note || '';
+
+  const tr = document.createElement('tr');
+  tr.className = 'border-b border-slate-200 hover:bg-slate-50/60 text-xs transition-colors';
+  tr.innerHTML = `
+    <td class="p-2 text-center text-slate-500 font-mono row-index font-bold"></td>
+    <td class="p-2">
+      <input type="text" name="expense_item" value="${escapeHtml(defaultItem)}" placeholder="예: 시제품 제작 지원 식대, KTX 교통비" required class="w-full px-2 py-1.5 border border-slate-300 rounded-lg focus:border-indigo-500 focus:outline-none">
+    </td>
+    <td class="p-2">
+      <input type="number" name="expense_amount" min="0" value="${defaultAmount}" required oninput="window.updateExpenseTableTotals()" class="w-full px-2 py-1.5 text-right border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:border-indigo-500 focus:outline-none">
+    </td>
+    <td class="p-2">
+      <input type="text" name="expense_note" value="${escapeHtml(defaultNote)}" placeholder="예: 4명 참석 (고객사 FAE 기술 미팅)" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-[11px] focus:border-indigo-500 focus:outline-none">
+    </td>
+    <td class="p-2 text-center">
+      <button type="button" onclick="window.removeExpenseItemRow(this)" title="행 삭제" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 w-7 h-7 rounded-lg inline-flex items-center justify-center font-bold text-sm cursor-pointer transition">
+        ✕
+      </button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+  reindexExpenseTableRows();
+  updateExpenseTableTotals();
+}
+
+export function removeExpenseItemRow(btn) {
+  const tr = btn.closest('tr');
+  const tbody = document.getElementById('expenseItemsTbody');
+  if (tbody && tbody.querySelectorAll('tr').length <= 1) {
+    alert('최소 1개 이상의 지출 항목이 등록되어야 합니다.');
+    return;
+  }
+  if (tr) tr.remove();
+  reindexExpenseTableRows();
+  updateExpenseTableTotals();
+}
+
+function reindexExpenseTableRows() {
+  const rows = document.querySelectorAll('#expenseItemsTbody tr');
+  rows.forEach((r, idx) => {
+    const idxEl = r.querySelector('.row-index');
+    if (idxEl) idxEl.innerText = idx + 1;
+  });
+}
+
+export function updateExpenseTableTotals() {
+  const tbody = document.getElementById('expenseItemsTbody');
+  if (!tbody) return;
+  const rows = tbody.querySelectorAll('tr');
+  let totalAmount = 0;
+
+  rows.forEach(r => {
+    const amt = parseInt(r.querySelector('input[name="expense_amount"]')?.value || '0', 10);
+    totalAmount += amt;
+  });
+
+  const totalAmountEl = document.getElementById('expenseTotalAmount');
+  if (totalAmountEl) {
+    totalAmountEl.innerText = `₩${totalAmount.toLocaleString()}`;
+  }
+
+  const docType = document.getElementById('appDocType')?.value;
+  if (docType === '지출품의서') {
+    const amountInput = document.getElementById('appExpectedAmount');
+    if (amountInput) {
+      amountInput.value = totalAmount;
+      updateKoreanCurrencyPreview();
+    }
+  }
+}
+
+/**
  * 5. 내부 결재 품의서 상신 (지출/구매/출장/일반)
  */
 export function toggleApprovalAmountField() {
@@ -616,52 +899,149 @@ export function toggleApprovalAmountField() {
     fieldset.disabled = !isActive;
     fieldset.classList.toggle('hidden', !isActive);
   });
+
+  if (docType === '구매품의서') {
+    updatePurchaseTableTotals();
+  } else if (docType === '지출품의서') {
+    updateExpenseTableTotals();
+  } else {
+    updateKoreanCurrencyPreview();
+  }
 }
 
 /**
- * 품의서 본문 생성 (ERP 연동용 JSON 메타데이터 포함)
+ * 표준 4단 공문서 본문 생성 (ERP 연동용 JSON 메타데이터 포함)
  */
 export function buildApprovalContent(docType) {
-  let sectionTitle = '내역 상세';
+  const purpose = document.getElementById('appPurpose')?.value.trim() || '';
+  const budgetPlan = document.getElementById('appBudgetPlan')?.value.trim() || '';
+  const expectedEffect = document.getElementById('appExpectedEffect')?.value.trim() || '';
+
+  let sectionTitle = 'Ⅱ. 세부 품의 명세';
   let sectionContent = '';
+  let draftData = {
+    version: '2.0',
+    docType,
+    purpose,
+    budgetPlan,
+    expectedEffect,
+    createdAt: new Date().toISOString()
+  };
   let metaPayload = null;
 
-  if (docType === '지출품의서') {
-    sectionTitle = '지출 산출 내역';
-    sectionContent = document.getElementById('appExpenseBreakdown')?.value.trim() || '';
-  } else if (docType === '구매품의서') {
-    sectionTitle = '구매 및 발주 상세 정보 (ERP 연동)';
+  if (docType === '구매품의서') {
     const vendor = document.getElementById('appPurchaseVendor')?.value.trim() || '미정';
-    const maker = document.getElementById('appPurchaseMaker')?.value.trim() || '기타';
-    const partNo = document.getElementById('appPurchasePartNo')?.value.trim() || '';
-    const qty = parseInt(document.getElementById('appPurchaseQty')?.value || '0', 10);
-    const unitPrice = parseFloat(document.getElementById('appPurchaseUnitPrice')?.value || '0');
-    const currency = document.getElementById('appPurchaseCurrency')?.value || 'USD';
     const customer = document.getElementById('appPurchaseCustomer')?.value.trim() || '본사 일반재고';
-    const memo = document.getElementById('appPurchaseItems')?.value.trim() || '';
+    const currency = document.getElementById('appPurchaseCurrency')?.value || 'USD';
+    const fxRate = parseFloat(document.getElementById('appPurchaseFxRate')?.value || '1334.18') || 1334.18;
+
+    const rows = document.querySelectorAll('#purchaseItemsTbody tr');
+    const items = [];
+    let totalQty = 0;
+    let totalAmount = 0;
+
+    rows.forEach(r => {
+      const partNo = r.querySelector('input[name="part_no"]')?.value.trim() || '';
+      const maker = r.querySelector('input[name="maker"]')?.value.trim() || '기타';
+      const qty = parseInt(r.querySelector('input[name="qty"]')?.value || '0', 10);
+      const unitPrice = parseFloat(r.querySelector('input[name="unit_price"]')?.value || '0');
+      const memo = r.querySelector('input[name="memo"]')?.value.trim() || '';
+      const lineTotal = Math.round((qty * unitPrice) * 10000) / 10000;
+
+      if (partNo || qty > 0) {
+        items.push({
+          part_no: partNo,
+          maker,
+          qty,
+          unit_price: unitPrice,
+          currency,
+          line_total: lineTotal,
+          memo
+        });
+        totalQty += qty;
+        totalAmount += lineTotal;
+      }
+    });
+
+    const krwTotal = currency === 'USD' ? Math.round(totalAmount * fxRate) : Math.round(totalAmount);
+
+    // 하위 호환 필드 동기화
+    if (items.length > 0) {
+      const first = items[0];
+      const pNoEl = document.getElementById('appPurchasePartNo');
+      const pMakerEl = document.getElementById('appPurchaseMaker');
+      const pQtyEl = document.getElementById('appPurchaseQty');
+      const pPriceEl = document.getElementById('appPurchaseUnitPrice');
+      const pItemsEl = document.getElementById('appPurchaseItems');
+      if (pNoEl) pNoEl.value = first.part_no;
+      if (pMakerEl) pMakerEl.value = first.maker;
+      if (pQtyEl) pQtyEl.value = first.qty;
+      if (pPriceEl) pPriceEl.value = first.unit_price;
+      if (pItemsEl) pItemsEl.value = items.map(i => `${i.part_no} (${i.qty.toLocaleString()} EA)`).join(', ');
+    }
+
+    const itemLines = items.map((i, idx) => 
+      `  ${idx + 1}. [${i.maker}] ${i.part_no} | 수량: ${i.qty.toLocaleString()} EA | 단가: ${currency === 'USD' ? '$' : '₩'}${i.unit_price.toLocaleString()} (${currency}) | 공급가액: ${currency === 'USD' ? '$' : '₩'}${i.line_total.toLocaleString()} ${i.memo ? '| ' + i.memo : ''}`
+    ).join('\n');
 
     sectionContent = [
       `• 공급업체(Vendor): ${vendor}`,
-      `• 제조사(Maker): ${maker}`,
-      `• 부품명(Part#): ${partNo || '(제목 참조)'}`,
-      `• 발주수량(Qty): ${qty.toLocaleString()} EA`,
-      `• 발주단가(Unit Price): ${currency === 'USD' ? '$' : '₩'}${unitPrice.toLocaleString()} (${currency})`,
       `• 실수요처/배정(Customer): ${customer}`,
-      `• 구매 사유 및 세부사항: ${memo}`
+      `• 발주 통화 및 환율: ${currency} (환율 ₩${fxRate.toLocaleString()}/$)`,
+      `• 발주 품목 명세 (총 ${items.length}건, ${totalQty.toLocaleString()} EA):`,
+      itemLines,
+      `• 발주 합계: ${currency === 'USD' ? '$' : '₩'}${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})} (원화 환산 합계: ₩${krwTotal.toLocaleString()})`
     ].join('\n');
+
+    draftData.vendor = vendor;
+    draftData.customer = customer;
+    draftData.currency = currency;
+    draftData.fxRate = fxRate;
+    draftData.items = items;
+    draftData.totalQty = totalQty;
+    draftData.totalAmount = totalAmount;
+    draftData.krwTotal = krwTotal;
 
     metaPayload = {
       vendor,
-      maker,
-      part_name: partNo,
-      qty,
-      unit_price: unitPrice,
+      maker: items[0]?.maker || '기타',
+      part_name: items.length > 1 ? `${items[0]?.part_no} 외 ${items.length - 1}건` : (items[0]?.part_no || ''),
+      qty: totalQty,
+      unit_price: items[0]?.unit_price || 0,
       currency,
       customer,
-      memo
+      memo: `${purpose} | 발주 총 ${items.length}건`,
+      items
     };
+  } else if (docType === '지출품의서') {
+    const rows = document.querySelectorAll('#expenseItemsTbody tr');
+    const items = [];
+    let totalAmount = 0;
+
+    rows.forEach(r => {
+      const item = r.querySelector('input[name="expense_item"]')?.value.trim() || '';
+      const amount = parseInt(r.querySelector('input[name="expense_amount"]')?.value || '0', 10);
+      const note = r.querySelector('input[name="expense_note"]')?.value.trim() || '';
+
+      if (item || amount > 0) {
+        items.push({ item, amount, note });
+        totalAmount += amount;
+      }
+    });
+
+    const itemLines = items.map((i, idx) => 
+      `  ${idx + 1}. ${i.item} | 금액: ₩${i.amount.toLocaleString()} | 내역: ${i.note || '-'}`
+    ).join('\n');
+
+    sectionContent = [
+      `• 세부 지출 항목 (총 ${items.length}건):`,
+      itemLines,
+      `• 지출 합계: ₩${totalAmount.toLocaleString()}`
+    ].join('\n');
+
+    draftData.items = items;
+    draftData.totalAmount = totalAmount;
   } else if (docType === '출장기안서') {
-    sectionTitle = '출장 일정 및 목적';
     const dest = document.getElementById('appTravelDestination')?.value.trim() || '';
     const sDate = document.getElementById('appTravelStartDate')?.value || '';
     const eDate = document.getElementById('appTravelEndDate')?.value || '';
@@ -671,17 +1051,30 @@ export function buildApprovalContent(docType) {
       `• 기간: ${sDate} ~ ${eDate}`,
       `• 방문 일정 및 업무 목표: \n${sched}`
     ].join('\n');
+    draftData.travel = { dest, sDate, eDate, sched };
   } else if (docType === '일반업무기안') {
-    sectionTitle = '기대 효과 및 완료 기준';
-    sectionContent = document.getElementById('appGeneralOutcome')?.value.trim() || '';
+    const outcome = document.getElementById('appGeneralOutcome')?.value.trim() || '';
+    sectionContent = `• 업무 목표 및 완료 기준: \n${outcome}`;
+    draftData.outcome = outcome;
   }
 
-  const background = document.getElementById('appContent')?.value.trim() || '';
-  let fullText = `[${sectionTitle}]\n${sectionContent}\n\n[기안 배경 및 추가 설명]\n${background}`;
+  const structuredText = [
+    `Ⅰ. 추진 배경 및 필요성\n${purpose || '(내용 없음)'}`,
+    `\n${sectionTitle}\n${sectionContent}`,
+    `\nⅢ. 예산 집행 계획\n${budgetPlan || '(내용 없음)'}`,
+    `\nⅣ. 기대 효과\n${expectedEffect || '(내용 없음)'}`
+  ].join('\n');
+
+  let fullContent = structuredText;
+  fullContent += `\n\n<!-- DRAFT_DATA: ${JSON.stringify(draftData)} -->`;
   if (metaPayload) {
-    fullText += `\n\n<!-- ERP_META: ${JSON.stringify(metaPayload)} -->`;
+    fullContent += `\n\n<!-- ERP_META: ${JSON.stringify(metaPayload)} -->`;
   }
-  return fullText;
+
+  const appContentEl = document.getElementById('appContent');
+  if (appContentEl) appContentEl.value = fullContent;
+
+  return fullContent;
 }
 
 export async function submitApproval(e) {
@@ -758,7 +1151,7 @@ export async function submitApproval(e) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '<span>📤</span> 결재 품의서 상신하기';
+      btn.innerHTML = '<span>📤</span> 전자결재 품의서 상신하기';
     }
   }
 }
@@ -1190,18 +1583,28 @@ export function renderAdminApprovalTable() {
 export async function updateApprovalStatus(id, newStatus) {
   if (!checkApproverAuthority()) return;
 
-  let rejectReason = null;
+  let approvalComment = null;
   if (newStatus === 'REJECTED') {
-    rejectReason = prompt('품의 반려 사유를 입력해 주세요:');
-    if (rejectReason === null) return;
-  } else if (!confirm('해당 품의서를 최종 [승인] 처리하시겠습니까?\n(구매품의서인 경우 BSK ERP 재고 목록에 [배정요청/입고예정]으로 자동 연동 등록됩니다.)')) {
-    return;
+    const inputReason = prompt('품의 반려 사유를 입력해 주세요 (필수):');
+    if (inputReason === null) return;
+    if (!inputReason.trim()) {
+      alert('반려 사유를 입력해야 반려 처리가 가능합니다.');
+      return;
+    }
+    approvalComment = `[반려사유] ${inputReason.trim()}`;
+  } else if (newStatus === 'APPROVED') {
+    const inputComment = prompt(
+      '해당 품의서를 최종 [승인]하시겠습니까?\n\n결재권자 종합 검토 의견 및 지시사항을 입력해 주세요 (선택):\n(구매품의서인 경우 BSK ERP 재고 목록에 [배정요청/입고예정]으로 자동 연동 등록됩니다.)',
+      '정상 검토 완료되어 승인합니다. 납기 및 품질 관리에 만전을 기해주시기 바랍니다.'
+    );
+    if (inputComment === null) return;
+    approvalComment = inputComment.trim() ? `[승인의견] ${inputComment.trim()}` : '[승인의견] 정상 검토 승인 완료';
   }
 
   // 1. 상태 업데이트 in Project 2
   const { error } = await paymentSupabase
     .from('approval_requests')
-    .update({ status: newStatus, reject_reason: rejectReason })
+    .update({ status: newStatus, reject_reason: approvalComment })
     .eq('id', id);
 
   if (error) return alert('품의 결재 실패: ' + error.message);
@@ -1222,20 +1625,26 @@ export async function updateApprovalStatus(id, newStatus) {
  */
 async function bridgePurchaseRequisitionToInventory(doc) {
   try {
-    // 메타데이터 추출
+    let draftData = null;
+    const draftMatch = doc.content?.match(/<!-- DRAFT_DATA:\s*({.*?})\s*-->/s);
+    if (draftMatch && draftMatch[1]) {
+      try { draftData = JSON.parse(draftMatch[1]); } catch (e) {}
+    }
+
     let meta = {};
     const metaMatch = doc.content?.match(/<!-- ERP_META:\s*({.*?})\s*-->/s);
     if (metaMatch && metaMatch[1]) {
       try { meta = JSON.parse(metaMatch[1]); } catch (e) {}
     }
 
+    const items = draftData?.items || meta.items || null;
+    const vendor = draftData?.vendor || meta.vendor || '';
+    const currency = draftData?.currency || meta.currency || 'USD';
+    const customer = draftData?.customer || meta.customer || '본사 일반재고';
     const partName = meta.part_name || doc.title || '미지정 부품';
     const maker = meta.maker || '기타';
-    const vendor = meta.vendor || '';
     const qty = parseInt(meta.qty || '0', 10) || 1;
     const unitPrice = parseFloat(meta.unit_price || 0);
-    const currency = meta.currency || 'USD';
-    const customer = meta.customer || '본사 일반재고';
     const today = new Date().toISOString().split('T')[0];
     const targetDate = doc.target_date || today;
     const currentEmail = (typeof window.getCurrentUserEmail === 'function') ? window.getCurrentUserEmail() : '';
@@ -1257,12 +1666,14 @@ async function bridgePurchaseRequisitionToInventory(doc) {
           drafter_name: doc.drafter_name,
           memo: meta.memo || '',
           target_date: targetDate,
-          approver_email: currentEmail
+          approver_email: currentEmail,
+          items: items
         })
       });
       const data = await resp.json();
       if (data.status === 'success' || data.status === 'already_exists') {
-        alert(`🎉 [구매품의서 ERP 자동 연동 완료]\n\n문서번호: ${doc.doc_no}\n품목: [${maker}] ${partName}\n수량: ${qty.toLocaleString()} EA\n\nBSK ERP 재고 관리 목록에 '배정요청(입고예정)' 상태로 등록되었습니다.`);
+        const countMsg = (items && items.length > 1) ? `총 ${items.length}개 품목이` : `품목 [${maker}] ${partName} (${qty.toLocaleString()} EA)이`;
+        alert(`🎉 [구매품의서 ERP 자동 연동 완료]\n\n문서번호: ${doc.doc_no}\n${countMsg} BSK ERP 재고 관리 목록에 '배정요청(입고예정)' 상태로 등록되었습니다.`);
         if (typeof window.refreshInventory === 'function') {
           window.refreshInventory();
         }
@@ -1362,49 +1773,242 @@ export function exportPaymentExpensesToCSV() {
 }
 
 /**
- * 8. 모달 관리 (기안서 인쇄/보기, 영수증 원본)
+ * 8. 모달 관리 (BSK 공식 A4 인쇄 / 기안서 미리보기, 영수증 원본)
  */
 export function openApprovalDocModal(docId, source) {
-  const pool = source === 'admin' ? allApprovals : myApprovalDocsCache;
+  const pool = source === 'admin'
+    ? (allApprovals && allApprovals.length ? allApprovals : (typeof window !== 'undefined' && window.allApprovals ? window.allApprovals : []))
+    : (myApprovalDocsCache && myApprovalDocsCache.length ? myApprovalDocsCache : (typeof window !== 'undefined' && window.myApprovalDocsCache ? window.myApprovalDocsCache : []));
   const doc = pool.find(d => String(d.id) === String(docId));
   if (!doc) {
     alert('품의 문서를 찾을 수 없습니다.');
     return;
   }
 
+  const docDate = (doc.created_at || '').split('T')[0] || new Date().toISOString().split('T')[0];
   const setT = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };
-  setT('docViewType', doc.doc_type);
-  setT('docViewDrafterSign', doc.drafter_name);
-  setT('docViewNo', doc.doc_no);
-  setT('docViewDate', (doc.created_at || '').split('T')[0]);
-  setT('docViewDept', doc.department || '-');
+
+  // 1. 레터헤드 & 기본 문서 메타데이터
+  setT('docViewType', `【 ${doc.doc_type || '품 의 서'} 】`);
+  setT('docViewNo', doc.doc_no || '-');
+  setT('docViewDate', docDate);
+  setT('docViewDept', doc.department || '영업/기술지원팀');
   setT('docViewTargetDate', doc.target_date || '-');
-  setT('docViewCategory', doc.category || '-');
-  setT('docViewAmount', `₩${Number(doc.expected_amount || 0).toLocaleString()}`);
-  setT('docViewTitle', doc.title);
+  setT('docViewCategory', doc.category || '부품 매입/재고비');
+  setT('docViewDrafterNameFull', doc.drafter_name || '-');
+  setT('docViewTitle', doc.title || '-');
 
-  // 본문에서 ERP_META 주석 숨기고 깔끔하게 표시
-  const cleanContent = (doc.content || '').replace(/<!-- ERP_META:.*?-->/s, '').trim();
-  setT('docViewContent', cleanContent);
+  // 3단 결재선 렌더링
+  setT('docViewDrafterSign', doc.drafter_name || '-');
+  setT('docViewDrafterDate', docDate);
+  setT('docViewReviewSign', '영업지원팀');
+  setT('docViewReviewDate', docDate);
 
-  const signEl = document.getElementById('docViewAdminSign');
-  if (signEl) {
-    signEl.innerText = doc.status === 'APPROVED' ? '승인완료' : (doc.status === 'REJECTED' ? '반려됨' : '결재대기');
-    signEl.className = doc.status === 'APPROVED'
-      ? 'border border-slate-400 px-3 font-bold text-emerald-600'
-      : (doc.status === 'REJECTED' ? 'border border-slate-400 px-3 font-bold text-rose-600' : 'border border-slate-400 px-3 font-bold text-amber-600');
-  }
-
-  const rBox = document.getElementById('docViewRejectBox');
-  if (rBox) {
-    if (doc.status === 'REJECTED' && doc.reject_reason) {
-      rBox.classList.remove('hidden');
-      setT('docViewRejectReason', doc.reject_reason);
+  // 승인권자 전자 직인 날인 칸 (docViewAdminStamp)
+  const adminStampEl = document.getElementById('docViewAdminStamp');
+  if (adminStampEl) {
+    if (doc.status === 'APPROVED') {
+      adminStampEl.innerHTML = `
+        <div class="relative inline-flex flex-col items-center justify-center w-14 h-14 rounded-full border-2 border-red-600 text-red-600 font-black text-center p-0.5 select-none mx-auto shadow-xs transform -rotate-3" style="border-style: double; border-width: 3px;">
+          <div class="text-[7.5px] leading-none tracking-tighter">(주)빅샤인</div>
+          <div class="text-[9.5px] leading-tight font-extrabold">대표이사</div>
+          <div class="text-[11px] leading-none font-black tracking-wider">이동일</div>
+          <div class="text-[7px] leading-none tracking-widest text-red-500 mt-0.5 font-bold">[ 印 ]</div>
+        </div>
+        <div class="text-[9px] text-red-600 font-mono font-bold mt-0.5">${docDate}</div>
+      `;
+    } else if (doc.status === 'REJECTED') {
+      adminStampEl.innerHTML = `
+        <div class="inline-flex flex-col items-center justify-center px-2.5 py-1.5 rounded-lg border-2 border-rose-600 text-rose-600 font-black text-xs mx-auto">
+          <span>반 려</span>
+          <span class="text-[9px] font-mono mt-0.5">${docDate}</span>
+        </div>
+      `;
     } else {
-      rBox.classList.add('hidden');
+      adminStampEl.innerHTML = `
+        <div class="inline-flex flex-col items-center justify-center px-2 py-1.5 rounded-lg border border-dashed border-amber-400 bg-amber-50 text-amber-700 font-bold text-xs mx-auto">
+          <span>결재 대기</span>
+        </div>
+      `;
     }
   }
 
+  // 2. 한글 금액 표기 및 환율 정보
+  const expAmount = Number(doc.expected_amount || 0);
+  const koreanAmt = numberToKoreanCurrency(expAmount);
+  const amountKoreanEl = document.getElementById('docViewAmountKorean');
+  const amountRawEl = document.getElementById('docViewAmountRaw');
+
+  // 메타데이터 추출
+  let draftData = null;
+  const draftMatch = doc.content?.match(/<!-- DRAFT_DATA:\s*({.*?})\s*-->/s);
+  if (draftMatch && draftMatch[1]) {
+    try { draftData = JSON.parse(draftMatch[1]); } catch (e) {}
+  }
+
+  if (amountKoreanEl) amountKoreanEl.innerText = koreanAmt;
+  if (amountRawEl) {
+    if (draftData && draftData.currency === 'USD' && draftData.totalAmount) {
+      amountRawEl.innerText = `(₩${expAmount.toLocaleString()} / $${Number(draftData.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD)`;
+    } else {
+      amountRawEl.innerText = `(₩${expAmount.toLocaleString()})`;
+    }
+  }
+
+  // 3. 본문 4단 구성 렌더링
+  const purposeEl = document.getElementById('docViewPurpose');
+  const itemsContainer = document.getElementById('docViewItemsContainer');
+  const budgetPlanEl = document.getElementById('docViewBudgetPlan');
+  const expectedEffectEl = document.getElementById('docViewExpectedEffect');
+
+  if (draftData) {
+    if (purposeEl) purposeEl.innerText = draftData.purpose || '-';
+    if (budgetPlanEl) budgetPlanEl.innerText = draftData.budgetPlan || '-';
+    if (expectedEffectEl) expectedEffectEl.innerText = draftData.expectedEffect || '-';
+
+    // 세부 품의 명세 그리드 표 렌더링
+    if (itemsContainer) {
+      if (draftData.docType === '구매품의서' && draftData.items && draftData.items.length > 0) {
+        const rowsHtml = draftData.items.map((i, idx) => `
+          <tr class="border-b border-slate-200 hover:bg-slate-50/50">
+            <td class="p-2 border-r border-slate-200 text-center font-mono">${idx + 1}</td>
+            <td class="p-2 border-r border-slate-200 font-mono font-bold text-indigo-950">${escapeHtml(i.part_no)}</td>
+            <td class="p-2 border-r border-slate-200 text-slate-800">${escapeHtml(i.maker || '-')}</td>
+            <td class="p-2 border-r border-slate-200 text-right font-mono font-bold text-slate-900">${Number(i.qty || 0).toLocaleString()} EA</td>
+            <td class="p-2 border-r border-slate-200 text-right font-mono">${draftData.currency === 'USD' ? '$' : '₩'}${Number(i.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: draftData.currency === 'USD' ? 2 : 0 })}</td>
+            <td class="p-2 border-r border-slate-200 text-right font-mono font-bold text-indigo-900">${draftData.currency === 'USD' ? '$' : '₩'}${Number(i.line_total || 0).toLocaleString(undefined, { minimumFractionDigits: draftData.currency === 'USD' ? 2 : 0 })}</td>
+            <td class="p-2 text-slate-600 text-[11px]">${escapeHtml(i.memo || '-')}</td>
+          </tr>
+        `).join('');
+
+        itemsContainer.innerHTML = `
+          <div class="bg-indigo-50/40 p-2 border-b border-slate-300 text-[11px] flex flex-wrap gap-x-4 gap-y-1 text-slate-700 font-medium">
+            <span><strong>공급처(Vendor):</strong> ${escapeHtml(draftData.vendor || '미정')}</span>
+            <span><strong>실수요처(Customer):</strong> ${escapeHtml(draftData.customer || '본사 일반재고')}</span>
+            <span><strong>기준 통화:</strong> ${draftData.currency || 'USD'} (적용환율: ₩${Number(draftData.fxRate || 1334.18).toLocaleString()})</span>
+          </div>
+          <table class="w-full text-xs text-left border-collapse">
+            <thead class="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+              <tr>
+                <th class="p-2 border-r border-slate-300 text-center w-8">No</th>
+                <th class="p-2 border-r border-slate-300">부품 품번 (Part#)</th>
+                <th class="p-2 border-r border-slate-300 w-24">제조사</th>
+                <th class="p-2 border-r border-slate-300 text-right w-24">발주수량</th>
+                <th class="p-2 border-r border-slate-300 text-right w-24">매입단가</th>
+                <th class="p-2 border-r border-slate-300 text-right w-28">공급가액</th>
+                <th class="p-2 min-w-[120px]">비고 / 견적특기</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+            <tfoot class="bg-slate-50 border-t border-slate-300 font-bold text-slate-900">
+              <tr>
+                <td colspan="3" class="p-2 text-right border-r border-slate-300">합계 (Total):</td>
+                <td class="p-2 text-right border-r border-slate-300 font-mono text-indigo-950">${Number(draftData.totalQty || 0).toLocaleString()} EA</td>
+                <td class="p-2 border-r border-slate-300"></td>
+                <td class="p-2 text-right border-r border-slate-300 font-mono text-indigo-950">${draftData.currency === 'USD' ? '$' : '₩'}${Number(draftData.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td class="p-2 text-[11px] text-slate-600 font-mono">원화 합계: ₩${Number(draftData.krwTotal || expAmount).toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+        `;
+      } else if (draftData.docType === '지출품의서' && draftData.items && draftData.items.length > 0) {
+        const rowsHtml = draftData.items.map((i, idx) => `
+          <tr class="border-b border-slate-200 hover:bg-slate-50/50">
+            <td class="p-2 border-r border-slate-200 text-center font-mono">${idx + 1}</td>
+            <td class="p-2 border-r border-slate-200 font-medium text-slate-900">${escapeHtml(i.item)}</td>
+            <td class="p-2 border-r border-slate-200 text-right font-mono font-bold text-indigo-900">₩${Number(i.amount || 0).toLocaleString()}</td>
+            <td class="p-2 text-slate-600">${escapeHtml(i.note || '-')}</td>
+          </tr>
+        `).join('');
+
+        itemsContainer.innerHTML = `
+          <table class="w-full text-xs text-left border-collapse">
+            <thead class="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+              <tr>
+                <th class="p-2 border-r border-slate-300 text-center w-8">No</th>
+                <th class="p-2 border-r border-slate-300 min-w-[180px]">지출 적요 / 항목명</th>
+                <th class="p-2 border-r border-slate-300 text-right w-36">지출 금액 (원화 ₩)</th>
+                <th class="p-2 min-w-[200px]">산출 근거 및 사용 내역</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+            <tfoot class="bg-slate-50 border-t border-slate-300 font-bold text-slate-900">
+              <tr>
+                <td colspan="2" class="p-2 text-right border-r border-slate-300">지출 합계 (VAT 포함):</td>
+                <td class="p-2 text-right border-r border-slate-300 font-mono text-indigo-950">₩${Number(draftData.totalAmount || expAmount).toLocaleString()}</td>
+                <td class="p-2 text-[11px] text-slate-500">정산 영수증 첨부 기준</td>
+              </tr>
+            </tfoot>
+          </table>
+        `;
+      } else if (draftData.travel) {
+        itemsContainer.innerHTML = `
+          <div class="p-3 bg-slate-50 space-y-1 text-xs">
+            <div><strong>출장 목적지:</strong> ${escapeHtml(draftData.travel.dest || '-')}</div>
+            <div><strong>출장 기간:</strong> ${escapeHtml(draftData.travel.sDate || '-')} ~ ${escapeHtml(draftData.travel.eDate || '-')}</div>
+            <div class="pt-1 whitespace-pre-wrap"><strong>일정 및 업무 목표:</strong>\n${escapeHtml(draftData.travel.sched || '-')}</div>
+          </div>
+        `;
+      } else {
+        const cleanContent = (doc.content || '').replace(/<!-- DRAFT_DATA:.*?-->/s, '').replace(/<!-- ERP_META:.*?-->/s, '').trim();
+        itemsContainer.innerHTML = `<div class="p-3 text-xs leading-relaxed whitespace-pre-wrap bg-slate-50">${escapeHtml(cleanContent)}</div>`;
+      }
+    }
+  } else {
+    // 하위 호환: 기존 형식의 일반 텍스트 문서
+    const cleanContent = (doc.content || '').replace(/<!-- ERP_META:.*?-->/s, '').trim();
+    if (purposeEl) purposeEl.innerText = cleanContent || '(상세 내용 없음)';
+    if (itemsContainer) itemsContainer.innerHTML = `<div class="p-3 text-xs text-slate-600 bg-slate-50">상기 기안 목적 내용에 통합 기술되어 있습니다.</div>`;
+    if (budgetPlanEl) budgetPlanEl.innerText = `예상 금액: ₩${expAmount.toLocaleString()} (${koreanAmt})`;
+    if (expectedEffectEl) expectedEffectEl.innerText = '품의 목적 달성 및 업무 정상 수행';
+  }
+
+  // 4. 결재권자 종합 검토 의견 및 지시사항 렌더링
+  const execReviewEl = document.getElementById('docViewExecutiveReview');
+  if (execReviewEl) {
+    if (doc.status === 'APPROVED') {
+      const comment = (doc.reject_reason || '').replace('[승인의견]', '').trim() || '정상 검토 완료되어 최종 승인합니다. 관련 규정에 의거하여 후속 업무를 진행해 주시기 바랍니다.';
+      execReviewEl.innerHTML = `
+        <div class="flex items-start gap-3 bg-emerald-50/70 border border-emerald-200 rounded-lg p-3.5 text-emerald-950">
+          <span class="text-lg">✅</span>
+          <div class="space-y-1">
+            <div class="font-bold flex items-center gap-2 text-xs text-emerald-900">
+              <span class="px-1.5 py-0.5 bg-emerald-200 text-emerald-950 rounded text-[10px] font-black">최종 승인 완료</span>
+              <span class="text-[11px] font-normal text-emerald-800">결재권자: 대표이사 이동일 (D.I.Lee) | 승인일: ${docDate}</span>
+            </div>
+            <p class="text-xs text-emerald-950 whitespace-pre-wrap font-medium leading-relaxed">${escapeHtml(comment)}</p>
+          </div>
+        </div>
+      `;
+    } else if (doc.status === 'REJECTED') {
+      const reason = (doc.reject_reason || '반려 사유가 입력되지 않았습니다.').replace('[반려사유]', '').trim();
+      execReviewEl.innerHTML = `
+        <div class="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-lg p-3.5 text-rose-950">
+          <span class="text-lg">⚠️</span>
+          <div class="space-y-1">
+            <div class="font-bold flex items-center gap-2 text-xs text-rose-800">
+              <span class="px-1.5 py-0.5 bg-rose-200 text-rose-950 rounded text-[10px] font-black">품의 반려 안내</span>
+              <span class="text-[11px] font-normal text-rose-700">결재권자: 대표이사 이동일 (D.I.Lee) | 반려일: ${docDate}</span>
+            </div>
+            <p class="text-xs text-rose-950 whitespace-pre-wrap font-semibold leading-relaxed">${escapeHtml(reason)}</p>
+          </div>
+        </div>
+      `;
+    } else {
+      execReviewEl.innerHTML = `
+        <div class="flex items-center gap-2.5 bg-amber-50/70 border border-amber-200 rounded-lg p-3 text-amber-900 text-xs">
+          <span class="text-base">⏳</span>
+          <span class="font-medium">현재 대표이사 및 결재권자 종합 검토 진행 중입니다. (결재 대기)</span>
+        </div>
+      `;
+    }
+  }
+
+  // 5. 첨부파일 박스
   const aBox = document.getElementById('docViewAttachBox');
   const aLink = document.getElementById('docViewAttachLink');
   if (aBox && aLink) {
@@ -1437,6 +2041,16 @@ export function closePaymentModal(modalId) {
 
 // 윈도우 전역 바인딩 (인라인 HTML onclick 지원)
 if (typeof window !== 'undefined') {
+  window.escapeHtml = escapeHtml;
+  window.numberToKoreanCurrency = numberToKoreanCurrency;
+  window.updateKoreanCurrencyPreview = updateKoreanCurrencyPreview;
+  window.addPurchaseItemRow = addPurchaseItemRow;
+  window.removePurchaseItemRow = removePurchaseItemRow;
+  window.updatePurchaseTableTotals = updatePurchaseTableTotals;
+  window.addExpenseItemRow = addExpenseItemRow;
+  window.removeExpenseItemRow = removeExpenseItemRow;
+  window.updateExpenseTableTotals = updateExpenseTableTotals;
+
   window.switchPaymentSubTab = switchPaymentSubTab;
   window.verifyPaymentAdminPin = verifyPaymentAdminPin;
   window.handleReceiptFileSelect = handleReceiptFileSelect;
@@ -1447,6 +2061,7 @@ if (typeof window !== 'undefined') {
   window.clearLinkedApproval = clearLinkedApproval;
   window.submitExpense = submitExpense;
   window.toggleApprovalAmountField = toggleApprovalAmountField;
+  window.buildApprovalContent = buildApprovalContent;
   window.submitApproval = submitApproval;
   window.switchMySubTab = switchMySubTab;
   window.loadMyAllDocs = loadMyAllDocs;

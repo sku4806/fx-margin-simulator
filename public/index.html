@@ -1003,11 +1003,14 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">예상 소요 금액 (원화 ₩)</label>
-              <input type="number" id="appExpectedAmount" required placeholder="0" min="0" value="0" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold text-slate-900 focus:border-indigo-500 focus:outline-none">
+              <label class="block text-xs font-bold text-slate-700 mb-1">총 예상 소요 금액 (원화 ₩) *</label>
+              <input type="number" id="appExpectedAmount" required placeholder="0" min="0" value="0" oninput="window.updateKoreanCurrencyPreview()" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold text-slate-900 focus:border-indigo-500 focus:outline-none">
+              <div id="appExpectedAmountKorean" class="mt-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50/70 px-2 py-0.5 rounded border border-indigo-100 flex items-center gap-1">
+                <span>🇰🇷</span> <span id="appExpectedAmountKoreanText">일금 영원정</span>
+              </div>
             </div>
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">관련 비용 계정</label>
+              <label class="block text-xs font-bold text-slate-700 mb-1">관련 비용 계정 *</label>
               <select id="appCategory" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:border-indigo-500 focus:outline-none font-medium">
                 <option value="부품 매입/재고비">부품 매입 / 안전재고 확보</option>
                 <option value="접대비 / 미팅비">접대비 / 고객 미팅비</option>
@@ -1018,69 +1021,121 @@
               </select>
             </div>
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">시행 / 입고 예정일 (ETA)</label>
+              <label class="block text-xs font-bold text-slate-700 mb-1">시행 / 입고 예정일 (ETA) *</label>
               <input type="date" id="appTargetDate" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono focus:border-indigo-500 focus:outline-none">
             </div>
           </div>
 
-          <!-- 1) 지출품의서 필드 -->
-          <fieldset id="appFieldsExpense" disabled class="hidden space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <legend class="px-2 text-xs font-bold text-slate-700">지출 산출 내역</legend>
-            <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1">항목 및 산출 근거 *</label>
-              <textarea id="appExpenseBreakdown" rows="3" placeholder="예: 고객 미팅 식대 4명 × 25,000원 = 100,000원" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white"></textarea>
+          <!-- 1) 지출품의서 필드 (동적 다중 지출 명세 그리드) -->
+          <fieldset id="appFieldsExpense" disabled class="hidden space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+              <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span>💳</span> 세부 지출 항목 명세서 (다중 품목 등록)
+              </span>
+              <button type="button" onclick="window.addExpenseItemRow()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 cursor-pointer">
+                <span>➕</span> 지출 항목 추가
+              </button>
             </div>
+            <div class="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs">
+              <table class="w-full text-xs text-left border-collapse" id="expenseItemsTable">
+                <thead>
+                  <tr class="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
+                    <th class="p-2 text-center w-10">No</th>
+                    <th class="p-2 min-w-[160px]">지출 적요 / 항목명 *</th>
+                    <th class="p-2 text-right w-36">지출 금액 (원화 ₩) *</th>
+                    <th class="p-2 min-w-[200px]">산출 근거 및 사용 내역</th>
+                    <th class="p-2 text-center w-12">삭제</th>
+                  </tr>
+                </thead>
+                <tbody id="expenseItemsTbody">
+                  <!-- JS에서 행 동적 렌더링 -->
+                </tbody>
+                <tfoot>
+                  <tr class="bg-slate-50 border-t border-slate-200 font-bold text-slate-900 text-xs">
+                    <td colspan="2" class="p-2.5 text-right font-extrabold text-slate-700">지출 합계 (VAT 포함):</td>
+                    <td id="expenseTotalAmount" class="p-2.5 text-right font-mono font-black text-indigo-700 text-sm">₩0</td>
+                    <td colspan="2" class="p-2.5 text-right text-[11px] text-slate-500 font-medium">※ 입력 시 총 예상 금액에 자동 반영됩니다.</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <textarea id="appExpenseBreakdown" class="hidden"></textarea>
           </fieldset>
 
-          <!-- 2) 구매품의서 전용 스마트 구조화 필드 (ERP 재고연동) -->
+          <!-- 2) 구매품의서 전용 스마트 구조화 필드 (ERP 재고연동 & 다중 품목 그리드) -->
           <fieldset id="appFieldsPurchase" class="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
             <div class="flex items-center justify-between border-b border-indigo-200/60 pb-2">
               <span class="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
-                <span>📦</span> ERP 재고 관리 자동 연동 정보
+                <span>📦</span> ERP 재고 관리 자동 연동 정보 (다중 부품 발주)
               </span>
               <span class="text-[10px] text-indigo-700 bg-white border border-indigo-200 px-2 py-0.5 rounded-full font-bold">승인 시 발주(PO) 생성</span>
             </div>
             
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1">부품 품번 (Part#) *</label>
-                <input id="appPurchasePartNo" type="text" placeholder="예: IS25LP128F-JBLE-TR" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-mono font-bold text-indigo-900">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">공급업체 (Vendor) *</label>
+                <input id="appPurchaseVendor" type="text" placeholder="예: ISSI Hong Kong, Avnet" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:border-indigo-500 focus:outline-none">
               </div>
               <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1">제조사 (Maker)</label>
-                <input id="appPurchaseMaker" type="text" placeholder="예: ISSI, Winbond" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">실수요처 / 배정 고객사 *</label>
+                <input id="appPurchaseCustomer" type="text" placeholder="예: 본사 일반재고, 또는 고객사명" value="본사 일반재고" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:border-indigo-500 focus:outline-none">
               </div>
               <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1">공급업체 (Vendor)</label>
-                <input id="appPurchaseVendor" type="text" placeholder="예: ISSI Hong Kong" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1">발주 수량 (Qty EA) *</label>
-                <input id="appPurchaseQty" type="number" min="1" placeholder="예: 5000" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-mono font-bold">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">발주 통화 (Currency) *</label>
+                <select id="appPurchaseCurrency" onchange="window.updatePurchaseTableTotals()" class="w-full px-3 py-2 text-xs border border-indigo-300 rounded-xl bg-white font-bold text-indigo-950 focus:border-indigo-500 focus:outline-none">
+                  <option value="USD">USD ($) - 외자 직발주</option>
+                  <option value="KRW">KRW (₩) - 원화 내자발주</option>
+                </select>
               </div>
               <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1">매입 단가 & 통화</label>
-                <div class="flex gap-1.5">
-                  <select id="appPurchaseCurrency" class="w-20 px-2 py-2 text-xs border border-slate-300 rounded-xl bg-white font-bold">
-                    <option value="USD">USD ($)</option>
-                    <option value="KRW">KRW (₩)</option>
-                  </select>
-                  <input id="appPurchaseUnitPrice" type="number" step="0.0001" min="0" placeholder="예: 1.15" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-mono">
-                </div>
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1">실수요처 / 배정 고객사</label>
-                <input id="appPurchaseCustomer" type="text" placeholder="예: 본사 일반재고, 또는 고객사명" value="본사 일반재고" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">적용 기준 환율</label>
+                <input id="appPurchaseFxRate" type="number" step="0.01" value="1334.18" onchange="window.updatePurchaseTableTotals()" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-mono text-slate-700 focus:border-indigo-500 focus:outline-none">
               </div>
             </div>
 
-            <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1">구매 사유 및 견적 조건 상세</label>
-              <textarea id="appPurchaseItems" rows="2" placeholder="예: 고객사 양산 프로젝트 수주 대비 안전재고 확보 (리드타임 6주, 홍콩 선적)" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white"></textarea>
+            <!-- 다중 부품 명세 그리드 -->
+            <div class="overflow-x-auto border border-indigo-200 rounded-xl bg-white shadow-xs mt-2">
+              <table class="w-full text-xs text-left border-collapse" id="purchaseItemsTable">
+                <thead>
+                  <tr class="bg-indigo-50/80 text-indigo-950 font-bold border-b border-indigo-200">
+                    <th class="p-2 text-center w-10">No</th>
+                    <th class="p-2 min-w-[160px]">부품 품번 (Part#) *</th>
+                    <th class="p-2 min-w-[100px]">제조사 (Maker) *</th>
+                    <th class="p-2 text-right w-24">수량 (Qty) *</th>
+                    <th class="p-2 text-right w-28">매입단가 *</th>
+                    <th class="p-2 text-right w-28">공급가액</th>
+                    <th class="p-2 min-w-[130px]">비고 / 견적특기</th>
+                    <th class="p-2 text-center w-12">삭제</th>
+                  </tr>
+                </thead>
+                <tbody id="purchaseItemsTbody">
+                  <!-- JS에서 동적 렌더링 -->
+                </tbody>
+                <tfoot>
+                  <tr class="bg-indigo-50/40 border-t border-indigo-200 font-bold text-indigo-950 text-xs">
+                    <td colspan="3" class="p-2.5 text-right font-extrabold">합계 (Total):</td>
+                    <td id="purchaseTotalQty" class="p-2.5 text-right font-mono font-black text-indigo-900">0 EA</td>
+                    <td></td>
+                    <td id="purchaseTotalAmount" class="p-2.5 text-right font-mono font-black text-indigo-900">$0.00</td>
+                    <td colspan="2" id="purchaseFxSummary" class="p-2.5 text-right text-[11px] text-indigo-700 font-medium">원화 환산 합계: ₩0</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
+
+            <div class="flex items-center justify-between pt-1">
+              <button type="button" onclick="window.addPurchaseItemRow()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer">
+                <span>➕</span> 부품 품목 추가
+              </button>
+              <span class="text-[11px] text-indigo-800 font-medium">※ 입력된 부품별 수량·단가 합계가 상단 예상 소요 금액에 실시간 반영됩니다.</span>
+            </div>
+
+            <!-- 하위 호환용 hidden 필드 -->
+            <input type="hidden" id="appPurchasePartNo">
+            <input type="hidden" id="appPurchaseMaker">
+            <input type="hidden" id="appPurchaseQty">
+            <input type="hidden" id="appPurchaseUnitPrice">
+            <textarea id="appPurchaseItems" class="hidden"></textarea>
           </fieldset>
 
           <!-- 3) 출장기안서 필드 -->
@@ -1120,9 +1175,32 @@
             <input type="text" id="appTitle" required placeholder="예: [안전재고 확보] IS25LP128F 5,000 EA 발주 및 입고 품의의 건" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-indigo-500 focus:outline-none font-semibold text-slate-900">
           </div>
 
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">기안 배경 및 종합 품의 설명 *</label>
-            <textarea id="appContent" rows="4" required placeholder="기안 배경, 도입 필요성, 단가 협의 내용, 납품 일정 등을 상세히 입력해 주세요." class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl leading-relaxed focus:border-indigo-500 focus:outline-none"></textarea>
+          <!-- 표준 4단 기안 본문 구조 (Executive 4-Paragraph Structure) -->
+          <div class="space-y-3 bg-slate-50/80 p-4 sm:p-5 rounded-2xl border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+              <span class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                <span>📑</span> BSK 표준 공문서 4단 기안 양식
+              </span>
+              <span class="text-[10px] text-slate-500 font-medium">빅샤인코리아 사규 회계·결재 표준 규격</span>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Ⅰ. 추진 배경 및 필요성 *</label>
+              <textarea id="appPurpose" rows="2" required placeholder="본 기안을 추진하게 된 계기, 고객사 발주 요청 및 시장 상황, 부품 도입 필요성을 구체적으로 입력해 주세요." class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:border-indigo-500 focus:outline-none"></textarea>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Ⅲ. 예산 집행 계획 *</label>
+              <textarea id="appBudgetPlan" rows="2" required placeholder="대금 결제 조건 (예: Net 30, T/T 송금, 법인카드 결제), 지급 예정일, 예산 배정 계획을 입력해 주세요." class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:border-indigo-500 focus:outline-none"></textarea>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Ⅳ. 기대 효과 *</label>
+              <textarea id="appExpectedEffect" rows="2" required placeholder="본 기안 승인 및 집행을 통해 기대되는 정량적·정성적 효과 (납기 안정화, 고객 만족도 제고, 원가 절감 등)를 입력해 주세요." class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:border-indigo-500 focus:outline-none"></textarea>
+            </div>
+
+            <!-- 하위 호환용 종합 설명 text -->
+            <textarea id="appContent" class="hidden"></textarea>
           </div>
 
           <div>
@@ -2169,88 +2247,189 @@
   </div>
 
   <!-- 📑 모달: 내부 결재 기안서 미리보기 및 인쇄/PDF 저장 모달 -->
+  <!-- 📑 모달: BSK 표준 전자결재 기안서 미리보기 및 A4 인쇄 팝업 -->
   <div id="approvalDocModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[99990] flex items-center justify-center p-2 sm:p-4 hidden">
-    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-slate-300">
-      <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between no-print bg-slate-50">
-        <h4 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-          <span>📄</span> 내부 전자결재 기안서 미리보기
+    <div class="bg-white w-full max-w-3xl sm:max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh] border border-slate-300">
+      <div class="px-5 py-3 border-b border-slate-200 flex items-center justify-between no-print bg-slate-900 text-white">
+        <h4 class="font-bold text-xs sm:text-sm flex items-center gap-2">
+          <span>📑</span> BSK 공식 전자결재 기안서 미리보기 (A4 공문서 규격)
         </h4>
         <div class="flex items-center gap-2">
-          <button type="button" onclick="window.print()" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer">
-            <span>🖨️</span> 인쇄 / PDF 저장
+          <button type="button" onclick="window.print()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer transition">
+            <span>🖨️</span> PDF 저장 / 인쇄
           </button>
-          <button type="button" onclick="window.closePaymentModal('approvalDocModal')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 flex items-center justify-center font-bold text-base cursor-pointer">
+          <button type="button" onclick="window.closePaymentModal('approvalDocModal')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center font-bold text-base cursor-pointer">
             ✕
           </button>
         </div>
       </div>
-      <div id="printDocArea" class="p-6 sm:p-8 overflow-y-auto flex-1 bg-white space-y-5 text-slate-900">
-        <div class="flex items-start justify-between border-b-2 border-slate-900 pb-4">
-          <div>
-            <span class="text-[11px] font-bold text-slate-500 tracking-wider">BIGSHINE KOREA CO., LTD.</span>
-            <h2 id="docViewType" class="text-xl sm:text-2xl font-black tracking-tight text-slate-950 mt-1">사전 지출 품의서</h2>
+
+      <div id="printDocArea" class="p-6 sm:p-10 overflow-y-auto flex-1 bg-white space-y-5 text-slate-900 font-sans">
+        <!-- 1. BSK 공식 레터헤드 & 3단 표준 결재선 그리드 -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b-2 border-slate-900 pb-4 gap-4">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-black tracking-widest text-indigo-900 uppercase">BIGSHINE KOREA CO., LTD.</span>
+              <span class="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-medium">공문서 제2호 서식</span>
+            </div>
+            <h2 id="docViewType" class="text-2xl sm:text-3xl font-black tracking-widest text-slate-950 mt-1">【 구 매 품 의 서 】</h2>
+            <p class="text-[11px] text-slate-500">반도체 및 전자부품 전문 유통 & 기술 솔루션</p>
           </div>
-          <table class="border-collapse border border-slate-400 text-xs text-center">
-            <tr>
-              <th rowspan="2" class="border border-slate-400 bg-slate-100 px-2 py-1 font-bold w-8">결<br>재</th>
-              <th class="border border-slate-400 bg-slate-100 px-4 py-1 font-semibold">기안</th>
-              <th class="border border-slate-400 bg-slate-100 px-4 py-1 font-semibold">최종승인</th>
-            </tr>
-            <tr class="h-14">
-              <td id="docViewDrafterSign" class="border border-slate-400 px-3 font-bold text-slate-800">-</td>
-              <td id="docViewAdminSign" class="border border-slate-400 px-3 font-bold text-amber-600">결재대기</td>
-            </tr>
-          </table>
+
+          <!-- 3단 표준 결재선 테이블 -->
+          <div class="shrink-0 self-end sm:self-auto">
+            <table class="border-collapse border border-slate-900 text-xs text-center w-64 shadow-2xs">
+              <thead>
+                <tr class="bg-slate-100 font-bold border-b border-slate-900 text-[11px]">
+                  <th rowspan="2" class="border-r border-slate-900 w-7 bg-slate-200 text-[11px] leading-tight px-1 py-1 font-black">결<br>재</th>
+                  <th class="border-r border-slate-900 py-1 w-1/3">기 안</th>
+                  <th class="border-r border-slate-900 py-1 w-1/3">검 토</th>
+                  <th class="py-1 w-1/3">승 인</th>
+                </tr>
+                <tr class="h-16 text-xs bg-white">
+                  <!-- 기안자 서명칸 -->
+                  <td class="border-r border-slate-900 p-1 align-middle relative">
+                    <div class="font-bold text-slate-900" id="docViewDrafterSign">-</div>
+                    <div class="text-[9px] text-slate-500 font-mono" id="docViewDrafterDate">-</div>
+                    <span class="inline-block mt-0.5 px-1 py-0.2 text-[9px] bg-slate-100 text-slate-700 rounded border border-slate-300 font-semibold">기안</span>
+                  </td>
+                  <!-- 검토자 서명칸 -->
+                  <td class="border-r border-slate-900 p-1 align-middle relative">
+                    <div class="font-bold text-slate-900" id="docViewReviewSign">영업지원</div>
+                    <div class="text-[9px] text-slate-500 font-mono" id="docViewReviewDate">-</div>
+                    <span class="inline-block mt-0.5 px-1 py-0.2 text-[9px] bg-indigo-50 text-indigo-700 rounded border border-indigo-200 font-semibold">검토완료</span>
+                  </td>
+                  <!-- 최종 승인권자 전자 직인 도장칸 -->
+                  <td class="p-1 align-middle relative overflow-hidden text-center" id="docViewAdminCell">
+                    <div id="docViewAdminStamp">
+                      <span class="text-amber-600 font-bold text-xs">결재대기</span>
+                    </div>
+                  </td>
+                </tr>
+              </thead>
+            </table>
+          </div>
         </div>
 
-        <table class="w-full border-collapse border border-slate-300 text-xs">
+        <!-- 2. 문서 기본 정보 메타데이터 표 (보존연한, 보안등급 등 표준 양식) -->
+        <table class="w-full border-collapse border border-slate-400 text-xs">
           <tr>
-            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left w-24 sm:w-28 font-bold">문서번호</th>
-            <td id="docViewNo" class="border border-slate-300 px-3 py-2 font-mono font-bold text-indigo-700">-</td>
-            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left w-24 sm:w-28 font-bold">기안일자</th>
-            <td id="docViewDate" class="border border-slate-300 px-3 py-2 font-mono">-</td>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2 text-left w-24 sm:w-28 font-bold text-slate-700">문서 번호</th>
+            <td id="docViewNo" class="border border-slate-300 px-3 py-2 font-mono font-bold text-indigo-800">-</td>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2 text-left w-24 sm:w-28 font-bold text-slate-700">보존 연한</th>
+            <td class="border border-slate-300 px-3 py-2 text-slate-800">5년 (회계규정 제12조)</td>
           </tr>
           <tr>
-            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">소속부서</th>
-            <td id="docViewDept" class="border border-slate-300 px-3 py-2">-</td>
-            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">시행/입고예정일</th>
-            <td id="docViewTargetDate" class="border border-slate-300 px-3 py-2 font-mono">-</td>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2 text-left font-bold text-slate-700">기안 일자</th>
+            <td id="docViewDate" class="border border-slate-300 px-3 py-2 font-mono text-slate-800">-</td>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2 text-left font-bold text-slate-700">보안 등급</th>
+            <td class="border border-slate-300 px-3 py-2 text-rose-700 font-bold">대외비 (CONFIDENTIAL - Level 2)</td>
           </tr>
           <tr>
-            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">비용계정</th>
-            <td id="docViewCategory" class="border border-slate-300 px-3 py-2">-</td>
-            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">예상금액</th>
-            <td id="docViewAmount" class="border border-slate-300 px-3 py-2 font-mono font-bold text-slate-900">₩0</td>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2 text-left font-bold text-slate-700">소속 부서</th>
+            <td id="docViewDept" class="border border-slate-300 px-3 py-2 text-slate-800">-</td>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2 text-left font-bold text-slate-700">시행/입고일</th>
+            <td id="docViewTargetDate" class="border border-slate-300 px-3 py-2 font-mono text-slate-800">-</td>
           </tr>
           <tr>
-            <th class="border border-slate-300 bg-slate-50 px-3 py-2 text-left font-bold">제 목</th>
-            <td id="docViewTitle" colspan="3" class="border border-slate-300 px-3 py-2 font-bold text-sm text-slate-950">-</td>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2 text-left font-bold text-slate-700">비용 계정</th>
+            <td id="docViewCategory" class="border border-slate-300 px-3 py-2 text-slate-800">-</td>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2 text-left font-bold text-slate-700">기 안 자</th>
+            <td id="docViewDrafterNameFull" class="border border-slate-300 px-3 py-2 font-medium text-slate-800">-</td>
+          </tr>
+          <tr>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2.5 text-left font-bold text-slate-700">기안 제목</th>
+            <td id="docViewTitle" colspan="3" class="border border-slate-300 px-3 py-2.5 font-bold text-sm text-slate-950">-</td>
+          </tr>
+          <tr>
+            <th class="border border-slate-300 bg-slate-100 px-3 py-2.5 text-left font-bold text-slate-700">품의 금액</th>
+            <td id="docViewAmountSummary" colspan="3" class="border border-slate-300 px-3 py-2.5 font-bold text-sm text-indigo-950 bg-indigo-50/40">
+              <span id="docViewAmountKorean" class="text-indigo-900 font-extrabold mr-2">일금 영원정</span>
+              <span id="docViewAmountRaw" class="text-xs text-slate-600 font-mono">(₩0)</span>
+            </td>
           </tr>
         </table>
 
-        <div>
-          <h4 class="text-xs font-bold text-slate-700 mb-1.5">[품의 상세 내용]</h4>
-          <div class="border border-slate-300 rounded-lg p-4 min-h-[180px] text-xs leading-relaxed whitespace-pre-wrap font-mono text-slate-800 bg-slate-50/30" id="docViewContent"></div>
+        <!-- 3. 표준 4단 기안 본문 구조 및 세부 명세 그리드 -->
+        <div class="space-y-4 pt-1">
+          <!-- Ⅰ. 추진 배경 및 목적 -->
+          <div class="space-y-1.5">
+            <h4 class="text-xs font-bold text-slate-900 flex items-center gap-1.5 border-l-4 border-indigo-700 pl-2">
+              <span>Ⅰ. 추진 배경 및 필요성</span>
+            </h4>
+            <div id="docViewPurpose" class="border border-slate-300 rounded-lg p-3 text-xs leading-relaxed whitespace-pre-wrap text-slate-800 bg-slate-50/30"></div>
+          </div>
+
+          <!-- Ⅱ. 세부 품의 명세 (동적 부품/지출 그리드 렌더링) -->
+          <div class="space-y-1.5">
+            <h4 class="text-xs font-bold text-slate-900 flex items-center gap-1.5 border-l-4 border-indigo-700 pl-2">
+              <span>Ⅱ. 세부 품의 명세</span>
+            </h4>
+            <div id="docViewItemsContainer" class="overflow-x-auto border border-slate-300 rounded-lg">
+              <!-- JS에서 품의 종류에 따라 세부 품목 표 렌더링 -->
+            </div>
+          </div>
+
+          <!-- Ⅲ. 예산 집행 계획 -->
+          <div class="space-y-1.5">
+            <h4 class="text-xs font-bold text-slate-900 flex items-center gap-1.5 border-l-4 border-indigo-700 pl-2">
+              <span>Ⅲ. 예산 집행 계획</span>
+            </h4>
+            <div id="docViewBudgetPlan" class="border border-slate-300 rounded-lg p-3 text-xs leading-relaxed whitespace-pre-wrap text-slate-800 bg-slate-50/30"></div>
+          </div>
+
+          <!-- Ⅳ. 기대 효과 -->
+          <div class="space-y-1.5">
+            <h4 class="text-xs font-bold text-slate-900 flex items-center gap-1.5 border-l-4 border-indigo-700 pl-2">
+              <span>Ⅳ. 기대 효과</span>
+            </h4>
+            <div id="docViewExpectedEffect" class="border border-slate-300 rounded-lg p-3 text-xs leading-relaxed whitespace-pre-wrap text-slate-800 bg-slate-50/30"></div>
+          </div>
+
+          <!-- Ⅴ. 결재권자 종합 검토 의견 및 지시사항 -->
+          <div id="docViewExecutiveReviewBox" class="space-y-1.5">
+            <h4 class="text-xs font-bold text-slate-900 flex items-center gap-1.5 border-l-4 border-slate-700 pl-2">
+              <span>Ⅴ. 결재권자 종합 검토 의견 및 지시사항</span>
+            </h4>
+            <div id="docViewExecutiveReview" class="border border-slate-300 rounded-lg p-3 text-xs leading-relaxed text-slate-800 bg-slate-50">
+              <span class="text-slate-400 italic">결재권자 검토 진행 중</span>
+            </div>
+          </div>
         </div>
 
-        <div id="docViewRejectBox" class="hidden bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 space-y-1">
-          <strong class="font-bold flex items-center gap-1"><span>⚠️</span> [관리자 반려 사유]</strong>
-          <p id="docViewRejectReason" class="pl-4 font-medium"></p>
-        </div>
+        <!-- 하위 호환용 텍스트 컨테이너 -->
+        <div id="docViewContent" class="hidden"></div>
 
+        <!-- 첨부파일 링크 -->
         <div id="docViewAttachBox" class="hidden no-print pt-1">
-          <a id="docViewAttachLink" href="#" target="_blank" class="text-xs font-bold text-indigo-600 hover:underline inline-flex items-center gap-1">
-            <span>📎</span> 첨부파일 열기 (새 탭)
+          <a id="docViewAttachLink" href="#" target="_blank" class="text-xs font-bold text-indigo-600 hover:underline inline-flex items-center gap-1.5 p-2 bg-indigo-50/60 rounded-lg border border-indigo-100">
+            <span>📎</span> 증빙 및 첨부파일 열기 (새 탭)
           </a>
         </div>
 
-        <div class="pt-6 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
-          <div>
-            <div class="font-bold text-slate-900">주식회사 빅샤인코리아 (BIGSHINE KOREA CO., LTD.)</div>
-            <div>대표이사: D.I.Lee (이동일)</div>
+        <!-- 4. BSK 공식 사업자 등록 정보 및 대표이사 직인 푸터 -->
+        <div class="pt-6 border-t-2 border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-slate-700 gap-4 mt-6">
+          <div class="space-y-1">
+            <div class="text-sm font-black text-slate-950 tracking-wide">주식회사 빅샤인코리아 (BIGSHINE KOREA CO., LTD.)</div>
+            <div class="text-[11px] text-slate-600 flex flex-wrap gap-x-3 gap-y-0.5">
+              <span><strong>사업자등록번호:</strong> 214-87-54877</span>
+              <span><strong>대표이사:</strong> 이동일 (D.I.Lee)</span>
+              <span><strong>TEL:</strong> 031-711-8881</span>
+              <span><strong>FAX:</strong> 031-711-8174</span>
+            </div>
+            <div class="text-[11px] text-slate-500">
+              <span><strong>본사 소재지:</strong> 경기도 성남시 분당구 성남대로 779번길 18 | <strong>웹사이트:</strong> www.bigshine.co.kr</span>
+            </div>
           </div>
-          <div class="w-16 h-16 flex items-center justify-center">
-            <img src="/BSK.jpg" alt="BSK 직인" class="w-14 h-14 object-contain opacity-90">
+
+          <div class="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+            <div class="text-right">
+              <div class="text-xs font-bold text-slate-800">(주)빅샤인코리아</div>
+              <div class="text-[10px] text-slate-500">대표이사 이동일 [직인생략]</div>
+            </div>
+            <div class="w-16 h-16 flex items-center justify-center p-0.5 bg-white rounded border border-slate-200 shadow-2xs">
+              <img src="/BSK.jpg" alt="빅샤인코리아 직인" class="w-14 h-14 object-contain">
+            </div>
           </div>
         </div>
       </div>
