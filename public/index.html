@@ -677,8 +677,11 @@
             <span>🚢</span> 발주·입고예정 (PO/ETA)
             <span id="poPendingBadge" class="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full hidden">0</span>
           </button>
-          <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors">
+          <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors cursor-pointer">
             <span>📄</span> 공식 견적서 발행 (PDF)
+          </button>
+          <button type="button" id="batchPurchaseRequisitionBtn" onclick="window.openBatchPurchaseRequisition && window.openBatchPurchaseRequisition()" class="hidden text-[11px] bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer" title="선택한 다중 부품들을 전자결재 구매품의서에 일괄 등록">
+            <span>✍️</span> 선택 부품 구매품의 (<span id="batchPurchaseCount">0</span>)
           </button>
           <button id="excelExportBtn"  class="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors">
             <span>📥</span> 엑셀 다운로드
@@ -1153,11 +1156,19 @@
             </div>
 
             <div class="flex items-center justify-between pt-1">
-              <button type="button" onclick="window.addPurchaseItemRow()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer">
-                <span>➕</span> 부품 품목 추가
-              </button>
-              <span class="text-[11px] text-indigo-800 font-medium">※ 입력된 부품별 수량·단가 합계가 상단 예상 소요 금액에 실시간 반영됩니다.</span>
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="window.addPurchaseItemRow()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer" title="빈 행을 추가하여 직접 입력">
+                  <span>➕</span> 직접 품목 추가
+                </button>
+                <button type="button" onclick="window.openPartPickerModal && window.openPartPickerModal()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer" title="ERP 등록 재고 및 부품 목록에서 검색하여 간편 추가">
+                  <span>🔍</span> 재고에서 부품 선택 추가
+                </button>
+              </div>
+              <span class="text-[11px] text-indigo-800 font-medium hidden sm:inline">※ 입력된 부품별 수량·단가 합계가 상단 예상 소요 금액에 실시간 반영됩니다.</span>
             </div>
+
+            <!-- 부품 품번 인라인 자동완성 플로팅 드롭다운 -->
+            <div id="purchasePartAutocomplete" class="hidden fixed z-[99995] bg-white border border-indigo-200 rounded-xl shadow-2xl overflow-hidden max-h-64 overflow-y-auto text-xs w-80"></div>
 
             <!-- 하위 호환용 hidden 필드 -->
             <input type="hidden" id="appPurchasePartNo">
@@ -2260,7 +2271,72 @@
     </div>
   </div>
 
-    <!-- 📑 모달: 전자결재 관리자 PIN 인증 모달 -->
+    <!-- 📦 모달: ERP 재고 및 부품 품목 빠른 검색·선택 모달 (다중 품목 품의 작성용) -->
+  <div id="partPickerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[99993] flex items-center justify-center p-2 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
+      <!-- 헤더 -->
+      <div class="px-5 py-3.5 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between">
+        <div>
+          <h4 class="font-bold text-xs sm:text-sm flex items-center gap-2">
+            <span>📦</span> ERP 재고 및 부품 품목 선택 (다중 품목 일괄 추가)
+          </h4>
+          <p class="text-[11px] text-slate-300 mt-0.5">품의서에 추가할 부품을 검색하고 선택하세요. 체크 후 추가 버튼을 누르면 단가/제조사가 자동 등록됩니다.</p>
+        </div>
+        <button type="button" onclick="window.closePartPickerModal && window.closePartPickerModal()" class="text-slate-400 hover:text-white font-bold text-lg cursor-pointer">✕</button>
+      </div>
+
+      <!-- 검색 및 필터 바 -->
+      <div class="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center gap-2">
+        <div class="flex-1 min-w-[200px] relative">
+          <input type="text" id="partPickerSearchInput" placeholder="Part#, 제조사, 고객사 검색..." oninput="window.filterPartPickerItems && window.filterPartPickerItems()" class="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-indigo-500">
+          <span class="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
+        </div>
+        <select id="partPickerMakerFilter" onchange="window.filterPartPickerItems && window.filterPartPickerItems()" class="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white outline-none font-semibold text-slate-700 cursor-pointer">
+          <option value="ALL">제조사 전체</option>
+        </select>
+        <button type="button" onclick="window.refreshPartPickerList && window.refreshPartPickerList()" class="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold transition cursor-pointer">
+          새로고침
+        </button>
+      </div>
+
+      <!-- 품목 목록 테이블 -->
+      <div class="overflow-y-auto flex-1 p-3">
+        <table class="w-full text-xs text-left border-collapse">
+          <thead class="sticky top-0 bg-slate-100 text-slate-700 font-bold border-b border-slate-200 select-none">
+            <tr>
+              <th class="p-2 text-center w-10">
+                <input type="checkbox" id="partPickerSelectAll" onchange="window.togglePartPickerSelectAll(this)" class="rounded cursor-pointer">
+              </th>
+              <th class="p-2 min-w-[160px]">부품 품번 (Part#)</th>
+              <th class="p-2 w-20 text-center">제조사</th>
+              <th class="p-2 text-right w-24">보유/가용</th>
+              <th class="p-2 text-right w-24">매입원가 ($)</th>
+              <th class="p-2 min-w-[120px]">계약처 / 영업</th>
+              <th class="p-2 text-center w-16">추가</th>
+            </tr>
+          </thead>
+          <tbody id="partPickerTableBody">
+            <!-- JS 동적 렌더링 -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 푸터 -->
+      <div class="p-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
+        <div class="text-xs font-bold text-slate-700">
+          선택된 품목: <span id="partPickerSelectedCount" class="text-indigo-600 font-extrabold text-sm">0</span>개
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="window.closePartPickerModal && window.closePartPickerModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 font-bold hover:bg-slate-100 text-xs transition cursor-pointer">닫기</button>
+          <button type="button" id="partPickerConfirmBtn" onclick="window.confirmPartPickerSelection && window.confirmPartPickerSelection()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow transition cursor-pointer flex items-center gap-1.5">
+            <span>➕</span> 선택 품목 품의서에 추가
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 📑 모달: 전자결재 관리자 PIN 인증 모달 -->
   <div id="adminAuthModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[99992] flex items-center justify-center p-4 hidden">
     <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 border border-slate-200">
       <div class="flex items-center justify-between">

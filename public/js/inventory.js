@@ -37,17 +37,57 @@ function updateSelectedQuoteCount() {
   const checked = document.querySelectorAll('.quote-select-checkbox:checked');
   const badge = document.getElementById('selectedQuoteCountBadge');
   const btn = document.getElementById('openQuotationModalBtn');
-  if (badge) {
-    if (checked.length > 0) {
+  const batchBtn = document.getElementById('batchPurchaseRequisitionBtn');
+  const batchCount = document.getElementById('batchPurchaseCount');
+
+  if (checked.length > 0) {
+    if (badge) {
       badge.innerText = `${checked.length}건 선택`;
       badge.classList.remove('hidden');
-      if (btn) btn.innerHTML = `<span>📄</span> ${checked.length}개 품목 견적서 출력 (PDF)`;
-    } else {
-      badge.classList.add('hidden');
-      if (btn) btn.innerHTML = `<span>📄</span> 견적서 출력 (PDF)`;
+    }
+    if (btn) btn.innerHTML = `<span>📄</span> ${checked.length}개 품목 견적서 출력 (PDF)`;
+    if (batchBtn) {
+      batchBtn.classList.remove('hidden');
+    }
+    if (batchCount) {
+      batchCount.innerText = checked.length;
+    }
+  } else {
+    if (badge) badge.classList.add('hidden');
+    if (btn) btn.innerHTML = `<span>📄</span> 공식 견적서 발행 (PDF)`;
+    if (batchBtn) {
+      batchBtn.classList.add('hidden');
+    }
+    if (batchCount) {
+      batchCount.innerText = '0';
     }
   }
 }
+
+export function openBatchPurchaseRequisition() {
+  const checked = document.querySelectorAll('.quote-select-checkbox:checked');
+  if (!checked || checked.length === 0) {
+    alert('구매품의서에 등록할 부품 품목을 최소 1개 이상 체크해 주세요.');
+    return;
+  }
+  const selectedIds = Array.from(checked).map(cb => cb.value);
+  const allItems = (window.cachedItems && window.cachedItems.length > 0) ? window.cachedItems : cachedItems;
+  const selectedItems = [];
+  selectedIds.forEach(id => {
+    const item = allItems.find(it => String(it.id) === String(id));
+    if (item) selectedItems.push(item);
+  });
+  if (selectedItems.length === 0) {
+    alert('선택한 품목의 상세 재고 데이터를 찾을 수 없습니다.');
+    return;
+  }
+  if (typeof window.openPurchaseRequisitionForParts === 'function') {
+    window.openPurchaseRequisitionForParts(selectedItems);
+  } else if (typeof window.openPurchaseRequisitionForPart === 'function') {
+    window.openPurchaseRequisitionForPart(selectedItems[0]);
+  }
+}
+window.openBatchPurchaseRequisition = openBatchPurchaseRequisition;
 
 document.addEventListener('change', function(e) {
   if (e.target && (e.target.id === 'quoteSelectAll' || e.target.id === 'quoteSelectAllFulfillment')) {
@@ -175,6 +215,7 @@ export async function fetchInventoryItems() {
     memo: item.memo || ''
   }));
 
+  window.cachedItems = cachedItems;
   return cachedItems;
 }
 

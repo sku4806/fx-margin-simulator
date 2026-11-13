@@ -691,7 +691,7 @@ export function addPurchaseItemRow(data = {}) {
   tr.innerHTML = `
     <td class="p-2 text-center text-slate-500 font-mono row-index font-bold"></td>
     <td class="p-2">
-      <input type="text" name="part_no" value="${escapeHtml(defaultPart)}" placeholder="예: IS25LP128F-JBLE-TR" required class="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono font-bold text-indigo-950 focus:border-indigo-500 focus:outline-none">
+      <input type="text" name="part_no" value="${escapeHtml(defaultPart)}" placeholder="예: IS25LP128F-JBLE-TR (검색/자동완성)" autocomplete="off" oninput="window.handlePartNoAutocomplete && window.handlePartNoAutocomplete(this, event)" onfocus="window.handlePartNoAutocomplete && window.handlePartNoAutocomplete(this, event)" required class="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono font-bold text-indigo-950 focus:border-indigo-500 focus:outline-none">
     </td>
     <td class="p-2">
       <input type="text" name="maker" value="${escapeHtml(defaultMaker)}" placeholder="예: ISSI, Winbond" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg focus:border-indigo-500 focus:outline-none">
@@ -708,15 +708,174 @@ export function addPurchaseItemRow(data = {}) {
     <td class="p-2">
       <input type="text" name="memo" value="${escapeHtml(defaultMemo)}" placeholder="리드타임, 안전재고 등" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-[11px] focus:border-indigo-500 focus:outline-none">
     </td>
-    <td class="p-2 text-center">
-      <button type="button" onclick="window.removePurchaseItemRow(this)" title="행 삭제" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 w-7 h-7 rounded-lg inline-flex items-center justify-center font-bold text-sm cursor-pointer transition">
-        ✕
-      </button>
+    <td class="p-2 text-center whitespace-nowrap">
+      <div class="flex items-center justify-center gap-1">
+        <button type="button" onclick="window.duplicatePurchaseItemRow && window.duplicatePurchaseItemRow(this)" title="이 행 복제 (동일 제조사/단가로 새 품목 추가)" class="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 w-7 h-7 rounded-lg inline-flex items-center justify-center font-bold text-xs cursor-pointer transition">
+          📋
+        </button>
+        <button type="button" onclick="window.removePurchaseItemRow(this)" title="행 삭제" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 w-7 h-7 rounded-lg inline-flex items-center justify-center font-bold text-sm cursor-pointer transition">
+          ✕
+        </button>
+      </div>
     </td>
   `;
   tbody.appendChild(tr);
   reindexPurchaseTableRows();
   updatePurchaseTableTotals();
+}
+
+/**
+ * 📋 행 복제 (동일 제조사, 단가, 비고 정보를 가진 새 행 추가)
+ */
+export function duplicatePurchaseItemRow(btn) {
+  const tr = btn.closest('tr');
+  if (!tr) return;
+  const partNo = tr.querySelector('input[name="part_no"]')?.value || '';
+  const maker = tr.querySelector('input[name="maker"]')?.value || '';
+  const qty = parseInt(tr.querySelector('input[name="qty"]')?.value || '1000', 10);
+  const unitPrice = parseFloat(tr.querySelector('input[name="unit_price"]')?.value || '0');
+  const memo = tr.querySelector('input[name="memo"]')?.value || '';
+
+  addPurchaseItemRow({
+    part_no: partNo,
+    maker: maker,
+    qty: qty,
+    unit_price: unitPrice,
+    memo: memo
+  });
+
+  const tbody = document.getElementById('purchaseItemsTbody');
+  if (tbody && tbody.lastElementChild) {
+    const input = tbody.lastElementChild.querySelector('input[name="part_no"]');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+}
+
+/**
+ * ⚡ 부품 품번 (Part#) 실시간 인라인 자동완성
+ */
+let _currentAutocompleteInput = null;
+
+export function handlePartNoAutocomplete(input, event) {
+  _currentAutocompleteInput = input;
+  window._currentAutocompleteInput = input;
+  const val = (input.value || '').trim();
+  const dropdown = document.getElementById('purchasePartAutocomplete');
+  if (!dropdown) return;
+
+  if (val.length < 1) {
+    dropdown.classList.add('hidden');
+    return;
+  }
+
+  const items = (window.cachedItems && Array.isArray(window.cachedItems)) ? window.cachedItems : [];
+  if (items.length === 0) {
+    dropdown.classList.add('hidden');
+    return;
+  }
+
+  const q = val.toUpperCase();
+  const matched = [];
+  const seenParts = new Set();
+
+  for (const item of items) {
+    const pName = (item.part_name || item.partName || '').trim();
+    const maker = (item.maker || '').trim();
+    if (!pName) continue;
+    if (pName.toUpperCase().includes(q) || maker.toUpperCase().includes(q)) {
+      if (!seenParts.has(pName)) {
+        seenParts.add(pName);
+        matched.push(item);
+        if (matched.length >= 7) break;
+      }
+    }
+  }
+
+  if (matched.length === 0) {
+    dropdown.classList.add('hidden');
+    return;
+  }
+
+  // 위치 계산 (인라인 입력창 바로 하단에 배치)
+  const rect = input.getBoundingClientRect();
+  dropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
+  dropdown.style.left = `${rect.left + window.scrollX}px`;
+  dropdown.style.width = `${Math.max(340, rect.width)}px`;
+
+  dropdown.innerHTML = `
+    <div class="px-3 py-1.5 bg-slate-900 text-white text-[11px] font-bold flex items-center justify-between">
+      <span class="flex items-center gap-1.5"><span>⚡</span> 추천 재고 품번 (${matched.length}건)</span>
+      <span class="text-[10px] text-slate-300">클릭 시 자동 기입</span>
+    </div>
+    <div class="divide-y divide-slate-100 max-h-60 overflow-y-auto">
+      ${matched.map(m => {
+        const pName = m.part_name || m.partName || '';
+        const mfg = m.maker || '-';
+        const price = (m.unit_usd !== undefined ? m.unit_usd : (m.unitUsd !== undefined ? m.unitUsd : 0)) || 0;
+        const stock = m.stock || 0;
+        const cust = m.customer && m.customer !== '-' ? m.customer : '본사 일반재고';
+        return `
+          <div class="p-2 hover:bg-indigo-50/80 cursor-pointer transition-colors flex items-center justify-between gap-2" onmousedown="event.preventDefault(); window.selectPartAutocomplete('${escapeHtml(pName)}', '${escapeHtml(mfg)}', ${price}, '${escapeHtml(cust)}')">
+            <div class="min-w-0">
+              <div class="font-mono font-bold text-indigo-950 truncate">${escapeHtml(pName)}</div>
+              <div class="text-[10px] text-slate-500">${escapeHtml(mfg)} · 재고: <span class="font-bold text-slate-700">${stock.toLocaleString()} EA</span></div>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="font-mono font-bold text-emerald-700">$${price.toFixed(4)}</div>
+              <div class="text-[9px] text-slate-400 truncate max-w-[90px]">${escapeHtml(cust)}</div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+  dropdown.classList.remove('hidden');
+}
+
+export function selectPartAutocomplete(partName, maker, unitPrice, customer) {
+  const targetInput = _currentAutocompleteInput || window._currentAutocompleteInput;
+  const dropdown = document.getElementById('purchasePartAutocomplete');
+  if (dropdown) dropdown.classList.add('hidden');
+
+  if (!targetInput) return;
+  const tr = targetInput.closest('tr');
+  if (!tr) return;
+
+  targetInput.value = partName;
+  const makerInput = tr.querySelector('input[name="maker"]');
+  if (makerInput && maker && maker !== '-') makerInput.value = maker;
+
+  const priceInput = tr.querySelector('input[name="unit_price"]');
+  if (priceInput && unitPrice > 0) priceInput.value = unitPrice;
+
+  const memoInput = tr.querySelector('input[name="memo"]');
+  if (memoInput && (!memoInput.value || memoInput.value === '리드타임, 안전재고 등')) {
+    if (customer && customer !== '-' && customer !== '본사 일반재고') {
+      memoInput.value = `고객사 [${customer}] 납기 대응`;
+    }
+  }
+
+  updatePurchaseTableTotals();
+
+  const qtyInput = tr.querySelector('input[name="qty"]');
+  if (qtyInput) {
+    qtyInput.focus();
+    qtyInput.select();
+  }
+}
+
+// 자동완성 드롭다운 바깥 클릭 시 닫기 리스너
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => {
+    const dd = document.getElementById('purchasePartAutocomplete');
+    if (!dd || dd.classList.contains('hidden')) return;
+    if (!e.target.closest('#purchasePartAutocomplete') && !e.target.closest('input[name="part_no"]')) {
+      dd.classList.add('hidden');
+    }
+  });
 }
 
 export function removePurchaseItemRow(btn) {
@@ -1081,10 +1240,12 @@ export function buildApprovalContent(docType) {
 }
 
 /**
- * 🚀 [견적·재고 -> 전자결재 품의 역연동]
- * 영업 견적/재고 화면에서 특정 부품 클릭 시 구매품의서 작성 폼으로 자동 이동 및 입력값 프리필(Pre-fill)
+ * 🚀 [견적·재고 -> 전자결재 품의 역연동 (단일 또는 다중 품목)]
+ * 영업 견적/재고 화면에서 특정 부품 또는 체크된 다중 품목으로 구매품의서 작성 폼 자동 이동 및 일괄 프리필
  */
-export function openPurchaseRequisitionForPart(partData = {}) {
+export function openPurchaseRequisitionForParts(parts = []) {
+  if (!Array.isArray(parts) || parts.length === 0) return;
+
   // 1. Tab 7 (전자결재·품의) 전환
   if (typeof window.switchToPaymentTab === 'function') {
     window.switchToPaymentTab();
@@ -1104,14 +1265,12 @@ export function openPurchaseRequisitionForPart(partData = {}) {
     toggleApprovalAmountField();
   }
 
-  const partName = partData.part_no || partData.part_name || '부품';
-  const maker = partData.maker || '기타';
-  const qty = parseInt(partData.qty || 1000, 10);
-  const unitPrice = parseFloat(partData.unit_price || partData.unit_usd || 1.0);
-  const currency = partData.currency || 'USD';
-  const customer = partData.customer || '본사 일반재고';
-  const vendor = partData.vendor || (maker && maker !== '기타' ? `${maker} 공식 대리점 / 본사 직납` : '공급업체 미정');
-  const memo = partData.memo || '고객사 수주 대비 안전재고 확보 및 납기 대응';
+  const first = parts[0];
+  const firstPartName = first.part_no || first.part_name || first.partName || '부품';
+  const firstMaker = first.maker || '기타';
+  const customer = (first.customer && first.customer !== '-') ? first.customer : '본사 일반재고';
+  const currency = first.currency || 'USD';
+  const vendor = first.vendor || (firstMaker && firstMaker !== '기타' ? `${firstMaker} 공식 대리점 / 본사 직납` : '공급업체 미정');
 
   // 4. 공급처, 실수요처, 통화 프리필
   const vendorEl = document.getElementById('appPurchaseVendor');
@@ -1123,28 +1282,44 @@ export function openPurchaseRequisitionForPart(partData = {}) {
   const currEl = document.getElementById('appPurchaseCurrency');
   if (currEl) currEl.value = currency;
 
-  // 5. 다중 품목 테이블 1행에 자동 세팅
+  // 5. 다중 품목 테이블 채우기
   const tbody = document.getElementById('purchaseItemsTbody');
   if (tbody) {
     tbody.innerHTML = '';
-    addPurchaseItemRow({
-      part_no: partName,
-      maker: maker,
-      qty: qty,
-      unit_price: unitPrice,
-      memo: memo
+    parts.forEach(p => {
+      const pName = p.part_no || p.part_name || p.partName || '';
+      const pMaker = p.maker || 'ISSI';
+      const pQty = parseInt(p.qty || p.stock || 1000, 10) || 1000;
+      const pPrice = parseFloat(p.unit_price !== undefined ? p.unit_price : (p.unit_usd !== undefined ? p.unit_usd : (p.unitUsd !== undefined ? p.unitUsd : 1.0))) || 0;
+      const pMemo = p.memo || (p.customer && p.customer !== '-' ? `고객사 [${p.customer}] 납기 대응` : '안전재고 확보');
+      addPurchaseItemRow({
+        part_no: pName,
+        maker: pMaker,
+        qty: pQty,
+        unit_price: pPrice,
+        memo: pMemo
+      });
     });
   }
 
   // 6. 표준 공문서 제목 및 4단 기안 내용 자동 완성
   const titleEl = document.getElementById('appTitle');
   if (titleEl) {
-    titleEl.value = `[부품구매] ${partName} (${qty.toLocaleString()} EA) 매입 및 안전재고 확보 품의의 건`;
+    if (parts.length === 1) {
+      const q = parseInt(first.qty || first.stock || 1000, 10) || 1000;
+      titleEl.value = `[부품구매] ${firstPartName} (${q.toLocaleString()} EA) 매입 및 안전재고 확보 품의의 건`;
+    } else {
+      titleEl.value = `[부품구매] ${firstPartName} 외 ${parts.length - 1}개 품목 매입 및 안전재고 확보 품의의 건`;
+    }
   }
 
   const purposeEl = document.getElementById('appPurpose');
   if (purposeEl) {
-    purposeEl.value = `고객사 [${customer}] 납기 대응 및 양산 소요 대비 안전재고 확보를 위한 긴급 매입 품의의 건입니다.`;
+    if (parts.length === 1) {
+      purposeEl.value = `고객사 [${customer}] 납기 대응 및 양산 소요 대비 안전재고 확보를 위한 긴급 매입 품의의 건입니다.`;
+    } else {
+      purposeEl.value = `고객사 납기 대응 및 주요 품목(${firstPartName} 등 총 ${parts.length}종) 양산 소요 대비 안전재고 확보를 위한 긴급 매입 품의의 건입니다.`;
+    }
   }
 
   const budgetEl = document.getElementById('appBudgetPlan');
@@ -1167,6 +1342,345 @@ export function openPurchaseRequisitionForPart(partData = {}) {
       formEl.scrollIntoView({ behavior: 'smooth' });
     }
   }, 100);
+}
+
+export function openPurchaseRequisitionForPart(partData = {}) {
+  openPurchaseRequisitionForParts([partData]);
+}
+
+/**
+ * 📦 ERP 재고 및 부품 품목 빠른 검색·다중 선택 모달 로직
+ */
+let partPickerSelectedIds = new Set();
+let partPickerCurrentList = [];
+
+export async function openPartPickerModal() {
+  const modal = document.getElementById('partPickerModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+
+  // 데이터 확인 및 로드
+  if (!window.cachedItems || window.cachedItems.length === 0) {
+    const tbody = document.getElementById('partPickerTableBody');
+    if (tbody) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="p-8 text-center text-slate-500">
+            <div class="inline-block animate-spin text-xl mb-2">⏳</div>
+            <div>ERP 재고 데이터를 불러오는 중입니다...</div>
+          </td>
+        </tr>
+      `;
+    }
+    if (typeof window.fetchInventoryItems === 'function') {
+      try {
+        const items = await window.fetchInventoryItems();
+        window.cachedItems = items;
+      } catch (e) {
+        console.warn('재고 로드 실패:', e);
+      }
+    }
+  }
+
+  // 제조사 셀렉트박스 구성
+  const makerSelect = document.getElementById('partPickerMakerFilter');
+  if (makerSelect && window.cachedItems) {
+    const makers = Array.from(new Set(window.cachedItems.map(it => (it.maker || '').trim()).filter(m => m && m !== '-'))).sort();
+    makerSelect.innerHTML = '<option value="ALL">제조사 전체</option>' + makers.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  }
+
+  // 검색창 초기화
+  const searchInput = document.getElementById('partPickerSearchInput');
+  if (searchInput) searchInput.value = '';
+
+  const masterCb = document.getElementById('partPickerSelectAll');
+  if (masterCb) masterCb.checked = false;
+
+  partPickerSelectedIds.clear();
+  updatePartPickerSelectedCount();
+  filterPartPickerItems();
+
+  if (searchInput) {
+    setTimeout(() => searchInput.focus(), 100);
+  }
+}
+
+export function closePartPickerModal() {
+  document.getElementById('partPickerModal')?.classList.add('hidden');
+}
+
+export function filterPartPickerItems() {
+  const q = (document.getElementById('partPickerSearchInput')?.value || '').trim().toLowerCase();
+  const makerFilter = document.getElementById('partPickerMakerFilter')?.value || 'ALL';
+  const tbody = document.getElementById('partPickerTableBody');
+  if (!tbody) return;
+
+  const items = (window.cachedItems && Array.isArray(window.cachedItems)) ? window.cachedItems : [];
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-400">등록된 ERP 재고 품목이 없습니다.</td></tr>`;
+    return;
+  }
+
+  // 필터링
+  const filtered = items.filter(it => {
+    const m = (it.maker || '').trim();
+    if (makerFilter !== 'ALL' && m !== makerFilter) return false;
+    if (!q) return true;
+    const p = (it.part_name || it.partName || '').toLowerCase();
+    const cust = (it.customer || '').toLowerCase();
+    const realCust = (it.real_customer || it.realCustomer || '').toLowerCase();
+    return p.includes(q) || m.toLowerCase().includes(q) || cust.includes(q) || realCust.includes(q);
+  });
+
+  partPickerCurrentList = filtered;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-400">검색 조건과 일치하는 재고 품목이 없습니다.</td></tr>`;
+    return;
+  }
+
+  // 상위 150건 렌더링 (성능 최적화)
+  const displayList = filtered.slice(0, 150);
+  tbody.innerHTML = displayList.map(item => {
+    const isChecked = partPickerSelectedIds.has(String(item.id));
+    const pName = item.part_name || item.partName || '-';
+    const maker = item.maker || '-';
+    const stock = item.stock || 0;
+    const arranged = item.arranged_qty || item.arrangedQty || 0;
+    const unitUsd = parseFloat(item.unit_usd !== undefined ? item.unit_usd : (item.unitUsd || 0));
+    const cust = item.customer && item.customer !== '-' ? item.customer : '본사 일반재고';
+    const owner = item.owner || '공용';
+
+    return `
+      <tr class="border-b border-slate-100 hover:bg-indigo-50/50 cursor-pointer transition-colors ${isChecked ? 'bg-indigo-50/70' : ''}" onclick="window.togglePartPickerRow('${item.id}', event)">
+        <td class="p-2 text-center" onclick="event.stopPropagation()">
+          <input type="checkbox" class="part-picker-cb rounded cursor-pointer" data-item-id="${item.id}" ${isChecked ? 'checked' : ''} onchange="window.handlePartPickerCheckbox('${item.id}', this.checked)">
+        </td>
+        <td class="p-2 font-mono font-bold text-indigo-950">
+          <div class="truncate max-w-[200px]" title="${escapeHtml(pName)}">${escapeHtml(pName)}</div>
+        </td>
+        <td class="p-2 text-center">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">${escapeHtml(maker)}</span>
+        </td>
+        <td class="p-2 text-right font-mono">
+          <span class="font-bold text-slate-800">${stock.toLocaleString()}</span>
+          <span class="text-[10px] text-slate-400">/ ${arranged.toLocaleString()}</span>
+        </td>
+        <td class="p-2 text-right font-mono font-bold text-emerald-700">
+          $${unitUsd.toFixed(4)}
+        </td>
+        <td class="p-2 text-slate-600 truncate max-w-[130px]" title="${escapeHtml(cust)} (${escapeHtml(owner)})">
+          <div class="truncate font-medium">${escapeHtml(cust)}</div>
+          <div class="text-[10px] text-slate-400 truncate">${escapeHtml(owner)}</div>
+        </td>
+        <td class="p-2 text-center" onclick="event.stopPropagation()">
+          <button type="button" onclick="window.addSinglePartToPurchase('${item.id}', this)" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded font-bold text-[10px] border border-indigo-200 transition cursor-pointer" title="이 품목 즉시 품의서에 추가">
+            + 추가
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if (filtered.length > 150) {
+    tbody.innerHTML += `
+      <tr>
+        <td colspan="7" class="p-2 text-center text-[11px] text-slate-400 bg-slate-50">
+          ※ 검색 결과가 많아 상위 150건만 표시됩니다. 더 정확한 결과를 위해 검색어를 입력해 주세요. (총 ${filtered.length.toLocaleString()}건)
+        </td>
+      </tr>
+    `;
+  }
+}
+
+export function refreshPartPickerList() {
+  filterPartPickerItems();
+}
+
+export function togglePartPickerRow(id, event) {
+  const isSelected = partPickerSelectedIds.has(String(id));
+  if (isSelected) {
+    partPickerSelectedIds.delete(String(id));
+  } else {
+    partPickerSelectedIds.add(String(id));
+  }
+  updatePartPickerRowUI(id, !isSelected);
+  updatePartPickerSelectedCount();
+}
+
+export function handlePartPickerCheckbox(id, checked) {
+  if (checked) {
+    partPickerSelectedIds.add(String(id));
+  } else {
+    partPickerSelectedIds.delete(String(id));
+  }
+  updatePartPickerRowUI(id, checked);
+  updatePartPickerSelectedCount();
+}
+
+function updatePartPickerRowUI(id, isChecked) {
+  const cb = document.querySelector(`.part-picker-cb[data-item-id="${id}"]`);
+  if (cb) cb.checked = isChecked;
+  const tr = cb?.closest('tr');
+  if (tr) {
+    if (isChecked) {
+      tr.classList.add('bg-indigo-50/70');
+    } else {
+      tr.classList.remove('bg-indigo-50/70');
+    }
+  }
+}
+
+export function togglePartPickerSelectAll(masterCb) {
+  const isChecked = masterCb.checked;
+  partPickerCurrentList.slice(0, 150).forEach(item => {
+    if (isChecked) {
+      partPickerSelectedIds.add(String(item.id));
+    } else {
+      partPickerSelectedIds.delete(String(item.id));
+    }
+    updatePartPickerRowUI(item.id, isChecked);
+  });
+  updatePartPickerSelectedCount();
+}
+
+function updatePartPickerSelectedCount() {
+  const countEl = document.getElementById('partPickerSelectedCount');
+  if (countEl) countEl.innerText = partPickerSelectedIds.size;
+  const btn = document.getElementById('partPickerConfirmBtn');
+  if (btn) {
+    if (partPickerSelectedIds.size > 0) {
+      btn.innerHTML = `<span>➕</span> 선택 ${partPickerSelectedIds.size}건 품의서에 추가`;
+      btn.className = 'px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-lg text-xs shadow transition cursor-pointer flex items-center gap-1.5';
+    } else {
+      btn.innerHTML = `<span>➕</span> 선택 품목 품의서에 추가`;
+      btn.className = 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow transition cursor-pointer flex items-center gap-1.5';
+    }
+  }
+}
+
+export function addSinglePartToPurchase(itemId, btnEl) {
+  const items = (window.cachedItems && Array.isArray(window.cachedItems)) ? window.cachedItems : [];
+  const item = items.find(it => String(it.id) === String(itemId));
+  if (!item) return;
+
+  const tbody = document.getElementById('purchaseItemsTbody');
+  if (!tbody) return;
+
+  const rows = tbody.querySelectorAll('tr');
+  const pName = item.part_name || item.partName || '';
+  const maker = item.maker || 'ISSI';
+  const unitPrice = parseFloat(item.unit_usd !== undefined ? item.unit_usd : (item.unitUsd || 0));
+  const qty = parseInt(item.stock || 1000, 10) || 1000;
+  const cust = item.customer && item.customer !== '-' ? item.customer : '';
+  const memo = cust ? `고객사 [${cust}] 납기 대응` : '안전재고 확보';
+
+  // 첫 번째 행이 기본 빈 상태인지 확인
+  if (rows.length === 1) {
+    const firstPartInput = rows[0].querySelector('input[name="part_no"]');
+    const firstPartVal = (firstPartInput?.value || '').trim();
+    if (!firstPartVal) {
+      // 1행 채우기
+      firstPartInput.value = pName;
+      const mInput = rows[0].querySelector('input[name="maker"]');
+      if (mInput) mInput.value = maker;
+      const pInput = rows[0].querySelector('input[name="unit_price"]');
+      if (pInput) pInput.value = unitPrice;
+      const qInput = rows[0].querySelector('input[name="qty"]');
+      if (qInput) qInput.value = qty;
+      const memoInput = rows[0].querySelector('input[name="memo"]');
+      if (memoInput) memoInput.value = memo;
+
+      updatePurchaseTableTotals();
+      if (btnEl) {
+        btnEl.innerText = '✓ 완료';
+        btnEl.className = 'px-2 py-1 bg-emerald-600 text-white rounded font-bold text-[10px] transition';
+        setTimeout(() => {
+          btnEl.innerText = '+ 추가';
+          btnEl.className = 'px-2 py-1 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded font-bold text-[10px] border border-indigo-200 transition cursor-pointer';
+        }, 1200);
+      }
+      return;
+    }
+  }
+
+  // 새 행 추가
+  addPurchaseItemRow({
+    part_no: pName,
+    maker: maker,
+    qty: qty,
+    unit_price: unitPrice,
+    memo: memo
+  });
+
+  if (btnEl) {
+    btnEl.innerText = '✓ 추가됨';
+    btnEl.className = 'px-2 py-1 bg-emerald-600 text-white rounded font-bold text-[10px] transition';
+    setTimeout(() => {
+      btnEl.innerText = '+ 추가';
+      btnEl.className = 'px-2 py-1 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded font-bold text-[10px] border border-indigo-200 transition cursor-pointer';
+    }, 1200);
+  }
+}
+
+export function confirmPartPickerSelection() {
+  if (partPickerSelectedIds.size === 0) {
+    alert('품의서에 추가할 부품 품목을 최소 1개 이상 체크해 주세요.');
+    return;
+  }
+
+  const items = (window.cachedItems && Array.isArray(window.cachedItems)) ? window.cachedItems : [];
+  const selectedItems = [];
+  partPickerSelectedIds.forEach(id => {
+    const it = items.find(x => String(x.id) === String(id));
+    if (it) selectedItems.push(it);
+  });
+
+  if (selectedItems.length === 0) {
+    alert('선택한 품목 데이터를 찾을 수 없습니다.');
+    return;
+  }
+
+  const tbody = document.getElementById('purchaseItemsTbody');
+  if (!tbody) return;
+
+  const rows = tbody.querySelectorAll('tr');
+  let startIdx = 0;
+
+  // 1행이 비어있는지 체크
+  if (rows.length === 1) {
+    const firstPartInput = rows[0].querySelector('input[name="part_no"]');
+    const firstPartVal = (firstPartInput?.value || '').trim();
+    if (!firstPartVal) {
+      const first = selectedItems[0];
+      firstPartInput.value = first.part_name || first.partName || '';
+      const mInput = rows[0].querySelector('input[name="maker"]');
+      if (mInput) mInput.value = first.maker || 'ISSI';
+      const pInput = rows[0].querySelector('input[name="unit_price"]');
+      if (pInput) pInput.value = parseFloat(first.unit_usd !== undefined ? first.unit_usd : (first.unitUsd || 0));
+      const qInput = rows[0].querySelector('input[name="qty"]');
+      if (qInput) qInput.value = parseInt(first.stock || 1000, 10) || 1000;
+      const memoInput = rows[0].querySelector('input[name="memo"]');
+      if (memoInput) memoInput.value = first.customer && first.customer !== '-' ? `고객사 [${first.customer}] 납기 대응` : '안전재고 확보';
+
+      startIdx = 1;
+    }
+  }
+
+  // 나머지 품목들 addPurchaseItemRow로 추가
+  for (let i = startIdx; i < selectedItems.length; i++) {
+    const it = selectedItems[i];
+    addPurchaseItemRow({
+      part_no: it.part_name || it.partName || '',
+      maker: it.maker || 'ISSI',
+      qty: parseInt(it.stock || 1000, 10) || 1000,
+      unit_price: parseFloat(it.unit_usd !== undefined ? it.unit_usd : (it.unitUsd || 0)),
+      memo: it.customer && it.customer !== '-' ? `고객사 [${it.customer}] 납기 대응` : '안전재고 확보'
+    });
+  }
+
+  updatePurchaseTableTotals();
+  closePartPickerModal();
 }
 
 export async function submitApproval(e) {
@@ -2137,8 +2651,21 @@ if (typeof window !== 'undefined') {
   window.numberToKoreanCurrency = numberToKoreanCurrency;
   window.updateKoreanCurrencyPreview = updateKoreanCurrencyPreview;
   window.addPurchaseItemRow = addPurchaseItemRow;
+  window.duplicatePurchaseItemRow = duplicatePurchaseItemRow;
   window.removePurchaseItemRow = removePurchaseItemRow;
   window.updatePurchaseTableTotals = updatePurchaseTableTotals;
+  window.handlePartNoAutocomplete = handlePartNoAutocomplete;
+  window.selectPartAutocomplete = selectPartAutocomplete;
+  window.openPartPickerModal = openPartPickerModal;
+  window.closePartPickerModal = closePartPickerModal;
+  window.filterPartPickerItems = filterPartPickerItems;
+  window.refreshPartPickerList = refreshPartPickerList;
+  window.togglePartPickerRow = togglePartPickerRow;
+  window.handlePartPickerCheckbox = handlePartPickerCheckbox;
+  window.togglePartPickerSelectAll = togglePartPickerSelectAll;
+  window.addSinglePartToPurchase = addSinglePartToPurchase;
+  window.confirmPartPickerSelection = confirmPartPickerSelection;
+  window.openPurchaseRequisitionForParts = openPurchaseRequisitionForParts;
   window.addExpenseItemRow = addExpenseItemRow;
   window.removeExpenseItemRow = removeExpenseItemRow;
   window.updateExpenseTableTotals = updateExpenseTableTotals;
