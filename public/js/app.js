@@ -2050,10 +2050,39 @@ async function saveCurrentForm() {
 }
 
 async function handleDeleteItem(id) {
-  if (!isCsOrAdminUser()) return;
-  if (!confirm("해당 건을 영구 삭제하시겠습니까?")) return;
+  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
+    ? window.isCsOrAdminUser() 
+    : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
+
+  if (!canEdit) {
+    alert("재고 품목 삭제 권한이 없습니다. (CS/관리자 전용 기능)");
+    return;
+  }
+
+  const item = (typeof getCachedItem === 'function') ? getCachedItem(id) : (window.cachedItems?.find(it => String(it.id) === String(id)));
+  const partName = item?.part_name || item?.partName || '재고 품목';
+  const po = item?.po_no || item?.poNo || '';
+  const poMsg = po ? ` (PO: ${po})` : '';
+
+  if (!confirm(`[${partName}]${poMsg} 해당 재고 품목을 영구 삭제하시겠습니까?\n삭제 후에는 데이터를 복구할 수 없습니다.`)) {
+    return;
+  }
+
   try {
     await deleteInventoryItem(id);
+
+    // 감사 로그 기록
+    try {
+      const logFn = window.recordAuditLog || (await import('./modules/audit.js')).recordAuditLog;
+      await logFn(id, partName, 'DELETE', `재고 품목 영구 삭제 (PO: ${po || '-'})`);
+    } catch (e) {
+      console.warn("감사 로그 삭제 기록 예외:", e);
+    }
+
+    alert("재고 품목이 성공적으로 삭제되었습니다.");
+    if (typeof window.closeItemDrawer === 'function') {
+      window.closeItemDrawer();
+    }
     resetCurrentForm();
     await refreshInventory();
   } catch (err) {
@@ -2490,6 +2519,7 @@ window.openItemDrawer = function(item) {
     : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
 
   const saveBtn = document.getElementById('drawerSaveBtn');
+  const deleteBtn = document.getElementById('drawerDeleteBtn');
   const badge = document.getElementById('drawerBadge');
 
   if (badge) {
@@ -2501,6 +2531,9 @@ window.openItemDrawer = function(item) {
 
   if (saveBtn) {
     saveBtn.classList.toggle('hidden', !canEdit);
+  }
+  if (deleteBtn) {
+    deleteBtn.classList.toggle('hidden', !canEdit);
   }
 
   drawer.querySelectorAll('input:not(#drawerTrackingNo), select, textarea').forEach(el => {
@@ -2639,6 +2672,21 @@ window.saveDrawerItem = async function() {
   } finally {
     if (btn) { btn.disabled = false; btn.innerText = "전체 변경사항 저장"; }
   }
+};
+
+window.deleteDrawerItem = async function() {
+  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
+    ? window.isCsOrAdminUser() 
+    : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
+
+  if (!canEdit) {
+    alert("재고 품목 삭제 권한이 없습니다. (CS/관리자 전용 기능)");
+    return;
+  }
+
+  const id = document.getElementById('drawerItemId')?.value;
+  if (!id) return;
+  await handleDeleteItem(id);
 };
 
 // ========================================================

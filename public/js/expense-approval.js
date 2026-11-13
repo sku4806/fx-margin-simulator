@@ -96,6 +96,9 @@ export function syncPaymentAuthSession(session) {
   }
 
   refreshAdminPaymentAuthUI();
+  if (typeof window.updateAuthHeaderUI === 'function') {
+    window.updateAuthHeaderUI();
+  }
 }
 window.syncPaymentAuthSession = syncPaymentAuthSession;
 
