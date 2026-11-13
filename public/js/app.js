@@ -997,6 +997,68 @@ function updateLineFilterCounts(items) {
   lineFilter.value = Array.from(lineFilter.options).some(o => o.value === currentVal) ? currentVal : 'ALL';
 }
 
+export const SALES_MASTER = [
+  { key: 'BSK', match: ['bsk', '본사', '본사 일반재고', '일반재고'], label: '본사 일반재고' },
+  { key: 'KELLY', match: ['kelly', '김경래', '김경래 차장'], label: 'Kelly (김경래 차장)' },
+  { key: 'WILLIAM', match: ['william', 'wiliam', '고기봉', '고기봉 부장'], label: 'William (고기봉 부장)' },
+  { key: 'ALLEN', match: ['allen', '박재범', '박재범 부장'], label: 'Allen (박재범 부장)' },
+  { key: 'STEVE', match: ['steve', '황환', '황 환', '황환 이사'], label: 'Steve (황환 이사)' },
+  { key: 'JOEY', match: ['joey', 'joye', '조지윤', '조지윤 과장'], label: 'Joey (조지윤 과장)' },
+  { key: 'DUSTIN', match: ['dustin', '김명호', '김명호 이사'], label: 'Dustin (김명호 이사)' },
+  { key: 'SCOTT', match: ['scott'], label: 'Scott' },
+  { key: 'WILSON', match: ['wilson'], label: 'Wilson' },
+  { key: 'ERIC', match: ['eric', '이재상', '이재상 부장'], label: 'Eric (이재상 부장)' },
+  { key: 'TIMOTHY', match: ['timothy', '박대원', '박대원 전무'], label: 'Timothy (박대원 전무)' },
+  { key: 'PHILIP', match: ['philip'], label: 'Philip' },
+  { key: 'TONY', match: ['tony', '이동일', '이동일 부사장'], label: 'Tony (이동일 부사장)' },
+  { key: 'KEVIN', match: ['kevin'], label: 'Kevin' },
+  { key: 'JOSEPH', match: ['joseph'], label: 'Joseph' },
+  { key: 'PAUL', match: ['paul', '김현진', '김현진 과장'], label: 'Paul (김현진 과장)' },
+  { key: 'LOGAN', match: ['logan', '이민수', '이민수 대리'], label: 'Logan (이민수 대리)' }
+];
+window.SALES_MASTER = SALES_MASTER;
+
+function updateSalesFilterCounts(items) {
+  const salesFilter = document.getElementById('filterSales') || document.getElementById('filterOwner');
+  if (!salesFilter) return;
+
+  const currentVal = (salesFilter.value || 'ALL').trim().toUpperCase();
+  const list = items || [];
+
+  const counts = {};
+  SALES_MASTER.forEach(s => { counts[s.key] = 0; });
+  let othersCount = 0;
+
+  list.forEach(it => {
+    const owner = String(it.owner || '').trim().toLowerCase();
+    const matched = SALES_MASTER.find(s => 
+      s.key.toLowerCase() === owner || s.match.some(m => m.toLowerCase() === owner)
+    );
+    if (matched) {
+      counts[matched.key] = (counts[matched.key] || 0) + 1;
+    } else {
+      othersCount += 1;
+    }
+  });
+
+  salesFilter.innerHTML = `
+    <option value="ALL">Sales 전체 (${list.length.toLocaleString()}건)</option>
+    ${SALES_MASTER.map(s => `<option value="${s.key}">${s.label} (${(counts[s.key] || 0).toLocaleString()}건)</option>`).join('')}
+    ${othersCount > 0 ? `<option value="OTHERS">기타 (${othersCount.toLocaleString()}건)</option>` : ''}
+  `;
+
+  const matchedOpt = Array.from(salesFilter.options).find(o => {
+    const ov = o.value.trim().toUpperCase();
+    return ov === currentVal ||
+           (currentVal === 'JOYE' && ov === 'JOEY') ||
+           (currentVal === 'JOEY' && ov === 'JOEY') ||
+           (currentVal && ov.includes(currentVal)) ||
+           (currentVal && currentVal.includes(ov));
+  });
+  salesFilter.value = matchedOpt ? matchedOpt.value : 'ALL';
+}
+window.updateSalesFilterCounts = updateSalesFilterCounts;
+
 async function refreshInventory() {
   try {
     const items = await fetchInventoryItems();
@@ -1004,6 +1066,7 @@ async function refreshInventory() {
     window.cachedItems = cachedItems;
 
     updateLineFilterCounts(cachedItems);
+    updateSalesFilterCounts(cachedItems);
     callRenderInventoryHeaders(activeTab);
 
     applyFilters();
@@ -1029,7 +1092,7 @@ function applyFilters() {
     filtered = filtered.filter(item => {
       const part = String(item.partName || item.part_name || '').toLowerCase();
       const maker = String(item.maker || '').toLowerCase();
-      const owner = String(item.owner || '').toLowerCase();
+      const owner = String(item.owner || '').trim().toLowerCase();
       const cust = String(item.customer || '').toLowerCase();
       const realCust = String(item.realCustomer || item.real_customer || '').toLowerCase();
       const dc = String(item.dateCode || item.date_code || '').toLowerCase();
@@ -1037,9 +1100,22 @@ function applyFilters() {
       const po = String(item.poNo || item.po_no || '').toLowerCase();
       const memo = String(item.memo || '').toLowerCase();
 
+      // Sales / Owner alias and Korean name expansion (e.g., joye -> joey, 조지윤, 김현진 -> paul, 황환 -> steve)
+      let matchOwner = owner.includes(q);
+      if (!matchOwner) {
+        const matchedSales = SALES_MASTER.find(s => 
+          s.key.toLowerCase() === owner || s.match.some(m => m.toLowerCase() === owner)
+        );
+        if (matchedSales) {
+          matchOwner = matchedSales.match.some(m => m.toLowerCase().includes(q) || q.includes(m.toLowerCase())) ||
+                       matchedSales.label.toLowerCase().includes(q) ||
+                       (q === 'joye' && matchedSales.key === 'JOEY');
+        }
+      }
+
       return part.includes(q) ||
              maker.includes(q) ||
-             owner.includes(q) ||
+             matchOwner ||
              cust.includes(q) ||
              realCust.includes(q) ||
              dc.includes(q) ||
@@ -1087,14 +1163,36 @@ function applyFilters() {
   }
 
   if (selectedSales && !['ALL', '전체', 'Sales 전체', '세일즈 전체', ''].includes(selectedSales)) {
-    const targetSales = selectedSales.toLowerCase();
-    filtered = filtered.filter(item => {
-      const owner = String(item.owner || '').trim().toLowerCase();
-      if (targetSales === 'dustin') return owner === 'dustin' || owner.includes('dustin');
-      if (targetSales === 'william') return owner === 'william' || owner.includes('william');
-      if (targetSales === 'bsk' || targetSales.includes('본사')) return owner === 'bsk' || owner.includes('본사');
-      return owner === targetSales || owner.includes(targetSales);
-    });
+    const target = selectedSales.trim().toLowerCase();
+
+    if (target === 'others' || target === '기타') {
+      filtered = filtered.filter(item => {
+        const owner = String(item.owner || '').trim().toLowerCase();
+        const isMajor = SALES_MASTER.some(s => 
+          s.key.toLowerCase() === owner || s.match.some(m => m.toLowerCase() === owner)
+        );
+        return !isMajor;
+      });
+    } else {
+      const master = SALES_MASTER.find(s => 
+        s.key.toLowerCase() === target ||
+        s.match.some(m => m.toLowerCase() === target) ||
+        target.includes(s.key.toLowerCase()) ||
+        (s.label && target.includes(s.label.toLowerCase())) ||
+        (target === 'joye' && s.key === 'JOEY')
+      );
+
+      filtered = filtered.filter(item => {
+        const owner = String(item.owner || '').trim().toLowerCase();
+        if (master) {
+          return master.key.toLowerCase() === owner || master.match.some(m => m.toLowerCase() === owner);
+        }
+        if (target === 'joye' || target === 'joey') {
+          return owner === 'joey' || owner === 'joye';
+        }
+        return owner === target || owner.includes(target);
+      });
+    }
   }
 
   if (selectedStatus && !['ALL', '전체', '수금 전체', '상태 전체', ''].includes(selectedStatus)) {
@@ -1147,7 +1245,12 @@ function setSelectValue(selectId, customInputId, val, customVal) {
 
   const matchedOpt = Array.from(sel.options).find(opt => {
     const optVal = opt.value.trim().toLowerCase();
-    return optVal === targetLower || (targetLower && optVal.includes(targetLower)) || (targetLower && targetLower.includes(optVal));
+    const optText = opt.text.trim().toLowerCase();
+    return optVal === targetLower || 
+           (targetLower && optVal.includes(targetLower)) || 
+           (targetLower && targetLower.includes(optVal)) ||
+           (optText && optText.includes(targetLower)) ||
+           ((targetLower === 'joey' || targetLower === 'joye') && (optVal === 'joey' || optVal === 'joye'));
   });
 
   if (matchedOpt && matchedOpt.value !== customVal) {
@@ -2345,6 +2448,7 @@ window.setCachedItems = (items) => {
   cachedItems = items || [];
   window.cachedItems = cachedItems;
   updateLineFilterCounts(cachedItems);
+  updateSalesFilterCounts(cachedItems);
   callRenderInventoryHeaders(activeTab);
   applyFilters();
 };

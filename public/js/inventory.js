@@ -226,6 +226,28 @@ export function getCachedItem(id) {
 export function filterItems({ query = '', filterMaker = '', filterOwner = '', filterPayment = '' }) {
   const q = query.toLowerCase().trim();
   return cachedItems.filter(item => {
+    const owner = (item.owner || '').toLowerCase().trim();
+    let matchOwnerSearch = owner.includes(q);
+    if (!matchOwnerSearch && q) {
+      if ((q === 'joye' || q === 'joey' || q.includes('조지윤')) && (owner === 'joey' || owner === 'joye')) {
+        matchOwnerSearch = true;
+      } else if ((q === 'paul' || q.includes('김현진')) && owner === 'paul') {
+        matchOwnerSearch = true;
+      } else if ((q === 'steve' || q.includes('황환')) && owner === 'steve') {
+        matchOwnerSearch = true;
+      } else if ((q === 'dustin' || q.includes('김명호')) && owner === 'dustin') {
+        matchOwnerSearch = true;
+      } else if ((q === 'william' || q.includes('고기봉')) && (owner === 'william' || owner === 'wiliam')) {
+        matchOwnerSearch = true;
+      } else if ((q === 'allen' || q.includes('박재범')) && owner === 'allen') {
+        matchOwnerSearch = true;
+      } else if ((q === 'kelly' || q.includes('김경래')) && owner === 'kelly') {
+        matchOwnerSearch = true;
+      } else if ((q === 'eric' || q.includes('이재상')) && owner === 'eric') {
+        matchOwnerSearch = true;
+      }
+    }
+
     const matchQuery = !q ||
       item.partName.toLowerCase().includes(q) ||
       item.maker.toLowerCase().includes(q) ||
@@ -233,14 +255,24 @@ export function filterItems({ query = '', filterMaker = '', filterOwner = '', fi
       item.realCustomer.toLowerCase().includes(q) ||
       item.poNo.toLowerCase().includes(q) ||
       item.application.toLowerCase().includes(q) ||
-      item.owner.toLowerCase().includes(q) ||
+      matchOwnerSearch ||
       item.dateCode.toLowerCase().includes(q) ||
       item.trackingNo.toLowerCase().includes(q) ||
       item.invoiceNo.toLowerCase().includes(q);
 
-    const matchMaker = !filterMaker || item.maker === filterMaker;
-    const matchOwner = !filterOwner || item.owner === filterOwner;
-    const matchPayment = !filterPayment || item.paymentStatus === filterPayment;
+    const matchMaker = !filterMaker || item.maker.toLowerCase() === filterMaker.toLowerCase();
+    
+    let matchOwner = true;
+    if (filterOwner && !['ALL', '전체', 'SALES 전체', '세일즈 전체'].includes(filterOwner.toUpperCase())) {
+      const fo = filterOwner.toLowerCase().trim();
+      if (fo === 'joye' || fo === 'joey') {
+        matchOwner = owner === 'joey' || owner === 'joye';
+      } else {
+        matchOwner = owner === fo || owner.includes(fo) || fo.includes(owner);
+      }
+    }
+
+    const matchPayment = !filterPayment || item.paymentStatus.toLowerCase() === filterPayment.toLowerCase();
 
     return matchQuery && matchMaker && matchOwner && matchPayment;
   });
