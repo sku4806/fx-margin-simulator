@@ -385,29 +385,27 @@ export function renderInventoryHeaders(activeTab) {
     thead.innerHTML = `
       <tr class="bg-slate-100/95 text-slate-700 text-[11px] font-bold border-b border-slate-200 select-none">
         <th class="py-2.5 px-3 text-center w-12 no-print"><input type="checkbox" id="quoteSelectAll" class="rounded cursor-pointer" title="전체 선택"></th>
-        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[5%]">KIND</th>
-        <th class="py-2.5 px-2 text-left w-[13%]">CNAME / 입고일</th>
-        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">SALES</th>
-        <th class="py-2.5 px-2 text-left w-[24%] min-w-[210px]">PART# / MFG</th>
+        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[6%]">KIND</th>
+        <th class="py-2.5 px-2 text-left w-[14%]">CNAME / 입고일</th>
+        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[8%]">SALES</th>
+        <th class="py-2.5 px-2 text-left w-[27%] min-w-[210px]">PART# / MFG</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">재고량 / 배정</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">원가(₩) / 가용</th>
         <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">AMOUNT(₩)</th>
-        <th class="py-2.5 px-2 text-left w-[17%]">PONO</th>
-        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">수금</th>
+        <th class="py-2.5 px-2 text-left w-[18%]">PONO</th>
       </tr>
     `;
   } else {
     thead.innerHTML = `
       <tr class="bg-slate-100/95 text-slate-700 text-[10px] font-bold border-b border-slate-200 select-none">
         <th class="py-2.5 px-3 text-center w-12 no-print"><input type="checkbox" id="quoteSelectAllFulfillment" class="rounded cursor-pointer" title="전체 선택"></th>
-        <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-[7%]">상태 / SALES</th>
-        <th class="py-2.5 px-2 text-left w-[13%]">계약처</th>
-        <th class="py-2.5 px-2 text-left w-[17%]">PART NO / MFG</th>
-        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[8%]">수량 / 배정</th>
-        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">판매·원가(₩) / 가용</th>
-        <th class="py-2.5 px-2 text-left whitespace-nowrap w-[10%]">입고 / 출고일</th>
-        <th class="py-2.5 px-2 text-left w-[17%]">PO / 송장(B/L)</th>
-        <th class="py-2.5 px-2 text-center whitespace-nowrap w-[7%]">수금</th>
+        <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-[8%]">상태 / SALES</th>
+        <th class="py-2.5 px-2 text-left w-[14%]">계약처</th>
+        <th class="py-2.5 px-2 text-left w-[19%]">PART NO / MFG</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[9%]">수량 / 배정</th>
+        <th class="py-2.5 px-2 text-right whitespace-nowrap w-[10%]">판매·원가(₩) / 가용</th>
+        <th class="py-2.5 px-2 text-left whitespace-nowrap w-[11%]">입고 / 출고일</th>
+        <th class="py-2.5 px-2 text-left w-[16%]">PO / 송장(B/L)</th>
         <th class="py-2.5 px-2 text-center whitespace-nowrap w-[13%]">관리</th>
       </tr>
     `;
@@ -503,11 +501,6 @@ function generateLegacyMasterRow(item, canEdit) {
       </td>
       <td class="py-2.5 px-2 align-middle max-w-[220px]">
         ${poDisplayHtml}
-      </td>
-      <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
-        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${paymentStatus === '완료' || paymentStatus === '수금완료' || paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">
-          ${paymentStatus === '완료' || paymentStatus === '수금완료' || paymentStatus === 'paid' ? '완료' : '미수'}
-        </span>
       </td>
     </tr>
   `;
@@ -611,11 +604,7 @@ function generateFulfillmentRow(item, canEdit) {
           ${trackingNo ? `<button type="button" onclick="event.stopPropagation(); window.openTrackingModal && window.openTrackingModal('${trackingNo}')" class="shrink-0 text-[9px] bg-indigo-50 text-indigo-700 font-bold px-1 py-0.5 rounded border">🚚</button>` : ''}
         </div>
       </td>
-      <!-- 8. 수금 -->
-      <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
-        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${paymentStatus === '완료' || paymentStatus === '수금완료' ? 'bg-green-100 text-green-800' : 'bg-rose-100 text-rose-800'}">${paymentStatus}</span>
-      </td>
-      <!-- 9. 관리 (권한 분기: CS/Admin -> 수정/분할/삭제, Sales -> 조회전용) -->
+      <!-- 8. 관리 (권한 분기: CS/Admin -> 수정/분할/삭제, Sales -> 조회전용) -->
       <td class="py-2.5 px-2 text-center select-none whitespace-nowrap align-middle" onclick="event.stopPropagation()">
         ${isAuthorized ? `
         <div class="inline-flex items-center justify-center gap-1">
@@ -802,7 +791,7 @@ function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit
   renderInventoryHeaders(activeTab);
 
   if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="py-8 text-center text-slate-400">조회된 데이터가 없습니다.</td></tr>`;
     return;
   }
 
