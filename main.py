@@ -1,5 +1,6 @@
 # main.py
 import os
+import re
 import time
 import datetime
 from typing import Optional, List, Dict, Any
@@ -31,33 +32,91 @@ SUPABASE_SERVICE_KEY = (
 
 app = FastAPI(title="FX Margin Simulator")
 
-# 환율 캐싱 변수
-CACHED_FX = {"rate": 1380.0, "updated_at": 0}
+# 서울외국환중개(SMBS) 실시간 고시환율 캐싱
+CACHED_FX = {
+    "rate": 1332.40,
+    "diff": 0.0,
+    "source": "SMBS (서울외국환중개)",
+    "tr_date": "",
+    "updated_at": 0
+}
 CACHE_TTL = 300  # 5분 캐시
 
-def fetch_current_fx_rate() -> float:
+def fetch_current_fx_rate() -> dict:
     now = time.time()
-    if now - CACHED_FX["updated_at"] < CACHE_TTL:
-        return CACHED_FX["rate"]
+    if now - CACHED_FX["updated_at"] < CACHE_TTL and CACHED_FX["updated_at"] > 0:
+        return CACHED_FX
     
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "http://www.smbs.biz/ExRate/TodayExRate.jsp"
+    }
+
+    # 1. 서울외국환중개(SMBS - http://www.smbs.biz/ExRate/TodayExRate.jsp) 실시간 고시환율 스크래핑
     try:
-        # 글로벌 오픈 환율 엔드포인트 (USD 기준)
+        from datetime import datetime, timezone, timedelta
+        kst = timezone(timedelta(hours=9))
+        tr_date = datetime.now(kst).strftime("%Y-%m-%d")
+
+        # TodayExRate.jsp 에서 금일 고시 기준일자(tr_date) 추출
+        try:
+            page_res = requests.get("http://www.smbs.biz/ExRate/TodayExRate.jsp", headers=headers, timeout=5)
+            if page_res.status_code == 200:
+                html = page_res.content.decode("euc-kr", errors="replace")
+                m_date = re.search(r'tr_date=([0-9]{4}-[0-9]{2}-[0-9]{2})', html)
+                if m_date:
+                    tr_date = m_date.group(1)
+        except Exception as pe:
+            print(f"[WARN] SMBS TodayExRate.jsp 페이지 조회 예외: {pe}")
+
+        # TodayExRate_flash.jsp 호출하여 USD 고시환율 및 전일대비 변동 추출
+        flash_url = f"http://www.smbs.biz/Flash/TodayExRate_flash.jsp?tr_date={tr_date}"
+        flash_res = requests.get(flash_url, headers=headers, timeout=5)
+        if flash_res.status_code == 200:
+            content = flash_res.content.decode("euc-kr", errors="replace")
+            usd_m = re.search(r'USD=([0-9,.]+)', content)
+            if usd_m:
+                rate_val = float(usd_m.group(1).replace(",", ""))
+                diff_m = re.search(r'diff1=([0-9+-\.]+)', content)
+                diff_val = float(diff_m.group(1)) if diff_m else 0.0
+
+                CACHED_FX["rate"] = rate_val
+                CACHED_FX["diff"] = diff_val
+                CACHED_FX["source"] = "SMBS (서울외국환중개)"
+                CACHED_FX["tr_date"] = tr_date
+                CACHED_FX["updated_at"] = now
+                print(f"[INFO] SMBS 환율 연동 성공: ₩{rate_val:,.2f} (변동: {diff_val:+,.2f}원) [기준일: {tr_date}]")
+                return CACHED_FX
+    except Exception as e:
+        print(f"[WARN] SMBS 실시간 환율 조회 실패: {e}")
+
+    # 2. SMBS 일시적 오류 시 글로벌 오픈 환율 API로 보조 폴백
+    try:
         res = requests.get("https://open.er-api.com/v6/latest/USD", timeout=5)
         data = res.json()
         if data.get("result") == "success":
-            rate = data["rates"]["KRW"]
-            CACHED_FX["rate"] = float(rate)
+            rate = float(data["rates"]["KRW"])
+            CACHED_FX["rate"] = rate
+            CACHED_FX["diff"] = 0.0
+            CACHED_FX["source"] = "Open Exchange (Fallback)"
             CACHED_FX["updated_at"] = now
-            return CACHED_FX["rate"]
+            return CACHED_FX
     except Exception as e:
-        print(f"[WARN] 환율 조회 실패, 캐시값 유지: {e}")
-    
-    return CACHED_FX["rate"]
+        print(f"[WARN] 글로벌 환율 보조 조회 실패: {e}")
+
+    return CACHED_FX
 
 @app.get("/api/fx-rate")
 def get_fx_rate():
-    rate = fetch_current_fx_rate()
-    return {"currency": "USD/KRW", "current_rate": rate}
+    fx_info = fetch_current_fx_rate()
+    return {
+        "currency": "USD/KRW",
+        "current_rate": fx_info["rate"],
+        "diff": fx_info.get("diff", 0.0),
+        "source": fx_info.get("source", "SMBS (서울외국환중개)"),
+        "tr_date": fx_info.get("tr_date", ""),
+        "updated_at": fx_info.get("updated_at", 0)
+    }
 
 # --- MS-SQL 레거시 세일즈 마스터 [frmQuotationSQL] 견적 연동 API ---
 @app.get("/api/quotations")

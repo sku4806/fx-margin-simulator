@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import datetime
@@ -30,29 +31,87 @@ SUPABASE_SERVICE_KEY = (
     "sb_publishable_0TB2JQq4BVfvihySxCbbkw_v4ZRAF80"
 ).strip()
 
-# 인메모리 환율 캐시 (5분 유지)
-CACHED_FX = {"rate": 1380.0, "updated_at": 0}
+# 서울외국환중개(SMBS) 실시간 고시환율 인메모리 캐시 (5분 유지)
+CACHED_FX = {
+    "rate": 1332.40,
+    "diff": 0.0,
+    "source": "SMBS (서울외국환중개)",
+    "tr_date": "",
+    "updated_at": 0
+}
 CACHE_TTL = 300
 
-def get_current_fx() -> float:
+def get_current_fx() -> dict:
     now = time.time()
-    if now - CACHED_FX["updated_at"] < CACHE_TTL:
-        return CACHED_FX["rate"]
+    if now - CACHED_FX["updated_at"] < CACHE_TTL and CACHED_FX["updated_at"] > 0:
+        return CACHED_FX
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "http://www.smbs.biz/ExRate/TodayExRate.jsp"
+    }
+
+    # 1. 서울외국환중개 (SMBS) 실시간 고시환율 스크래핑
+    try:
+        from datetime import datetime, timezone, timedelta
+        kst = timezone(timedelta(hours=9))
+        tr_date = datetime.now(kst).strftime("%Y-%m-%d")
+
+        try:
+            page_res = requests.get("http://www.smbs.biz/ExRate/TodayExRate.jsp", headers=headers, timeout=5)
+            if page_res.status_code == 200:
+                html = page_res.content.decode("euc-kr", errors="replace")
+                m_date = re.search(r'tr_date=([0-9]{4}-[0-9]{2}-[0-9]{2})', html)
+                if m_date:
+                    tr_date = m_date.group(1)
+        except Exception:
+            pass
+
+        flash_url = f"http://www.smbs.biz/Flash/TodayExRate_flash.jsp?tr_date={tr_date}"
+        flash_res = requests.get(flash_url, headers=headers, timeout=5)
+        if flash_res.status_code == 200:
+            content = flash_res.content.decode("euc-kr", errors="replace")
+            usd_m = re.search(r'USD=([0-9,.]+)', content)
+            if usd_m:
+                rate_val = float(usd_m.group(1).replace(",", ""))
+                diff_m = re.search(r'diff1=([0-9+-\.]+)', content)
+                diff_val = float(diff_m.group(1)) if diff_m else 0.0
+
+                CACHED_FX["rate"] = rate_val
+                CACHED_FX["diff"] = diff_val
+                CACHED_FX["source"] = "SMBS (서울외국환중개)"
+                CACHED_FX["tr_date"] = tr_date
+                CACHED_FX["updated_at"] = now
+                return CACHED_FX
+    except Exception:
+        pass
+
+    # 2. 보조 폴백
     try:
         res = requests.get("https://open.er-api.com/v6/latest/USD", timeout=5)
         data = res.json()
         if data.get("result") == "success":
             CACHED_FX["rate"] = float(data["rates"]["KRW"])
+            CACHED_FX["diff"] = 0.0
+            CACHED_FX["source"] = "Open Exchange (Fallback)"
             CACHED_FX["updated_at"] = now
-            return CACHED_FX["rate"]
+            return CACHED_FX
     except Exception:
         pass
-    return CACHED_FX["rate"]
+
+    return CACHED_FX
 
 @app.get("/api/fx-rate")
 def get_fx_rate():
-    rate = get_current_fx()
-    return {"currency": "USD/KRW", "current_rate": rate}
+    fx_info = get_current_fx()
+    return {
+        "currency": "USD/KRW",
+        "current_rate": fx_info["rate"],
+        "diff": fx_info.get("diff", 0.0),
+        "source": fx_info.get("source", "SMBS (서울외국환중개)"),
+        "tr_date": fx_info.get("tr_date", ""),
+        "updated_at": fx_info.get("updated_at", 0)
+    }
 
 # ========================================================
 # 📋 Vercel Serverless Supabase 견적 이력 API (Service Key 권한 우회)

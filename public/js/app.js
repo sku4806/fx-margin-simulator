@@ -317,8 +317,11 @@ function debounce(func, delay = 250) {
 }
 
 let cachedItems = [];
-let rawFxRate = 1380.0;
-let appliedFxRate = 1380.0;
+let rawFxRate = 1332.40;
+let appliedFxRate = 1332.40;
+let currentFxDiff = 0.0;
+let currentFxSource = "SMBS (서울외국환중개)";
+let currentFxDate = "";
 let activeTab = 'sales';
 let editingItemId = null;
 let targetSplitId = null;
@@ -470,7 +473,10 @@ export async function bootstrap() {
   try {
     const fxRes = await fetch('/api/fx-rate');
     const fxData = await fxRes.json();
-    rawFxRate = fxData.current_rate || 1380.0;
+    rawFxRate = fxData.current_rate || 1332.40;
+    currentFxDiff = fxData.diff || 0.0;
+    currentFxSource = fxData.source || "SMBS (서울외국환중개)";
+    currentFxDate = fxData.tr_date || "";
   } catch (err) {
     console.warn("FX 기본값 유지", err);
   }
@@ -1338,6 +1344,22 @@ function clearSelectedStockCard() {
   if (emptyState) emptyState.classList.remove('hidden');
   if (detailCard) detailCard.classList.add('hidden');
 
+  // Reset margin controls to 20% default
+  currentTargetMarginRate = 0.20;
+  const customMarginInput = document.getElementById('inputCustomMargin');
+  if (customMarginInput) {
+    customMarginInput.value = '20';
+    customMarginInput.classList.remove('ring-2', 'ring-indigo-400', 'border-indigo-500');
+  }
+  document.querySelectorAll('.btn-margin-preset').forEach(b => {
+    const bMargin = parseFloat(b.dataset.margin);
+    if (Math.round(bMargin * 100) === 20) {
+      b.className = 'btn-margin-preset flex-1 sm:flex-none px-2.5 sm:px-2.5 py-1 sm:py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors text-center cursor-pointer';
+    } else {
+      b.className = 'btn-margin-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer';
+    }
+  });
+
   // Clear row active highlight if any
   document.querySelectorAll('tr[id^="row-item-"]').forEach(tr => {
     tr.classList.remove('bg-indigo-100/80', 'ring-2', 'ring-indigo-400');
@@ -1383,23 +1405,59 @@ function setupSalesCalculatorControls() {
   document.getElementById('btnQuickQty5k')?.addEventListener('click', (e) => { e.stopPropagation(); setQty(5000); });
   document.getElementById('btnQuickQty10k')?.addEventListener('click', (e) => { e.stopPropagation(); setQty(10000); });
 
-  // Margin Preset Buttons
-  document.querySelectorAll('.btn-margin-preset').forEach(btn => {
+  // Margin Preset Buttons & Custom Margin Input
+  const customMarginInput = document.getElementById('inputCustomMargin');
+  const presetButtons = document.querySelectorAll('.btn-margin-preset');
+
+  const updatePresetUI = (marginRate) => {
+    const pct = Math.round(marginRate * 1000) / 10;
+    let matched = false;
+    presetButtons.forEach(b => {
+      const bPct = Math.round(parseFloat(b.dataset.margin) * 100);
+      if (Math.abs(bPct - pct) < 0.05) {
+        matched = true;
+        b.className = 'btn-margin-preset flex-1 sm:flex-none px-2.5 sm:px-2.5 py-1 sm:py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors text-center cursor-pointer';
+      } else {
+        b.className = 'btn-margin-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer';
+      }
+    });
+
+    if (customMarginInput) {
+      if (!matched) {
+        customMarginInput.classList.add('ring-2', 'ring-indigo-400', 'border-indigo-500');
+      } else {
+        customMarginInput.classList.remove('ring-2', 'ring-indigo-400', 'border-indigo-500');
+      }
+    }
+  };
+
+  presetButtons.forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const margin = parseFloat(btn.dataset.margin);
       if (isNaN(margin)) return;
       currentTargetMarginRate = margin;
-
-      // Update button styling
-      document.querySelectorAll('.btn-margin-preset').forEach(b => {
-        b.className = 'btn-margin-preset px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors';
-      });
-      btn.className = 'btn-margin-preset px-2.5 py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors';
-
+      if (customMarginInput) {
+        const pctNum = Math.round(margin * 1000) / 10;
+        customMarginInput.value = pctNum;
+      }
+      updatePresetUI(margin);
       runEngine();
     });
   });
+
+  if (customMarginInput) {
+    const handleCustomMargin = () => {
+      const val = parseFloat(customMarginInput.value);
+      if (isNaN(val) || val < 0) return;
+      const capped = Math.min(val, 99.0);
+      currentTargetMarginRate = capped / 100.0;
+      updatePresetUI(currentTargetMarginRate);
+      runEngine();
+    };
+    customMarginInput.addEventListener('input', handleCustomMargin);
+    customMarginInput.addEventListener('change', handleCustomMargin);
+  }
 }
 
 window.renderSelectedStockCard = renderSelectedStockCard;
@@ -1695,8 +1753,29 @@ function updateFxDisplay() {
   const bufferText = buffer > 0 ? ` (+${buffer}원)` : "";
   const liveFxEl = document.getElementById('liveFx');
   if (liveFxEl) {
-    liveFxEl.innerText = `$1.00 (₩${Math.round(appliedFxRate).toLocaleString()})${bufferText}`;
+    liveFxEl.innerText = `$1.00 = ₩${rawFxRate.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}${bufferText}`;
   }
+
+  const diffEl = document.getElementById('liveFxDiff');
+  if (diffEl && currentFxDiff !== undefined && currentFxDiff !== null) {
+    diffEl.classList.remove('hidden');
+    if (currentFxDiff < 0) {
+      diffEl.className = "text-[10px] sm:text-xs font-bold text-sky-400";
+      diffEl.innerText = `▼ ${Math.abs(currentFxDiff).toFixed(2)}`;
+    } else if (currentFxDiff > 0) {
+      diffEl.className = "text-[10px] sm:text-xs font-bold text-rose-400";
+      diffEl.innerText = `▲ ${Math.abs(currentFxDiff).toFixed(2)}`;
+    } else {
+      diffEl.className = "text-[10px] sm:text-xs font-medium text-slate-300";
+      diffEl.innerText = `- 0.00`;
+    }
+  }
+
+  const sourceBadge = document.getElementById('fxSourceBadge');
+  if (sourceBadge && currentFxDate) {
+    sourceBadge.title = `${currentFxSource} [고시일: ${currentFxDate}] 실시간 매매기준율`;
+  }
+
   runEngine();
   if (activeTab === 'sales') {
     document.getElementById('formSection')?.classList.add('hidden');
