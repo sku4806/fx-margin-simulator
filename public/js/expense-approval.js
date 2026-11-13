@@ -1282,6 +1282,13 @@ export function openPurchaseRequisitionForParts(parts = []) {
   const currEl = document.getElementById('appPurchaseCurrency');
   if (currEl) currEl.value = currency;
 
+  // 적용 환율 동기화 (Tab 1 환율 또는 실시간 SMBS 고시환율 동기화)
+  const purchaseFxEl = document.getElementById('appPurchaseFxRate');
+  const liveFx = (typeof window.getLiveFxRate === 'function') ? window.getLiveFxRate() : (window.appliedFxRate || window.rawFxRate || document.getElementById('inputFxRate')?.value);
+  if (purchaseFxEl && liveFx && parseFloat(liveFx) > 0) {
+    purchaseFxEl.value = parseFloat(liveFx).toFixed(2);
+  }
+
   // 5. 다중 품목 테이블 채우기
   const tbody = document.getElementById('purchaseItemsTbody');
   if (tbody) {

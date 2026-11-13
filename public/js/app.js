@@ -477,6 +477,9 @@ export async function bootstrap() {
     currentFxDiff = fxData.diff || 0.0;
     currentFxSource = fxData.source || "SMBS (서울외국환중개)";
     currentFxDate = fxData.tr_date || "";
+    window.rawFxRate = rawFxRate;
+    window.appliedFxRate = appliedFxRate;
+    window.getLiveFxRate = () => appliedFxRate;
   } catch (err) {
     console.warn("FX 기본값 유지", err);
   }
@@ -570,6 +573,12 @@ function initCustomerMasterAutocomplete() {
   const inputRealCust = document.getElementById('inputRealCustomer');
   if (inputRealCust) {
     attachCustomerAutocomplete(inputRealCust);
+  }
+
+  // 5. 전자결재 구매품의서 (실수요처 / 배정 고객사)
+  const appPurchaseCust = document.getElementById('appPurchaseCustomer');
+  if (appPurchaseCust) {
+    attachCustomerAutocomplete(appPurchaseCust);
   }
 }
 
@@ -1750,6 +1759,7 @@ function updateFxDisplay() {
   const bufferEl = document.getElementById('fxBufferSelect');
   const buffer = bufferEl ? (parseFloat(bufferEl.value) || 0) : 0;
   appliedFxRate = rawFxRate + buffer;
+  window.appliedFxRate = appliedFxRate;
   const bufferText = buffer > 0 ? ` (+${buffer}원)` : "";
   const liveFxEl = document.getElementById('liveFx');
   if (liveFxEl) {

@@ -3,7 +3,7 @@ import re
 import json
 import time
 import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -1073,4 +1073,131 @@ def price_history(part_no: str):
             "quotations": quotations,
             "purchase_orders": matching_pos
         }
+    }
+
+# ========================================================
+# 📑 전자결재 구매품의서 -> ERP 발주(PO) 생성 브릿지 API
+# ========================================================
+ALLOWED_APPROVAL_ADMINS = {
+    "timothy@bigshine.co.kr",
+    "tony@bigshine.co.kr",
+    "nathan@bigshine.co.kr"
+}
+
+class PurchaseBridgeInput(BaseModel):
+    doc_no: str
+    part_name: Optional[str] = "미지정 부품"
+    maker: Optional[str] = "기타"
+    vendor: Optional[str] = None
+    qty: int = 1
+    unit_price: float = 0.0
+    currency: Optional[str] = "USD"
+    customer: Optional[str] = "본사 일반재고"
+    drafter_name: Optional[str] = "본사 일반재고"
+    memo: Optional[str] = ""
+    target_date: Optional[str] = None
+    approver_email: Optional[str] = None
+    items: Optional[List[Dict[str, Any]]] = None
+
+@app.post("/api/approvals/bridge-purchase-order")
+def bridge_purchase_order(data: PurchaseBridgeInput):
+    # 0. 결재 승인권자 검증 (timothy, tony, nathan 3계정 전용)
+    if data.approver_email and data.approver_email.lower().strip() not in ALLOWED_APPROVAL_ADMINS:
+        raise HTTPException(
+            status_code=403,
+            detail=f"결재 승인 권한이 없는 계정입니다: {data.approver_email}"
+        )
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+
+    # 1. 중복 체크 (동일 doc_no로 시작하는 po_no 존재 여부 확인)
+    check_url = f"{SUPABASE_URL}/rest/v1/inventory_items?po_no=like.{data.doc_no}*&select=id,po_no"
+    check_res = requests.get(check_url, headers=headers, timeout=5)
+    if check_res.status_code == 200 and check_res.json():
+        return {
+            "status": "already_exists",
+            "message": f"이미 ERP 재고에 등록된 발주번호입니다: {data.doc_no}",
+            "item": check_res.json()[0]
+        }
+
+    # 2. 품목 리스트 구성 (다중 품목 vs 단일 품목 호환)
+    today_str = datetime.date.today().isoformat()
+    entry_date = data.target_date or today_str
+    approver_info = f"승인자: {data.approver_email}" if data.approver_email else "승인자: 지정 결재권자"
+    items_to_insert = []
+
+    if data.items and len(data.items) > 0:
+        for idx, itm in enumerate(data.items, 1):
+            sub_po = f"{data.doc_no}-{idx}" if len(data.items) > 1 else data.doc_no
+            p_name = (itm.get("part_no") or itm.get("part_name") or data.part_name or "부품").strip()
+            p_maker = (itm.get("maker") or data.maker or "기타").strip()
+            p_qty = int(itm.get("qty") or data.qty or 1)
+            p_curr = (itm.get("currency") or data.currency or "USD").strip().upper()
+            p_uprice = float(itm.get("unit_price") or data.unit_price or 0.0)
+            p_unit_usd = p_uprice if p_curr == "USD" else round(p_uprice / 1350.0, 4)
+            p_memo = (itm.get("memo") or data.memo or "").strip()
+
+            items_to_insert.append({
+                "maker": p_maker,
+                "part_name": p_name,
+                "date_code": "-",
+                "owner": data.drafter_name or "본사 일반재고",
+                "customer": data.customer or "본사 일반재고",
+                "real_customer": data.customer or "본사 일반재고",
+                "po_no": sub_po,
+                "application": "품의승인 발주 (PO)",
+                "biz_type": "외자" if p_curr == "USD" else "내자",
+                "entry_date": entry_date,
+                "stock": max(1, p_qty),
+                "unit_usd": p_unit_usd,
+                "sold_price_usd": 0,
+                "ship_fx": 1350,
+                "margin": 20,
+                "order_status": "배정요청",
+                "payment_terms": "Net 30",
+                "payment_status": "미수",
+                "currency": p_curr,
+                "memo": f"[전자결재 승인 발주] 문서번호: {sub_po} / {approver_info} / 기안자: {data.drafter_name} / 승인일: {today_str} | {p_memo}".strip()
+            })
+    else:
+        unit_usd = data.unit_price if data.currency == "USD" else round(data.unit_price / 1350.0, 4)
+        items_to_insert.append({
+            "maker": data.maker or "기타",
+            "part_name": data.part_name,
+            "date_code": "-",
+            "owner": data.drafter_name or "본사 일반재고",
+            "customer": data.customer or "본사 일반재고",
+            "real_customer": data.customer or "본사 일반재고",
+            "po_no": data.doc_no,
+            "application": "품의승인 발주 (PO)",
+            "biz_type": "외자" if data.currency == "USD" else "내자",
+            "entry_date": entry_date,
+            "stock": max(1, data.qty),
+            "unit_usd": unit_usd,
+            "sold_price_usd": 0,
+            "ship_fx": 1350,
+            "margin": 20,
+            "order_status": "배정요청",
+            "payment_terms": "Net 30",
+            "payment_status": "미수",
+            "currency": data.currency or "USD",
+            "memo": f"[전자결재 승인 발주] 문서번호: {data.doc_no} / {approver_info} / 기안자: {data.drafter_name} / 승인일: {today_str} | {data.memo or ''}".strip()
+        })
+
+    ins_url = f"{SUPABASE_URL}/rest/v1/inventory_items"
+    ins_res = requests.post(ins_url, headers=headers, json=items_to_insert, timeout=5)
+    if ins_res.status_code not in (200, 201):
+        raise HTTPException(status_code=ins_res.status_code, detail=f"ERP 재고 삽입 실패: {ins_res.text}")
+
+    inserted = ins_res.json() if ins_res.text else items_to_insert
+    return {
+        "status": "success",
+        "message": f"구매품의서({data.doc_no}) 총 {len(items_to_insert)}건의 품목이 ERP 재고관리에 성공적으로 등록되었습니다.",
+        "items_count": len(items_to_insert),
+        "items": inserted
     }
