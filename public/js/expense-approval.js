@@ -1077,6 +1077,95 @@ export function buildApprovalContent(docType) {
   return fullContent;
 }
 
+/**
+ * 🚀 [견적·재고 -> 전자결재 품의 역연동]
+ * 영업 견적/재고 화면에서 특정 부품 클릭 시 구매품의서 작성 폼으로 자동 이동 및 입력값 프리필(Pre-fill)
+ */
+export function openPurchaseRequisitionForPart(partData = {}) {
+  // 1. Tab 7 (전자결재·품의) 전환
+  if (typeof window.switchToPaymentTab === 'function') {
+    window.switchToPaymentTab();
+  } else if (typeof window.switchMainTab === 'function') {
+    window.switchMainTab('tabPayment');
+  }
+
+  // 2. [품의작성] 서브탭 활성화
+  if (typeof window.switchPaymentSubTab === 'function') {
+    window.switchPaymentSubTab('approval');
+  }
+
+  // 3. 품의 구분을 '구매품의서'로 강제 설정 및 필드 전환
+  const docTypeEl = document.getElementById('appDocType');
+  if (docTypeEl) {
+    docTypeEl.value = '구매품의서';
+    toggleApprovalAmountField();
+  }
+
+  const partName = partData.part_no || partData.part_name || '부품';
+  const maker = partData.maker || '기타';
+  const qty = parseInt(partData.qty || 1000, 10);
+  const unitPrice = parseFloat(partData.unit_price || partData.unit_usd || 1.0);
+  const currency = partData.currency || 'USD';
+  const customer = partData.customer || '본사 일반재고';
+  const vendor = partData.vendor || (maker && maker !== '기타' ? `${maker} 공식 대리점 / 본사 직납` : '공급업체 미정');
+  const memo = partData.memo || '고객사 수주 대비 안전재고 확보 및 납기 대응';
+
+  // 4. 공급처, 실수요처, 통화 프리필
+  const vendorEl = document.getElementById('appPurchaseVendor');
+  if (vendorEl) vendorEl.value = vendor;
+
+  const customerEl = document.getElementById('appPurchaseCustomer');
+  if (customerEl) customerEl.value = customer;
+
+  const currEl = document.getElementById('appPurchaseCurrency');
+  if (currEl) currEl.value = currency;
+
+  // 5. 다중 품목 테이블 1행에 자동 세팅
+  const tbody = document.getElementById('purchaseItemsTbody');
+  if (tbody) {
+    tbody.innerHTML = '';
+    addPurchaseItemRow({
+      part_no: partName,
+      maker: maker,
+      qty: qty,
+      unit_price: unitPrice,
+      memo: memo
+    });
+  }
+
+  // 6. 표준 공문서 제목 및 4단 기안 내용 자동 완성
+  const titleEl = document.getElementById('appTitle');
+  if (titleEl) {
+    titleEl.value = `[부품구매] ${partName} (${qty.toLocaleString()} EA) 매입 및 안전재고 확보 품의의 건`;
+  }
+
+  const purposeEl = document.getElementById('appPurpose');
+  if (purposeEl) {
+    purposeEl.value = `고객사 [${customer}] 납기 대응 및 양산 소요 대비 안전재고 확보를 위한 긴급 매입 품의의 건입니다.`;
+  }
+
+  const budgetEl = document.getElementById('appBudgetPlan');
+  if (budgetEl) {
+    budgetEl.value = `공급처(${vendor}) 외상 매입 (여신 조건: Net 30일 지급 예정)`;
+  }
+
+  const effectEl = document.getElementById('appExpectedEffect');
+  if (effectEl) {
+    effectEl.value = `부품 리드타임 단축 및 고객사 결품 방지, 안정적인 납기 경쟁력 확보`;
+  }
+
+  // 7. 총액 및 한글 금액 실시간 재계산
+  updatePurchaseTableTotals();
+
+  // 8. 폼 영역으로 부드럽게 스크롤
+  setTimeout(() => {
+    const formEl = document.getElementById('paymentSectionApproval');
+    if (formEl) {
+      formEl.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, 100);
+}
+
 export async function submitApproval(e) {
   if (e) e.preventDefault();
   const isAuth = !!(typeof window.getCurrentUserEmail === 'function' && window.getCurrentUserEmail());
@@ -2062,6 +2151,7 @@ if (typeof window !== 'undefined') {
   window.submitExpense = submitExpense;
   window.toggleApprovalAmountField = toggleApprovalAmountField;
   window.buildApprovalContent = buildApprovalContent;
+  window.openPurchaseRequisitionForPart = openPurchaseRequisitionForPart;
   window.submitApproval = submitApproval;
   window.switchMySubTab = switchMySubTab;
   window.loadMyAllDocs = loadMyAllDocs;

@@ -1285,6 +1285,31 @@ function renderSelectedStockCard(item) {
     };
   }
 
+  // 🚀 견적 재고 -> 전자결재 구매품의서 작성 역연동 버튼
+  const btnPurchaseReq = document.getElementById('salesBtnPurchaseRequisition');
+  if (btnPurchaseReq) {
+    btnPurchaseReq.onclick = (e) => {
+      e.stopPropagation();
+      const qtyInput = document.getElementById('salesInteractiveQty');
+      const qty = qtyInput ? (parseInt(qtyInput.value.replace(/,/g, ''), 10) || 1000) : 1000;
+      const customerInput = document.getElementById('inputCustomer');
+      const customer = customerInput?.value.trim() || item.customer || '본사 일반재고';
+      const unitUsd = parseFloat(item.unit_usd || item.unitUsd || 0);
+
+      if (typeof window.openPurchaseRequisitionForPart === 'function') {
+        window.openPurchaseRequisitionForPart({
+          part_no: item.partName || item.part_name,
+          maker: item.maker || '기타',
+          unit_price: unitUsd,
+          currency: 'USD',
+          qty: qty,
+          customer: customer,
+          memo: `재고 기준 매입원가: $${unitUsd} USD / D/C: ${item.dateCode || item.date_code || '-'}`
+        });
+      }
+    };
+  }
+
   const btnOrder = document.getElementById('salesBtnOrder');
   if (btnOrder) {
     const isCsAdmin = typeof window.isCsOrAdminUser === 'function' ? window.isCsOrAdminUser() : false;
