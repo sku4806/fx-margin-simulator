@@ -277,23 +277,37 @@
               </div>
             </div>
 
-            <!-- 2) 목표 마진율 퀵 프리셋 & 직접 입력 -->
-            <div class="flex items-center gap-1.5 flex-wrap justify-between sm:justify-start sm:ml-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-indigo-200/50">
-              <span class="text-[11px] font-bold text-slate-700 shrink-0">목표 마진:</span>
-              <div class="inline-flex rounded-lg shadow-2xs border border-slate-200 bg-white p-0.5 w-full sm:w-auto justify-between sm:justify-start" role="group">
-                <button type="button" data-margin="0.10" class="btn-margin-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer">10%</button>
-                <button type="button" data-margin="0.15" class="btn-margin-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer">15%</button>
-                <button type="button" data-margin="0.20" class="btn-margin-preset flex-1 sm:flex-none px-2.5 sm:px-2.5 py-1 sm:py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors text-center cursor-pointer">20%</button>
-                <button type="button" data-margin="0.25" class="btn-margin-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer">25%</button>
-                <button type="button" data-margin="0.30" class="btn-margin-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer">30%</button>
+            <!-- 2) 견적 책정 기준 (마진율 % ↔ 배수율 x 듀얼 모드) -->
+            <div class="flex items-center gap-1.5 flex-wrap sm:flex-nowrap justify-between sm:justify-start sm:ml-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-indigo-200/50">
+              <div class="flex items-center gap-1 shrink-0">
+                <span class="text-[11px] font-bold text-slate-700 shrink-0">책정 기준:</span>
+                <!-- 모드 토글 (마진율 % vs 배수율 x) -->
+                <div class="inline-flex rounded-md p-0.5 bg-slate-200 text-[10px] font-bold" id="marginCalcModeToggle">
+                  <button type="button" id="btnModeMargin" class="px-2 py-0.5 rounded text-white bg-indigo-600 shadow-2xs transition-colors cursor-pointer" title="판매가 기준 마진율 (%) 책정">마진율 (%)</button>
+                  <button type="button" id="btnModeMarkup" class="px-2 py-0.5 rounded text-slate-600 hover:text-indigo-700 transition-colors cursor-pointer" title="원가 대비 배수율 (x) 책정 (100% 이상 고마진 지원)">배수율 (x)</button>
+                </div>
               </div>
 
-              <!-- 마진율 직접 입력 칸 -->
-              <div class="flex items-center gap-1 shrink-0 ml-0.5 sm:ml-1">
-                <div class="relative w-16 sm:w-20">
-                  <input type="number" id="inputCustomMargin" placeholder="20" min="0" max="99" step="0.5" value="20" class="w-full pl-2 pr-5 py-1 text-xs font-black text-indigo-950 bg-white border border-indigo-300 rounded-lg shadow-2xs outline-none focus:ring-2 focus:ring-indigo-500 text-right transition-all" title="마진율 직접 입력 (%)">
-                  <span class="absolute right-1.5 top-1 text-[10px] text-slate-400 font-bold pointer-events-none">%</span>
+              <!-- 동적 프리셋 버튼 그룹 -->
+              <div id="pricingPresetContainer" class="inline-flex rounded-lg shadow-2xs border border-slate-200 bg-white p-0.5 shrink-0" role="group">
+                <button type="button" data-val="0.10" class="btn-pricing-preset px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer">10%</button>
+                <button type="button" data-val="0.15" class="btn-pricing-preset px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer">15%</button>
+                <button type="button" data-val="0.20" class="btn-pricing-preset px-2.5 py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors text-center cursor-pointer">20%</button>
+                <button type="button" data-val="0.25" class="btn-pricing-preset px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer">25%</button>
+                <button type="button" data-val="0.30" class="btn-pricing-preset px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer">30%</button>
+              </div>
+
+              <!-- 직접 입력 칸 -->
+              <div class="flex items-center gap-1 shrink-0 ml-0.5">
+                <div class="relative w-16">
+                  <input type="number" id="inputCustomMargin" placeholder="20" min="0" step="0.1" value="20" class="w-full pl-2 pr-5 py-1 text-xs font-black text-indigo-950 bg-white border border-indigo-300 rounded-lg shadow-2xs outline-none focus:ring-2 focus:ring-indigo-500 text-right transition-all" title="직접 입력">
+                  <span id="customMarginUnitSuffix" class="absolute right-1.5 top-1 text-[10px] text-slate-400 font-bold pointer-events-none">%</span>
                 </div>
+              </div>
+
+              <!-- 실시간 상호 환산 안내 캡션 -->
+              <div id="pricingConversionHint" class="text-[10px] text-indigo-700 font-semibold pl-1 whitespace-nowrap shrink-0">
+                (원가 대비 1.25배)
               </div>
             </div>
           </div>

@@ -7,6 +7,8 @@ export function computeQuotation({
   shipFx, 
   overheadRate, 
   targetMarginRate, 
+  targetMultiplier,
+  pricingMode = 'margin',
   appliedFxRate, 
   targetOfferUsd,
   isSpa = false,
@@ -25,8 +27,17 @@ export function computeQuotation({
   const totalReplaceCostKrw = unitReplaceCostKrw * qty;
   const totalUsdCost = loadedUnitUsd * qty;
 
-  const unitMinPriceActualKrw = targetMarginRate < 1 ? (unitActualCostKrw / (1 - targetMarginRate)) : 0;
-  const unitMinPriceReplaceKrw = targetMarginRate < 1 ? (unitReplaceCostKrw / (1 - targetMarginRate)) : 0;
+  let unitMinPriceActualKrw = 0;
+  let unitMinPriceReplaceKrw = 0;
+
+  if (pricingMode === 'markup' && targetMultiplier && targetMultiplier > 0) {
+    unitMinPriceActualKrw = unitActualCostKrw * targetMultiplier;
+    unitMinPriceReplaceKrw = unitReplaceCostKrw * targetMultiplier;
+  } else {
+    const rate = (typeof targetMarginRate === 'number' && targetMarginRate < 1) ? targetMarginRate : 0.20;
+    unitMinPriceActualKrw = (1 - rate) > 0 ? (unitActualCostKrw / (1 - rate)) : 0;
+    unitMinPriceReplaceKrw = (1 - rate) > 0 ? (unitReplaceCostKrw / (1 - rate)) : 0;
+  }
 
   const unitMinPriceActualUsd = appliedFxRate > 0 ? (unitMinPriceActualKrw / appliedFxRate) : 0;
   const unitMinPriceReplaceUsd = appliedFxRate > 0 ? (unitMinPriceReplaceKrw / appliedFxRate) : 0;

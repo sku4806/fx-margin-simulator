@@ -326,7 +326,12 @@ let activeTab = 'sales';
 let editingItemId = null;
 let targetSplitId = null;
 let selectedStockItem = null;
+let currentPricingMode = 'margin'; // 'margin' (마진율 %) | 'markup' (배수율 x)
 let currentTargetMarginRate = 0.20;
+let currentTargetMultiplier = 1.25;
+let renderPricingPresets = () => {};
+let updatePricingUI = () => {};
+let setPricingMode = () => {};
 
 function callRenderInventoryHeaders(tab) {
   const fn = InventoryModule.renderInventoryHeaders || InventoryModule.default?.renderInventoryHeaders;
@@ -1353,21 +1358,17 @@ function clearSelectedStockCard() {
   if (emptyState) emptyState.classList.remove('hidden');
   if (detailCard) detailCard.classList.add('hidden');
 
-  // Reset margin controls to 20% default
+  // Reset margin/pricing controls to 20% default
+  currentPricingMode = 'margin';
   currentTargetMarginRate = 0.20;
+  currentTargetMultiplier = 1.25;
   const customMarginInput = document.getElementById('inputCustomMargin');
   if (customMarginInput) {
     customMarginInput.value = '20';
     customMarginInput.classList.remove('ring-2', 'ring-indigo-400', 'border-indigo-500');
   }
-  document.querySelectorAll('.btn-margin-preset').forEach(b => {
-    const bMargin = parseFloat(b.dataset.margin);
-    if (Math.round(bMargin * 100) === 20) {
-      b.className = 'btn-margin-preset flex-1 sm:flex-none px-2.5 sm:px-2.5 py-1 sm:py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors text-center cursor-pointer';
-    } else {
-      b.className = 'btn-margin-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer';
-    }
-  });
+  renderPricingPresets();
+  updatePricingUI();
 
   // Clear row active highlight if any
   document.querySelectorAll('tr[id^="row-item-"]').forEach(tr => {
@@ -1414,59 +1415,188 @@ function setupSalesCalculatorControls() {
   document.getElementById('btnQuickQty5k')?.addEventListener('click', (e) => { e.stopPropagation(); setQty(5000); });
   document.getElementById('btnQuickQty10k')?.addEventListener('click', (e) => { e.stopPropagation(); setQty(10000); });
 
-  // Margin Preset Buttons & Custom Margin Input
-  const customMarginInput = document.getElementById('inputCustomMargin');
-  const presetButtons = document.querySelectorAll('.btn-margin-preset');
+  // Dual-mode Pricing Controls (마진율 % ↔ 배수율 x 듀얼 모드)
+  const marginPresets = [
+    { val: 0.10, label: '10%' },
+    { val: 0.15, label: '15%' },
+    { val: 0.20, label: '20%' },
+    { val: 0.25, label: '25%' },
+    { val: 0.30, label: '30%' }
+  ];
+  const markupPresets = [
+    { val: 1.2, label: '1.2x' },
+    { val: 1.5, label: '1.5x' },
+    { val: 2.0, label: '2.0x' },
+    { val: 2.5, label: '2.5x' },
+    { val: 3.0, label: '3.0x' }
+  ];
 
-  const updatePresetUI = (marginRate) => {
-    const pct = Math.round(marginRate * 1000) / 10;
-    let matched = false;
-    presetButtons.forEach(b => {
-      const bPct = Math.round(parseFloat(b.dataset.margin) * 100);
-      if (Math.abs(bPct - pct) < 0.05) {
-        matched = true;
-        b.className = 'btn-margin-preset flex-1 sm:flex-none px-2.5 sm:px-2.5 py-1 sm:py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors text-center cursor-pointer';
-      } else {
-        b.className = 'btn-margin-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer';
-      }
+  renderPricingPresets = function() {
+    const container = document.getElementById('pricingPresetContainer');
+    if (!container) return;
+    const presets = currentPricingMode === 'margin' ? marginPresets : markupPresets;
+    const currentVal = currentPricingMode === 'margin' ? currentTargetMarginRate : currentTargetMultiplier;
+
+    container.innerHTML = presets.map(p => {
+      const isSelected = Math.abs(p.val - currentVal) < 0.005;
+      const activeClass = "btn-pricing-preset flex-1 sm:flex-none px-2.5 sm:px-2.5 py-1 sm:py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors text-center cursor-pointer";
+      const inactiveClass = "btn-pricing-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer";
+      return `<button type="button" data-val="${p.val}" class="${isSelected ? activeClass : inactiveClass}">${p.label}</button>`;
+    }).join('');
+
+    container.querySelectorAll('.btn-pricing-preset').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const val = parseFloat(btn.dataset.val);
+        if (isNaN(val)) return;
+        if (currentPricingMode === 'margin') {
+          currentTargetMarginRate = val;
+          currentTargetMultiplier = Math.round((1 / (1 - val)) * 100) / 100;
+          const customInp = document.getElementById('inputCustomMargin');
+          if (customInp) customInp.value = Math.round(val * 1000) / 10;
+        } else {
+          currentTargetMultiplier = val;
+          currentTargetMarginRate = Math.round((1 - (1 / val)) * 1000) / 1000;
+          const customInp = document.getElementById('inputCustomMargin');
+          if (customInp) customInp.value = val;
+        }
+        updatePricingUI();
+        runEngine();
+      });
     });
+  };
 
-    if (customMarginInput) {
-      if (!matched) {
-        customMarginInput.classList.add('ring-2', 'ring-indigo-400', 'border-indigo-500');
+  updatePricingUI = function() {
+    const customInp = document.getElementById('inputCustomMargin');
+    const hintEl = document.getElementById('pricingConversionHint');
+    const btnMargin = document.getElementById('btnModeMargin');
+    const btnMarkup = document.getElementById('btnModeMarkup');
+    const suffixEl = document.getElementById('customMarginUnitSuffix');
+
+    // 1) 모드 토글 버튼 활성화 상태 표시
+    if (btnMargin && btnMarkup) {
+      if (currentPricingMode === 'margin') {
+        btnMargin.className = "px-2 py-0.5 rounded text-white bg-indigo-600 shadow-2xs transition-colors cursor-pointer";
+        btnMarkup.className = "px-2 py-0.5 rounded text-slate-600 hover:text-indigo-700 transition-colors cursor-pointer";
+        if (suffixEl) suffixEl.textContent = '%';
+        if (customInp) {
+          customInp.title = "마진율 직접 입력 (%)";
+          customInp.step = "0.5";
+          customInp.placeholder = "20";
+        }
       } else {
-        customMarginInput.classList.remove('ring-2', 'ring-indigo-400', 'border-indigo-500');
+        btnMarkup.className = "px-2 py-0.5 rounded text-white bg-indigo-600 shadow-2xs transition-colors cursor-pointer";
+        btnMargin.className = "px-2 py-0.5 rounded text-slate-600 hover:text-indigo-700 transition-colors cursor-pointer";
+        if (suffixEl) suffixEl.textContent = 'x';
+        if (customInp) {
+          customInp.title = "원가 배수율 직접 입력 (x)";
+          customInp.step = "0.1";
+          customInp.placeholder = "2.0";
+        }
+      }
+    }
+
+    // 2) 프리셋 버튼 하이라이트 매칭
+    const container = document.getElementById('pricingPresetContainer');
+    const currentVal = currentPricingMode === 'margin' ? currentTargetMarginRate : currentTargetMultiplier;
+    let matched = false;
+
+    if (container) {
+      container.querySelectorAll('.btn-pricing-preset').forEach(b => {
+        const bVal = parseFloat(b.dataset.val);
+        if (Math.abs(bVal - currentVal) < 0.005) {
+          matched = true;
+          b.className = 'btn-pricing-preset flex-1 sm:flex-none px-2.5 sm:px-2.5 py-1 sm:py-0.5 text-[10px] font-black bg-indigo-600 text-white rounded shadow-xs transition-colors text-center cursor-pointer';
+        } else {
+          b.className = 'btn-pricing-preset flex-1 sm:flex-none px-2 sm:px-2 py-1 sm:py-0.5 text-[10px] font-bold text-slate-600 rounded hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-center cursor-pointer';
+        }
+      });
+    }
+
+    if (customInp) {
+      if (!matched) {
+        customInp.classList.add('ring-2', 'ring-indigo-400', 'border-indigo-500');
+      } else {
+        customInp.classList.remove('ring-2', 'ring-indigo-400', 'border-indigo-500');
+      }
+    }
+
+    // 3) 상호 환산 안내 캡션 갱신
+    if (hintEl) {
+      if (currentPricingMode === 'margin') {
+        const mult = currentTargetMarginRate < 1 ? (1 / (1 - currentTargetMarginRate)) : 0;
+        const multStr = mult > 0 ? mult.toFixed(2).replace(/\.?0+$/, '') : '0';
+        hintEl.textContent = `(원가 대비 ${multStr}배)`;
+      } else {
+        const marginPct = currentTargetMultiplier > 0 ? (1 - (1 / currentTargetMultiplier)) * 100 : 0;
+        const marginPctStr = marginPct >= 0 ? marginPct.toFixed(1) : '0';
+        const multStr = currentTargetMultiplier.toFixed(2).replace(/\.?0+$/, '');
+        hintEl.textContent = `(원가 ${multStr}배 · 마진 ${marginPctStr}%)`;
       }
     }
   };
 
-  presetButtons.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const margin = parseFloat(btn.dataset.margin);
-      if (isNaN(margin)) return;
-      currentTargetMarginRate = margin;
-      if (customMarginInput) {
-        const pctNum = Math.round(margin * 1000) / 10;
-        customMarginInput.value = pctNum;
+  setPricingMode = function(mode) {
+    if (currentPricingMode === mode) return;
+    currentPricingMode = mode;
+    const customInp = document.getElementById('inputCustomMargin');
+    if (mode === 'margin') {
+      if (currentTargetMultiplier && currentTargetMultiplier >= 1) {
+        currentTargetMarginRate = Math.min(0.99, Math.round((1 - (1 / currentTargetMultiplier)) * 1000) / 1000);
+      } else {
+        currentTargetMarginRate = 0.20;
       }
-      updatePresetUI(margin);
-      runEngine();
-    });
+      if (customInp) {
+        customInp.value = Math.round(currentTargetMarginRate * 1000) / 10;
+      }
+    } else {
+      if (currentTargetMarginRate && currentTargetMarginRate < 1) {
+        currentTargetMultiplier = Math.round((1 / (1 - currentTargetMarginRate)) * 100) / 100;
+      } else {
+        currentTargetMultiplier = 1.25;
+      }
+      if (customInp) {
+        customInp.value = currentTargetMultiplier;
+      }
+    }
+    renderPricingPresets();
+    updatePricingUI();
+    runEngine();
+  };
+
+  document.getElementById('btnModeMargin')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setPricingMode('margin');
   });
 
+  document.getElementById('btnModeMarkup')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setPricingMode('markup');
+  });
+
+  const customMarginInput = document.getElementById('inputCustomMargin');
   if (customMarginInput) {
     const handleCustomMargin = () => {
       const val = parseFloat(customMarginInput.value);
-      if (isNaN(val) || val < 0) return;
-      const capped = Math.min(val, 99.0);
-      currentTargetMarginRate = capped / 100.0;
-      updatePresetUI(currentTargetMarginRate);
+      if (isNaN(val) || val <= 0) return;
+      if (currentPricingMode === 'margin') {
+        const capped = Math.min(val, 99.0);
+        currentTargetMarginRate = capped / 100.0;
+        currentTargetMultiplier = Math.round((1 / (1 - currentTargetMarginRate)) * 100) / 100;
+      } else {
+        currentTargetMultiplier = val;
+        currentTargetMarginRate = Math.round((1 - (1 / val)) * 1000) / 1000;
+      }
+      updatePricingUI();
       runEngine();
     };
     customMarginInput.addEventListener('input', handleCustomMargin);
     customMarginInput.addEventListener('change', handleCustomMargin);
   }
+
+  // 초기 프리셋 렌더링 및 UI 동기화
+  renderPricingPresets();
+  updatePricingUI();
 }
 
 window.renderSelectedStockCard = renderSelectedStockCard;
@@ -1924,6 +2054,8 @@ function runEngine() {
     shipFx,
     overheadRate: overhead,
     targetMarginRate: currentTargetMarginRate || 0.20,
+    targetMultiplier: currentTargetMultiplier || 1.25,
+    pricingMode: currentPricingMode || 'margin',
     appliedFxRate,
     targetOfferUsd: targetOffer,
     isSpa,
@@ -1985,6 +2117,7 @@ function runEngine() {
 
   renderTierTable(result.unitMinPriceReplaceUsd, result.unitMinPriceReplaceKrw, stock);
 }
+window.runEngine = runEngine;
 
 function renderTierTable(unitUsd, unitKrw, currentQty) {
   const tiers = [
