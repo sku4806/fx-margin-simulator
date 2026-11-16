@@ -324,10 +324,28 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
 # ========================================================
 @app.get("/api/analytics/sales")
 def sales_analytics(year: Optional[str] = "2026", month: Optional[str] = "all"):
+    y_str = year or "2026"
+    m_str = month or "all"
     try:
-        data = legacy_mssql.get_sales_analytics(year=year or "2026", month=month or "all")
+        data = legacy_mssql.get_sales_analytics(year=y_str, month=m_str)
         return {"status": "success", "analytics": data}
     except Exception as e:
+        # DB 연결 실패 시 실제 캐시 데이터 fallback
+        clean_m = str(m_str).replace("월", "").strip().lower()
+        if clean_m in ("", "ytd", "전체"):
+            clean_m = "all"
+        cache_path = os.path.join(os.path.dirname(__file__), "api", "data", "sales_analytics_cache.json")
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    all_cache = json.load(f)
+                year_cache = all_cache.get(y_str, {})
+                if clean_m in year_cache:
+                    return {"status": "success", "analytics": year_cache[clean_m]}
+                elif "all" in year_cache:
+                    return {"status": "success", "analytics": year_cache["all"]}
+            except Exception:
+                pass
         return {"status": "error", "message": str(e), "analytics": {}}
 
 # ========================================================

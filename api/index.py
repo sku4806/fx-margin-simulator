@@ -611,12 +611,38 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
 def sales_analytics(year: Optional[str] = "2026", month: Optional[str] = "all"):
     y_str = year or "2026"
     m_str = month or "all"
+    
+    # 1. 로컬 환경 MS-SQL 직접 조회
     if not is_vercel:
         try:
             import legacy_mssql
             return {"status": "success", "analytics": legacy_mssql.get_sales_analytics(year=y_str, month=m_str)}
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[WARN] legacy_mssql query failed, falling back to cache: {e}")
+
+    # 2. 클라우드/Vercel 환경: 실제 데이터 기반 실시간 캐시 활용 (월별/연간 완벽 지원)
+    clean_m = str(m_str).replace("월", "").strip().lower()
+    if clean_m in ("", "ytd", "전체"):
+        clean_m = "all"
+
+    cache_candidates = [
+        os.path.join(os.path.dirname(__file__), "data", "sales_analytics_cache.json"),
+        os.path.join(os.path.dirname(__file__), "..", "data", "sales_analytics_cache.json"),
+        os.path.join(os.getcwd(), "data", "sales_analytics_cache.json"),
+        os.path.join(os.getcwd(), "api", "data", "sales_analytics_cache.json")
+    ]
+    for cp in cache_candidates:
+        if os.path.exists(cp):
+            try:
+                with open(cp, "r", encoding="utf-8") as f:
+                    all_cache = json.load(f)
+                year_cache = all_cache.get(y_str, {})
+                if clean_m in year_cache:
+                    return {"status": "success", "analytics": year_cache[clean_m]}
+                elif "all" in year_cache:
+                    return {"status": "success", "analytics": year_cache["all"]}
+            except Exception as ex:
+                print(f"[CACHE READ ERROR] {ex}")
 
     # 클라우드/Vercel 환경 연도별 응답 데이터
     if y_str == "2025":

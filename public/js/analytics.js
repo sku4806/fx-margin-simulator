@@ -52,18 +52,47 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
   const marginYtd = a.total_margin_ytd || 0;
   const marginRate = a.overall_margin_rate || 0;
 
-  const periodBilling = a.period_billing != null ? a.period_billing : (isMonthly ? 0 : billingYtd);
-  const periodBooking = a.period_booking != null ? a.period_booking : (isMonthly ? 0 : bookingYtd);
-  const periodMargin = a.period_margin != null ? a.period_margin : (isMonthly ? 0 : marginYtd);
-  const periodMarginRate = a.period_margin_rate != null ? a.period_margin_rate : (isMonthly ? 0 : marginRate);
-  const periodShipmentCount = a.period_shipment_count != null ? a.period_shipment_count : 0;
-
   // 월별 추이 데이터
   const monthly = a.monthly || [];
   const yearMonthly = monthly.filter(m => m.month && m.month.startsWith(currentYear));
   const latestMonthItem = yearMonthly.length > 0 ? yearMonthly[yearMonthly.length - 1] : { billing: 0, booking: 0, month: `${currentYear}-11` };
   const latestMonthNum = latestMonthItem.month ? parseInt(latestMonthItem.month.slice(5), 10) : 11;
   const currentMonthBill = latestMonthItem.billing || 0;
+
+  // 선택된 월의 목표 데이터 매칭 (monthly 배열 기반)
+  let targetM = null;
+  if (isMonthly && selectedMonthNum) {
+    const ymKey = `${currentYear}-${String(selectedMonthNum).padStart(2, '0')}`;
+    targetM = monthly.find(m => m.month === ymKey);
+  }
+
+  let periodBilling = a.period_billing;
+  if (periodBilling == null || periodBilling === 0) {
+    if (isMonthly && targetM && targetM.billing > 0) {
+      periodBilling = targetM.billing;
+    } else if (isMonthly && a.sales_reps && a.sales_reps.length > 0) {
+      periodBilling = a.sales_reps.reduce((acc, s) => acc + (s.billing || 0), 0);
+    } else {
+      periodBilling = isMonthly ? (targetM ? targetM.billing : 0) : billingYtd;
+    }
+  }
+
+  let periodMargin = a.period_margin;
+  if (periodMargin == null) {
+    periodMargin = isMonthly ? (targetM ? targetM.margin : (a.sales_reps ? a.sales_reps.reduce((acc, s) => acc + (s.margin || 0), 0) : 0)) : marginYtd;
+  }
+
+  let periodMarginRate = a.period_margin_rate;
+  if (periodMarginRate == null) {
+    periodMarginRate = isMonthly ? (targetM ? targetM.margin_rate : (periodBilling > 0 ? Number(((periodMargin / periodBilling) * 100).toFixed(1)) : 0)) : marginRate;
+  }
+
+  let periodShipmentCount = a.period_shipment_count;
+  if (periodShipmentCount == null) {
+    periodShipmentCount = isMonthly ? (targetM ? targetM.bill_count : (a.sales_reps ? a.sales_reps.reduce((acc, s) => acc + (s.shipment_count || 0), 0) : 0)) : monthly.reduce((acc, m) => acc + (m.bill_count || 0), 0);
+  }
+
+  const periodBooking = a.period_booking != null ? a.period_booking : (isMonthly ? (targetM ? targetM.booking : 0) : bookingYtd);
 
   // 월 선택 드롭다운 옵션 목록 (최신 월부터 1월까지 역순 생성)
   const availableMonths = [];
@@ -72,8 +101,8 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     availableMonths.push(mo);
   }
 
-  // 기준 매출액 (비율 계산용: 월별 모드일 땐 당월 매출액, 연간 모드일 땐 YTD 매출액)
-  const baseBilling = isMonthly ? (periodBilling > 0 ? periodBilling : 1) : (billingYtd > 0 ? billingYtd : 1);
+  // 기준 매출액 (비율 계산용: 안전 분모 설정)
+  const baseBilling = (isMonthly ? (periodBilling && periodBilling > 0 ? periodBilling : billingYtd) : billingYtd) || 1;
 
   // 1. 월별 매출 차트 스케일 계산 (매출액 전용 + Y축 눈금선)
   const maxBill = Math.max(...monthly.map(m => m.billing || 0), 100000000);
