@@ -534,8 +534,9 @@ def query_customers(search_query: Optional[str] = None, limit: int = 30) -> List
 # ========================================================
 # 📊 매출 장부 및 다차원 실적 분석 (FrmSalesBKBL & FrmSalesGraph)
 # ========================================================
-def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
-    """월별 수주/매출(Book & Bill), Top 고객사, 제조사 비중, 영업사원 실적 집계"""
+def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dict[str, Any]:
+    """월별 수주/매출(Book & Bill), Top 고객사, 제조사 비중, 영업사원 실적 집계 (연간 누적 또는 특정 월 선택)"""
+    import calendar
     try:
         conn = get_db_connection()
         cur = conn.cursor(as_dict=True)
@@ -543,7 +544,7 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
         start_date = f"{year}-01-01"
         end_date = f"{year}-12-31"
 
-        # 1. 월별 Book & Bill 추이
+        # 1. 월별 Book & Bill 추이 (연간 전체 추이는 항상 계산)
         cur.execute("""
             SELECT 
                 LEFT(CONVERT(VARCHAR, COALESCE(A.OUTDT, A.SDT), 23), 7) as yyyy_mm,
@@ -584,7 +585,25 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
                 "book_count": int(r["book_cnt"] or 0)
             })
 
-        # 2. Top 10 고객사
+        # 특정 월 필터링 날짜 설정
+        is_monthly = False
+        selected_month_num = None
+        filter_start = start_date
+        filter_end = end_date
+
+        if month and str(month).strip().lower() not in ("all", "ytd", "", "전체"):
+            try:
+                m_int = int(str(month).replace("월", "").strip())
+                if 1 <= m_int <= 12:
+                    last_day = calendar.monthrange(int(year), m_int)[1]
+                    filter_start = f"{year}-{m_int:02d}-01"
+                    filter_end = f"{year}-{m_int:02d}-{last_day:02d}"
+                    is_monthly = True
+                    selected_month_num = m_int
+            except Exception as ex:
+                print(f"[WARN] month parsing failed: {ex}")
+
+        # 2. Top 10 고객사 (선택된 기간 기준)
         cur.execute("""
             SELECT TOP 10
                 COALESCE(B.KNAME, B.CNAME, '기타') as customer_name,
@@ -595,7 +614,7 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
             WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.OUTDT <= %s
             GROUP BY COALESCE(B.KNAME, B.CNAME, '기타')
             ORDER BY total_billing DESC
-        """, (f"{year}-01-01", f"{year}-12-31"))
+        """, (filter_start, filter_end))
         top_cust_raw = cur.fetchall()
         top_customers = [
             {
@@ -605,7 +624,7 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
             } for r in top_cust_raw
         ]
 
-        # 3. Top 제조사 (Maker)
+        # 3. Top 제조사 (Maker) (선택된 기간 기준)
         cur.execute("""
             SELECT TOP 8
                 LTRIM(RTRIM(A.Mfg)) as maker,
@@ -615,7 +634,7 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
             WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.OUTDT <= %s AND A.Mfg IS NOT NULL AND LTRIM(RTRIM(A.Mfg)) <> ''
             GROUP BY LTRIM(RTRIM(A.Mfg))
             ORDER BY total_billing DESC
-        """, (f"{year}-01-01", f"{year}-12-31"))
+        """, (filter_start, filter_end))
         top_maker_raw = cur.fetchall()
         top_makers = [
             {
@@ -625,7 +644,7 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
             } for r in top_maker_raw
         ]
 
-        # 4. 영업 담당자별 실적
+        # 4. 영업 담당자별 실적 (선택된 기간 기준)
         cur.execute("""
             SELECT 
                 LTRIM(RTRIM(A.Sales)) as sales_rep,
@@ -636,7 +655,7 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
             WHERE A.RESULT = 'OUT' AND A.OUTDT >= %s AND A.OUTDT <= %s AND A.Sales IS NOT NULL AND LTRIM(RTRIM(A.Sales)) <> ''
             GROUP BY LTRIM(RTRIM(A.Sales))
             ORDER BY total_billing DESC
-        """, (f"{year}-01-01", f"{year}-12-31"))
+        """, (filter_start, filter_end))
         sales_raw = cur.fetchall()
         sales_reps = [
             {
@@ -650,10 +669,41 @@ def get_sales_analytics(year: str = "2026") -> Dict[str, Any]:
 
         conn.close()
 
+        # 선택된 기간의 실적 수치 계산
+        if is_monthly and selected_month_num:
+            ym_key = f"{year}-{selected_month_num:02d}"
+            target_m = next((m for m in monthly_data if m["month"] == ym_key), None)
+            if target_m:
+                period_billing = target_m["billing"]
+                period_booking = target_m["booking"]
+                period_margin = target_m["margin"]
+                period_margin_rate = target_m["margin_rate"]
+                period_shipment_count = target_m["bill_count"]
+            else:
+                period_billing = sum(s["billing"] for s in sales_reps)
+                period_booking = 0.0
+                period_margin = sum(s["margin"] for s in sales_reps)
+                period_margin_rate = round((period_margin / period_billing * 100), 1) if period_billing > 0 else 0.0
+                period_shipment_count = sum(s["shipment_count"] for s in sales_reps)
+        else:
+            period_billing = total_billing_ytd
+            period_booking = total_booking_ytd
+            period_margin = total_margin_ytd
+            period_margin_rate = (total_margin_ytd / total_billing_ytd * 100) if total_billing_ytd > 0 else 0.0
+            period_shipment_count = sum(m["bill_count"] for m in monthly_data if m["month"].startswith(year))
+
         overall_margin_rate = (total_margin_ytd / total_billing_ytd * 100) if total_billing_ytd > 0 else 0.0
 
         return {
             "year": year,
+            "month": str(selected_month_num) if is_monthly else "all",
+            "is_monthly": is_monthly,
+            "selected_month_num": selected_month_num,
+            "period_billing": period_billing,
+            "period_booking": period_booking,
+            "period_margin": period_margin,
+            "period_margin_rate": round(period_margin_rate, 1),
+            "period_shipment_count": period_shipment_count,
             "total_billing_ytd": total_billing_ytd,
             "total_booking_ytd": total_booking_ytd,
             "total_margin_ytd": total_margin_ytd,

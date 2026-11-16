@@ -608,12 +608,13 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
 # 📊 매출 장부 및 실적 분석 (Book & Bill) API
 # ========================================================
 @app.get("/api/analytics/sales")
-def sales_analytics(year: Optional[str] = "2026"):
+def sales_analytics(year: Optional[str] = "2026", month: Optional[str] = "all"):
     y_str = year or "2026"
+    m_str = month or "all"
     if not is_vercel:
         try:
             import legacy_mssql
-            return {"status": "success", "analytics": legacy_mssql.get_sales_analytics(year=y_str)}
+            return {"status": "success", "analytics": legacy_mssql.get_sales_analytics(year=y_str, month=m_str)}
         except Exception:
             pass
 

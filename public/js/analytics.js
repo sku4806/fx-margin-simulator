@@ -2,15 +2,19 @@
  * analytics.js
  * 세일즈 마스터 MS-SQL 연동 매출 장부 & 다차원 실적 분석 (Book & Bill) 모듈
  * (FrmSalesBKBL & FrmSalesGraph 기능 완벽 이식)
+ * 
+ * 특정 월 필터 (당월 보기 / 연간 누적 YTD 보기) 완벽 지원
  */
 
 let cachedAnalytics = null;
 let currentYear = "2026";
+let currentMonth = "all"; // "all" (연간 누적) 또는 "1".."12"
 
-export async function fetchSalesAnalytics(year = "2026") {
-  currentYear = year;
+export async function fetchSalesAnalytics(year = "2026", month = "all") {
+  currentYear = String(year);
+  currentMonth = String(month);
   try {
-    const res = await fetch(`/api/analytics/sales?year=${encodeURIComponent(year)}`);
+    const res = await fetch(`/api/analytics/sales?year=${encodeURIComponent(currentYear)}&month=${encodeURIComponent(currentMonth)}`);
     const data = await res.json();
     if (data.status === "success" && data.analytics) {
       cachedAnalytics = data.analytics;
@@ -33,22 +37,43 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
         <div class="text-slate-600 font-bold text-sm">세일즈 마스터 매출 장부 및 실적 데이터를 불러오는 중입니다...</div>
       </div>
     `;
-    fetchSalesAnalytics(currentYear).then(data => {
+    fetchSalesAnalytics(currentYear, currentMonth).then(data => {
       if (data) renderAnalyticsView(containerId);
     });
     return;
   }
 
   const a = cachedAnalytics;
+  const isMonthly = a.is_monthly || (currentMonth !== "all");
+  const selectedMonthNum = a.selected_month_num || (isMonthly ? parseInt(currentMonth, 10) : null);
+
   const billingYtd = a.total_billing_ytd || 0;
   const bookingYtd = a.total_booking_ytd || 0;
   const marginYtd = a.total_margin_ytd || 0;
   const marginRate = a.overall_margin_rate || 0;
 
-  // 당월 매출 계산
+  const periodBilling = a.period_billing != null ? a.period_billing : (isMonthly ? 0 : billingYtd);
+  const periodBooking = a.period_booking != null ? a.period_booking : (isMonthly ? 0 : bookingYtd);
+  const periodMargin = a.period_margin != null ? a.period_margin : (isMonthly ? 0 : marginYtd);
+  const periodMarginRate = a.period_margin_rate != null ? a.period_margin_rate : (isMonthly ? 0 : marginRate);
+  const periodShipmentCount = a.period_shipment_count != null ? a.period_shipment_count : 0;
+
+  // 월별 추이 데이터
   const monthly = a.monthly || [];
-  const currentMonthItem = monthly.length > 0 ? monthly[monthly.length - 1] : { billing: 0, booking: 0 };
-  const currentMonthBill = currentMonthItem.billing || 0;
+  const yearMonthly = monthly.filter(m => m.month && m.month.startsWith(currentYear));
+  const latestMonthItem = yearMonthly.length > 0 ? yearMonthly[yearMonthly.length - 1] : { billing: 0, booking: 0, month: `${currentYear}-11` };
+  const latestMonthNum = latestMonthItem.month ? parseInt(latestMonthItem.month.slice(5), 10) : 11;
+  const currentMonthBill = latestMonthItem.billing || 0;
+
+  // 월 선택 드롭다운 옵션 목록 (최신 월부터 1월까지 역순 생성)
+  const availableMonths = [];
+  const maxMo = Math.max(latestMonthNum, 11);
+  for (let mo = maxMo; mo >= 1; mo--) {
+    availableMonths.push(mo);
+  }
+
+  // 기준 매출액 (비율 계산용: 월별 모드일 땐 당월 매출액, 연간 모드일 땐 YTD 매출액)
+  const baseBilling = isMonthly ? (periodBilling > 0 ? periodBilling : 1) : (billingYtd > 0 ? billingYtd : 1);
 
   // 1. 월별 매출 차트 스케일 계산 (매출액 전용 + Y축 눈금선)
   const maxBill = Math.max(...monthly.map(m => m.billing || 0), 100000000);
@@ -85,7 +110,7 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     </g>
   `).join('');
 
-  // X축 및 매출 단일 막대 생성 (상단 금액 & 마진율 수치 직접 표기)
+  // X축 및 매출 단일 막대 생성 (상단 금액 & 마진율 수치 직접 표기 + 클릭 시 해당 월 전환)
   const slotCount = monthly.length;
   const slotWidth = slotCount > 0 ? plotWidth / slotCount : 60;
   const barWidth = Math.min(38, Math.max(16, Math.floor(slotWidth * 0.58)));
@@ -95,6 +120,9 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     const mgn = m.margin || 0;
     const mgnRate = m.margin_rate || 0;
     const billCount = m.bill_count || 0;
+
+    const mNum = parseInt(m.month.slice(5), 10);
+    const isSelected = isMonthly && (selectedMonthNum === mNum);
 
     const slotCenter = plotLeft + idx * slotWidth + slotWidth / 2;
     const barX = Math.round(slotCenter - barWidth / 2);
@@ -116,12 +144,12 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     }
 
     return `
-      <g class="chart-group cursor-pointer group" data-idx="${idx}">
-        <!-- 호버 시 배경 슬롯 하이라이트 -->
-        <rect x="${Math.round(slotCenter - slotWidth / 2 + 2)}" y="${plotTop - 15}" width="${Math.round(slotWidth - 4)}" height="${plotHeight + 25}" fill="#f8fafc" rx="8" class="opacity-0 group-hover:opacity-100 transition-opacity" pointer-events="none"></rect>
+      <g class="chart-group cursor-pointer group" data-idx="${idx}" onclick="window.switchAnalyticsMonth('${mNum}')">
+        <!-- 호버 및 선택 시 배경 슬롯 하이라이트 -->
+        <rect x="${Math.round(slotCenter - slotWidth / 2 + 2)}" y="${plotTop - 15}" width="${Math.round(slotWidth - 4)}" height="${plotHeight + 25}" fill="${isSelected ? '#eef2ff' : '#f8fafc'}" rx="8" class="${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity" pointer-events="none"></rect>
 
-        <!-- 막대 상단 1: 매출액 수치 직접 표기 (굵은 남색) -->
-        <text x="${slotCenter}" y="${barY - 14}" text-anchor="middle" font-size="10.5" font-weight="900" fill="#1e1b4b" class="font-mono tracking-tight select-none">
+        <!-- 막대 상단 1: 매출액 수치 직접 표기 (선택 시 앰버/인디고 강조) -->
+        <text x="${slotCenter}" y="${barY - 14}" text-anchor="middle" font-size="${isSelected ? '11.5' : '10.5'}" font-weight="900" fill="${isSelected ? '#4338ca' : '#1e1b4b'}" class="font-mono tracking-tight select-none">
           ${bill > 0 ? eokText : ''}
         </text>
 
@@ -130,24 +158,29 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
           ${bill > 0 ? `${mgnRate}%` : ''}
         </text>
 
-        <!-- 매출 단일 바 (그라디언트 + 모던 라운딩) -->
-        <rect x="${barX}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="4" fill="url(#billingBarGradient)" class="filter drop-shadow-xs transition-all duration-150 group-hover:brightness-110">
-          <title>${m.month} 실적
+        <!-- 매출 단일 바 (선택 시 골드 테두리 강조) -->
+        <rect x="${barX}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="4" 
+              fill="${isSelected ? 'url(#selectedBarGradient)' : 'url(#billingBarGradient)'}" 
+              stroke="${isSelected ? '#f59e0b' : 'none'}" stroke-width="${isSelected ? '2.5' : '0'}"
+              class="filter drop-shadow-xs transition-all duration-150 group-hover:brightness-110">
+          <title>${m.month} 실적 (클릭 시 ${mNum}월 상세 조회)
 • 매출액: ₩${Math.round(bill).toLocaleString()}
 • 매출이익: ₩${Math.round(mgn).toLocaleString()}
 • 실현마진율: ${mgnRate}%
 • 출하건수: ${billCount}건</title>
         </rect>
 
-        <!-- X축 월 라벨 -->
-        <text x="${slotCenter}" y="${plotBottom + 18}" text-anchor="middle" font-size="11" font-weight="${idx >= slotCount - 2 ? '900' : 'bold'}" fill="${idx >= slotCount - 2 ? '#4338ca' : '#64748b'}" class="select-none">
-          ${monthLabel}
+        <!-- X축 월 라벨 (선택된 월은 진한 보라색 강조) -->
+        <text x="${slotCenter}" y="${plotBottom + 18}" text-anchor="middle" font-size="${isSelected ? '12' : '11'}" 
+              font-weight="${isSelected ? '900' : (idx >= slotCount - 2 ? '800' : 'bold')}" 
+              fill="${isSelected ? '#4338ca' : (idx >= slotCount - 2 ? '#4338ca' : '#64748b')}" class="select-none">
+          ${monthLabel}${isSelected ? '★' : ''}
         </text>
       </g>
     `;
   }).join('');
 
-  // 하단 월별 정확한 수치 상세 테이블 HTML 생성
+  // 하단 월별 정확한 수치 상세 테이블 HTML 생성 (월 클릭 시 필터 전환 연동)
   const monthlySummaryTableHtml = `
     <div class="overflow-x-auto border-t border-slate-100 mt-2 pt-2.5">
       <table class="w-full text-xs text-center border-collapse">
@@ -157,7 +190,14 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
             ${monthly.map(m => {
               const isOtherYear = !m.month.startsWith(currentYear);
               const mLabel = isOtherYear ? `${m.month.slice(2, 4)}.${m.month.slice(5)}` : `${m.month.slice(5)}월`;
-              return `<th class="py-1.5 px-2 font-mono text-slate-700 whitespace-nowrap">${mLabel}</th>`;
+              const mNum = parseInt(m.month.slice(5), 10);
+              const isSelected = isMonthly && (selectedMonthNum === mNum);
+              return `
+                <th class="py-1.5 px-2 font-mono whitespace-nowrap cursor-pointer transition-colors ${isSelected ? 'bg-indigo-100/80 text-indigo-900 font-black border-b-2 border-indigo-600' : 'text-slate-700 hover:bg-slate-100'}" 
+                    onclick="window.switchAnalyticsMonth('${mNum}')" title="${mNum}월 상세 실적 보기">
+                  ${mLabel}${isSelected ? '📍' : ''}
+                </th>
+              `;
             }).join('')}
           </tr>
         </thead>
@@ -170,8 +210,10 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
             </td>
             ${monthly.map(m => {
               const bill = m.billing || 0;
+              const mNum = parseInt(m.month.slice(5), 10);
+              const isSelected = isMonthly && (selectedMonthNum === mNum);
               const eokStr = bill >= 100000000 ? `${(bill / 100000000).toFixed(1)}억` : `${Math.round(bill / 10000).toLocaleString()}만`;
-              return `<td class="py-1.5 px-2 font-mono font-black text-indigo-950 whitespace-nowrap" title="₩${Math.round(bill).toLocaleString()}">₩${eokStr}</td>`;
+              return `<td class="py-1.5 px-2 font-mono font-black ${isSelected ? 'bg-indigo-50/60 text-indigo-700 font-black' : 'text-indigo-950'} whitespace-nowrap" title="₩${Math.round(bill).toLocaleString()}">₩${eokStr}</td>`;
             }).join('')}
           </tr>
           <!-- 2. 매출이익 (마진) -->
@@ -182,8 +224,10 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
             </td>
             ${monthly.map(m => {
               const mgn = m.margin || 0;
+              const mNum = parseInt(m.month.slice(5), 10);
+              const isSelected = isMonthly && (selectedMonthNum === mNum);
               const eokStr = mgn >= 100000000 ? `${(mgn / 100000000).toFixed(1)}억` : `${Math.round(mgn / 10000).toLocaleString()}만`;
-              return `<td class="py-1.5 px-2 font-mono font-bold text-emerald-800 whitespace-nowrap" title="₩${Math.round(mgn).toLocaleString()}">₩${eokStr}</td>`;
+              return `<td class="py-1.5 px-2 font-mono font-bold ${isSelected ? 'bg-indigo-50/60 text-emerald-900' : 'text-emerald-800'} whitespace-nowrap" title="₩${Math.round(mgn).toLocaleString()}">₩${eokStr}</td>`;
             }).join('')}
           </tr>
           <!-- 3. 실현 마진율 -->
@@ -192,11 +236,15 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
               <span class="w-2 h-2 rounded-full bg-teal-500 inline-block shrink-0"></span>
               <span>마진율</span>
             </td>
-            ${monthly.map(m => `
-              <td class="py-1.5 px-2 whitespace-nowrap">
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${m.margin_rate || 0}%</span>
-              </td>
-            `).join('')}
+            ${monthly.map(m => {
+              const mNum = parseInt(m.month.slice(5), 10);
+              const isSelected = isMonthly && (selectedMonthNum === mNum);
+              return `
+                <td class="py-1.5 px-2 whitespace-nowrap ${isSelected ? 'bg-indigo-50/60' : ''}">
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${isSelected ? 'bg-indigo-100 text-indigo-900 border border-indigo-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">${m.margin_rate || 0}%</span>
+                </td>
+              `;
+            }).join('')}
           </tr>
           <!-- 4. 출하 건수 -->
           <tr class="hover:bg-slate-50/50 transition-colors">
@@ -204,17 +252,143 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
               <span class="w-2 h-2 rounded-full bg-slate-400 inline-block shrink-0"></span>
               <span>출하건수</span>
             </td>
-            ${monthly.map(m => `<td class="py-1.5 px-2 font-mono text-slate-500 text-[10px] whitespace-nowrap">${m.bill_count || 0}건</td>`).join('')}
+            ${monthly.map(m => {
+              const mNum = parseInt(m.month.slice(5), 10);
+              const isSelected = isMonthly && (selectedMonthNum === mNum);
+              return `<td class="py-1.5 px-2 font-mono text-slate-500 text-[10px] whitespace-nowrap ${isSelected ? 'bg-indigo-50/60 font-bold text-indigo-900' : ''}">${m.bill_count || 0}건</td>`;
+            }).join('')}
           </tr>
         </tbody>
       </table>
     </div>
   `;
 
+  // 상단 4단 KPI 카드 구성 (월별 모드 vs 연간 누적 모드 분기)
+  const kpiCardsHtml = isMonthly ? `
+    <!-- [월별 모드] 4단 KPI 카드 -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+      <!-- 1) 선택 월 매출 실적 -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-indigo-300 bg-indigo-50/30 shadow-sm relative overflow-hidden flex flex-col justify-between">
+        <div class="text-[10px] sm:text-[11px] font-bold text-indigo-900 flex items-center justify-between">
+          <span class="truncate">${selectedMonthNum}월 매출 실적</span>
+          <span class="text-indigo-700 font-black text-[9px] sm:text-xs shrink-0 bg-indigo-100 px-1.5 py-0.2 rounded">📅 ${selectedMonthNum}월</span>
+        </div>
+        <div class="text-sm sm:text-xl font-black text-indigo-950 mt-1 font-mono truncate">
+          ₩${Math.round(periodBilling).toLocaleString()}
+        </div>
+        <div class="text-[9px] sm:text-[10px] text-indigo-700 mt-0.5 truncate">
+          출하 확정: <strong class="text-indigo-950">${periodShipmentCount.toLocaleString()}건</strong>
+        </div>
+      </div>
+
+      <!-- 2) 선택 월 실현 마진 -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-emerald-300 bg-emerald-50/30 shadow-sm relative overflow-hidden flex flex-col justify-between">
+        <div class="text-[10px] sm:text-[11px] font-bold text-emerald-900 flex items-center justify-between">
+          <span class="truncate">${selectedMonthNum}월 실현 마진</span>
+          <span class="text-emerald-700 font-black text-[9px] sm:text-xs shrink-0 bg-emerald-100 px-1.5 py-0.2 rounded">${periodMarginRate}%</span>
+        </div>
+        <div class="text-sm sm:text-xl font-black text-emerald-950 mt-1 font-mono truncate">
+          ₩${Math.round(periodMargin).toLocaleString()}
+        </div>
+        <div class="text-[9px] sm:text-[10px] text-emerald-700 mt-0.5 truncate">
+          마진율: <strong class="text-emerald-950 font-bold">${periodMarginRate}% 달성</strong>
+        </div>
+      </div>
+
+      <!-- 3) 선택 월 신규 수주 (Booking) -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-amber-300 bg-amber-50/20 shadow-sm relative overflow-hidden flex flex-col justify-between">
+        <div class="text-[10px] sm:text-[11px] font-bold text-amber-900 flex items-center justify-between">
+          <span class="truncate">${selectedMonthNum}월 수주액</span>
+          <span class="text-amber-700 font-bold text-[9px] sm:text-xs shrink-0 bg-amber-100 px-1.5 py-0.2 rounded">🛒 PO</span>
+        </div>
+        <div class="text-sm sm:text-xl font-black text-amber-950 mt-1 font-mono truncate">
+          ₩${Math.round(periodBooking).toLocaleString()}
+        </div>
+        <div class="text-[9px] sm:text-[10px] text-amber-700 mt-0.5 truncate">
+          수주 등록 진행
+        </div>
+      </div>
+
+      <!-- 4) 연간 누적 매출 비교 -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
+        <div class="text-[10px] sm:text-[11px] font-bold text-slate-500 flex items-center justify-between">
+          <span class="truncate">${currentYear}년 연간 누적 매출</span>
+          <span class="text-slate-500 font-mono text-[9px] sm:text-xs shrink-0">📈 YTD 비교</span>
+        </div>
+        <div class="text-sm sm:text-xl font-black text-slate-800 mt-1 font-mono truncate">
+          ₩${Math.round(billingYtd).toLocaleString()}
+        </div>
+        <div class="text-[9px] sm:text-[10px] text-slate-500 mt-0.5 truncate">
+          연간 누적 마진: <strong class="text-slate-700">${marginRate}% (₩${Math.round(marginYtd / 100000000).toFixed(1)}억)</strong>
+        </div>
+      </div>
+    </div>
+  ` : `
+    <!-- [연간 누적 모드 (YTD)] 4단 KPI 카드 -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+      <!-- 1) 연간 누적 매출액 -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
+        <div class="text-[10px] sm:text-[11px] font-bold text-slate-500 flex items-center justify-between">
+          <span class="truncate">${currentYear}년 연간 누적 매출</span>
+          <span class="text-indigo-600 font-mono text-[9px] sm:text-xs shrink-0 font-bold">📈 YTD 전체</span>
+        </div>
+        <div class="text-sm sm:text-xl font-black text-slate-900 mt-1 font-mono truncate">
+          ₩${Math.round(billingYtd).toLocaleString()}
+        </div>
+        <div class="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
+          출하: <strong class="text-slate-700">${monthly.reduce((acc, m) => acc + (m.bill_count || 0), 0).toLocaleString()}건</strong>
+        </div>
+      </div>
+
+      <!-- 2) 연간 누적 매출이익 (Margin) -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm relative overflow-hidden flex flex-col justify-between">
+        <div class="text-[10px] sm:text-[11px] font-bold text-emerald-800 flex items-center justify-between">
+          <span class="truncate">${currentYear}년 연간 누적 마진</span>
+          <span class="text-emerald-600 font-black text-[9px] sm:text-xs shrink-0">${marginRate}%</span>
+        </div>
+        <div class="text-sm sm:text-xl font-black text-emerald-900 mt-1 font-mono truncate">
+          ₩${Math.round(marginYtd).toLocaleString()}
+        </div>
+        <div class="text-[9px] sm:text-[10px] text-emerald-700 mt-0.5 truncate">
+          전사 평균: <strong class="text-emerald-900 font-bold">${marginRate}% 달성</strong>
+        </div>
+      </div>
+
+      <!-- 3) 연간 누적 수주액 (Booking) -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm relative overflow-hidden flex flex-col justify-between">
+        <div class="text-[10px] sm:text-[11px] font-bold text-amber-800 flex items-center justify-between">
+          <span class="truncate">${currentYear}년 연간 누적 수주</span>
+          <span class="text-amber-600 font-bold text-[9px] sm:text-xs shrink-0">🛒 PO</span>
+        </div>
+        <div class="text-sm sm:text-xl font-black text-amber-950 mt-1 font-mono truncate">
+          ₩${Math.round(bookingYtd).toLocaleString()}
+        </div>
+        <div class="text-[9px] sm:text-[10px] text-amber-700 mt-0.5 truncate">
+          수주: <strong class="text-amber-900">${monthly.reduce((acc, m) => acc + (m.book_count || 0), 0).toLocaleString()}건</strong>
+        </div>
+      </div>
+
+      <!-- 4) 당월 매출액 (최근 월) -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-indigo-200 bg-indigo-50/30 shadow-sm relative overflow-hidden flex flex-col justify-between cursor-pointer hover:border-indigo-400 transition-colors"
+           onclick="window.switchAnalyticsMonth('${latestMonthNum}')" title="클릭하여 ${latestMonthNum}월 당월 상세 보기">
+        <div class="text-[10px] sm:text-[11px] font-bold text-indigo-800 flex items-center justify-between">
+          <span class="truncate">최근 당월 매출 (${latestMonthNum}월)</span>
+          <span class="text-indigo-600 font-bold text-[9px] sm:text-xs shrink-0 bg-indigo-100 px-1 rounded">📅 당월 바로가기 👉</span>
+        </div>
+        <div class="text-sm sm:text-xl font-black text-indigo-950 mt-1 font-mono truncate">
+          ₩${Math.round(currentMonthBill).toLocaleString()}
+        </div>
+        <div class="text-[9px] sm:text-[10px] text-indigo-700 mt-0.5 truncate">
+          진행: <strong class="text-indigo-900">${(latestMonthItem.bill_count || 0)}건 출하</strong>
+        </div>
+      </div>
+    </div>
+  `;
+
   container.innerHTML = `
     <div class="space-y-4">
       
-      <!-- 1. 최상단 헤더 바 -->
+      <!-- 1. 최상단 헤더 바 (기준 연도 + 조회 기간 필터) -->
       <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3.5 sm:p-5 rounded-2xl shadow-sm border border-slate-700/60 flex flex-wrap items-center justify-between gap-2.5">
         <div class="flex items-center gap-2.5 sm:gap-3">
           <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-lg sm:text-xl shrink-0">
@@ -223,93 +397,76 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
           <div>
             <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <h2 class="text-sm sm:text-lg font-black tracking-wide text-white break-keep">매출 장부 & 실적 분석 (Book & Bill)</h2>
-              <span class="text-[9px] sm:text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.5 rounded-full shrink-0">실시간 연동</span>
+              ${isMonthly ? `
+                <span class="text-[10px] sm:text-xs font-black bg-indigo-500 text-white border border-indigo-300/40 px-2 py-0.5 rounded-full shrink-0 shadow-xs flex items-center gap-1">
+                  <span>📅</span> ${selectedMonthNum}월 당월 보기
+                </span>
+              ` : `
+                <span class="text-[10px] sm:text-xs font-black bg-emerald-500 text-white border border-emerald-300/40 px-2 py-0.5 rounded-full shrink-0 shadow-xs flex items-center gap-1">
+                  <span>📈</span> ${currentYear}년 연간 누적 (YTD)
+                </span>
+              `}
             </div>
-            <p class="text-[10px] sm:text-xs text-slate-300 font-medium mt-0.5">FrmSalesBKBL & FrmSalesGraph 기반 연간·월별 실적 분석</p>
+            <p class="text-[10px] sm:text-xs text-slate-300 font-medium mt-0.5">FrmSalesBKBL & FrmSalesGraph 기반 실시간 출하 실적 및 마진 분석</p>
           </div>
         </div>
 
-        <div class="flex items-center gap-2 text-xs w-full sm:w-auto justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-800">
-          <span class="text-slate-300 font-bold text-[11px] sm:text-xs shrink-0">기준 연도:</span>
-          <select id="analyticsYearSelect" onchange="window.switchAnalyticsYear(this.value)" class="bg-slate-800 text-amber-300 border border-slate-600 rounded-lg px-2 sm:px-2.5 py-1 sm:py-1.5 font-bold outline-none cursor-pointer text-xs">
-            <option value="2026" ${currentYear === '2026' ? 'selected' : ''}>2026년</option>
-            <option value="2025" ${currentYear === '2025' ? 'selected' : ''}>2025년</option>
-            <option value="2024" ${currentYear === '2024' ? 'selected' : ''}>2024년</option>
-          </select>
-          <button type="button" onclick="window.refreshSalesAnalytics()" class="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer text-xs shrink-0">
-            🔄 새로고침
+        <!-- 우측 필터 컨트롤 바 (기준 연도 & 조회 기간 드롭다운) -->
+        <div class="flex items-center gap-2 text-xs w-full sm:w-auto justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-800 flex-wrap">
+          
+          <!-- 1) 기준 연도 선택 -->
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="text-slate-300 font-bold text-[11px] sm:text-xs">연도:</span>
+            <select id="analyticsYearSelect" onchange="window.switchAnalyticsYear(this.value)" 
+                    class="bg-slate-800 text-amber-300 border border-slate-600 rounded-lg px-2 sm:px-2.5 py-1 sm:py-1.5 font-bold outline-none cursor-pointer text-xs">
+              <option value="2026" ${currentYear === '2026' ? 'selected' : ''}>2026년</option>
+              <option value="2025" ${currentYear === '2025' ? 'selected' : ''}>2025년</option>
+              <option value="2024" ${currentYear === '2024' ? 'selected' : ''}>2024년</option>
+            </select>
+          </div>
+
+          <!-- 2) 조회 기간 (특정 월 / 연간 누적) 선택 드롭다운 -->
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="text-slate-300 font-bold text-[11px] sm:text-xs">기간:</span>
+            <select id="analyticsMonthSelect" onchange="window.switchAnalyticsMonth(this.value)" 
+                    class="bg-slate-800 text-amber-300 border border-indigo-500/60 rounded-lg px-2 sm:px-2.5 py-1 sm:py-1.5 font-bold outline-none cursor-pointer text-xs shadow-xs">
+              <option value="all" ${currentMonth === 'all' ? 'selected' : ''}>전체 (연간 누적)</option>
+              ${availableMonths.map(mo => {
+                const isCurrent = mo === latestMonthNum;
+                return `<option value="${mo}" ${String(currentMonth) === String(mo) ? 'selected' : ''}>${mo}월 ${isCurrent ? '(당월)' : ''}</option>`;
+              }).join('')}
+            </select>
+          </div>
+
+          <!-- 3) 새로고침 버튼 -->
+          <button type="button" onclick="window.refreshSalesAnalytics()" 
+                  class="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer text-xs shrink-0">
+            🔄
           </button>
         </div>
       </div>
 
-      <!-- 2. 핵심 KPI 4단 카드 (모바일 2x2 그리드) -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        <!-- 1) 연간 누적 매출액 -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
-          <div class="text-[10px] sm:text-[11px] font-bold text-slate-500 flex items-center justify-between">
-            <span class="truncate">${currentYear}년 누적 매출</span>
-            <span class="text-indigo-600 font-mono text-[9px] sm:text-xs shrink-0">📈 YTD</span>
-          </div>
-          <div class="text-sm sm:text-xl font-black text-slate-900 mt-1 font-mono truncate">
-            ₩${Math.round(billingYtd).toLocaleString()}
-          </div>
-          <div class="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">
-            출하: <strong class="text-slate-700">${monthly.reduce((acc, m) => acc + m.bill_count, 0).toLocaleString()}건</strong>
-          </div>
-        </div>
-
-        <!-- 2) 연간 누적 매출이익 (Margin) -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm relative overflow-hidden flex flex-col justify-between">
-          <div class="text-[10px] sm:text-[11px] font-bold text-emerald-800 flex items-center justify-between">
-            <span class="truncate">${currentYear}년 누적 마진</span>
-            <span class="text-emerald-600 font-black text-[9px] sm:text-xs shrink-0">${marginRate}%</span>
-          </div>
-          <div class="text-sm sm:text-xl font-black text-emerald-900 mt-1 font-mono truncate">
-            ₩${Math.round(marginYtd).toLocaleString()}
-          </div>
-          <div class="text-[9px] sm:text-[10px] text-emerald-700 mt-0.5 truncate">
-            평균: <strong class="text-emerald-900 font-bold">${marginRate}% 달성</strong>
-          </div>
-        </div>
-
-        <!-- 3) 연간 누적 수주액 (Booking) -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm relative overflow-hidden flex flex-col justify-between">
-          <div class="text-[10px] sm:text-[11px] font-bold text-amber-800 flex items-center justify-between">
-            <span class="truncate">${currentYear}년 누적 수주</span>
-            <span class="text-amber-600 font-bold text-[9px] sm:text-xs shrink-0">🛒 PO</span>
-          </div>
-          <div class="text-sm sm:text-xl font-black text-amber-950 mt-1 font-mono truncate">
-            ₩${Math.round(bookingYtd).toLocaleString()}
-          </div>
-          <div class="text-[9px] sm:text-[10px] text-amber-700 mt-0.5 truncate">
-            수주: <strong class="text-amber-900">${monthly.reduce((acc, m) => acc + m.book_count, 0).toLocaleString()}건</strong>
-          </div>
-        </div>
-
-        <!-- 4) 당월 매출액 -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-indigo-200 bg-indigo-50/30 shadow-sm relative overflow-hidden flex flex-col justify-between">
-          <div class="text-[10px] sm:text-[11px] font-bold text-indigo-800 flex items-center justify-between">
-            <span class="truncate">당월 매출 (${currentMonthItem.month || 'Current'})</span>
-            <span class="text-indigo-600 font-bold text-[9px] sm:text-xs shrink-0">📅 당월</span>
-          </div>
-          <div class="text-sm sm:text-xl font-black text-indigo-950 mt-1 font-mono truncate">
-            ₩${Math.round(currentMonthBill).toLocaleString()}
-          </div>
-          <div class="text-[9px] sm:text-[10px] text-indigo-700 mt-0.5 truncate">
-            진행: <strong class="text-indigo-900">${(currentMonthItem.bill_count || 0)}건 출하</strong>
-          </div>
-        </div>
-      </div>
+      <!-- 2. 핵심 KPI 4단 카드 -->
+      ${kpiCardsHtml}
 
       <!-- 3. 월별 매출 실적 (Billing) 및 마진율 추이 차트 -->
       <div class="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-1.5 sm:gap-2">
+          <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <h3 class="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
               <span>📈</span>
               <span>월별 매출 실적 (Billing) 및 마진율 추이</span>
             </h3>
-            <span class="text-[9px] sm:text-[10px] text-slate-400 font-medium">${currentYear}년 월별 출하 확정 매출 및 마진율</span>
+            ${isMonthly ? `
+              <span class="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full font-bold cursor-pointer hover:bg-indigo-100" 
+                    onclick="window.switchAnalyticsMonth('all')" title="클릭하여 전체 연간 누적 보기로 복귀">
+                📍 현재 ${selectedMonthNum}월 선택됨 (전체 누적 보기로 돌아가기 ↩)
+              </span>
+            ` : `
+              <span class="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full font-medium">
+                💡 차트의 막대를 클릭하면 해당 월 상세 실적으로 즉시 전환됩니다
+              </span>
+            `}
           </div>
           <!-- 범례 -->
           <div class="flex items-center gap-3 sm:gap-4 text-[11px] sm:text-xs font-bold">
@@ -336,6 +493,10 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
                 <stop offset="0%" stop-color="#6366f1" />
                 <stop offset="100%" stop-color="#4338ca" />
               </linearGradient>
+              <linearGradient id="selectedBarGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#4f46e5" />
+                <stop offset="100%" stop-color="#312e81" />
+              </linearGradient>
             </defs>
             <!-- Y축 그리드 라인 & 눈금 라벨 -->
             ${yGridSvg}
@@ -357,12 +518,14 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
             <h3 class="font-bold text-xs text-slate-900 flex items-center gap-1.5">
               <span>🏢</span> Top 10 주요 고객사
             </h3>
-            <span class="text-[10px] text-slate-400 font-medium">매출 기여도 순</span>
+            <span class="text-[10px] ${isMonthly ? 'text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded font-bold' : 'text-slate-400 font-medium'}">
+              ${isMonthly ? `${selectedMonthNum}월 매출 순` : '연간 매출 기여도 순'}
+            </span>
           </div>
 
           <div class="space-y-2 overflow-y-auto max-h-80 pr-1 text-xs">
-            ${(a.top_customers || []).map((c, idx) => {
-              const pct = billingYtd > 0 ? ((c.billing / billingYtd) * 100).toFixed(1) : 0;
+            ${(a.top_customers && a.top_customers.length > 0) ? a.top_customers.map((c, idx) => {
+              const pct = baseBilling > 0 ? ((c.billing / baseBilling) * 100).toFixed(1) : 0;
               return `
                 <div class="space-y-0.5">
                   <div class="flex items-center justify-between text-[11px]">
@@ -379,7 +542,9 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
                   </div>
                 </div>
               `;
-            }).join('')}
+            }).join('') : `
+              <div class="text-slate-400 text-center py-8 font-medium">선택된 기간의 출하 고객사 데이터가 없습니다.</div>
+            `}
           </div>
         </div>
 
@@ -389,12 +554,14 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
             <h3 class="font-bold text-xs text-slate-900 flex items-center gap-1.5">
               <span>🏭</span> 제조사 (Maker) 점유율
             </h3>
-            <span class="text-[10px] text-slate-400 font-medium">라인별 매출 비중</span>
+            <span class="text-[10px] ${isMonthly ? 'text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-bold' : 'text-slate-400 font-medium'}">
+              ${isMonthly ? `${selectedMonthNum}월 라인별 비중` : '연간 라인별 비중'}
+            </span>
           </div>
 
           <div class="space-y-2 overflow-y-auto max-h-80 pr-1 text-xs">
-            ${(a.top_makers || []).map((m, idx) => {
-              const pct = billingYtd > 0 ? ((m.billing / billingYtd) * 100).toFixed(1) : 0;
+            ${(a.top_makers && a.top_makers.length > 0) ? a.top_makers.map((m, idx) => {
+              const pct = baseBilling > 0 ? ((m.billing / baseBilling) * 100).toFixed(1) : 0;
               return `
                 <div class="space-y-0.5">
                   <div class="flex items-center justify-between text-[11px]">
@@ -412,7 +579,9 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
                   </div>
                 </div>
               `;
-            }).join('')}
+            }).join('') : `
+              <div class="text-slate-400 text-center py-8 font-medium">선택된 기간의 출하 제조사 데이터가 없습니다.</div>
+            `}
           </div>
         </div>
 
@@ -422,11 +591,13 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
             <h3 class="font-bold text-xs text-slate-900 flex items-center gap-1.5">
               <span>👤</span> 영업 담당자별 실적 & 마진
             </h3>
-            <span class="text-[10px] text-slate-400 font-medium">영업사원 기여도</span>
+            <span class="text-[10px] ${isMonthly ? 'text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-bold' : 'text-slate-400 font-medium'}">
+              ${isMonthly ? `${selectedMonthNum}월 영업사원 기여도` : '연간 영업사원 기여도'}
+            </span>
           </div>
 
           <div class="space-y-2.5 overflow-y-auto max-h-80 pr-1 text-xs">
-            ${(a.sales_reps || []).map(s => {
+            ${(a.sales_reps && a.sales_reps.length > 0) ? a.sales_reps.map(s => {
               return `
                 <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
                   <div class="flex items-center justify-between">
@@ -444,7 +615,9 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
                   </div>
                 </div>
               `;
-            }).join('')}
+            }).join('') : `
+              <div class="text-slate-400 text-center py-8 font-medium">선택된 기간의 영업사원 실적 데이터가 없습니다.</div>
+            `}
           </div>
         </div>
 
@@ -504,11 +677,18 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
   // 메모 자동 로드
   loadSalesMemos('ALL');
 
-  // DOM 이벤트 리스너 안전 바인딩 (인라인 핸들러 외 이중 보장)
+  // DOM 이벤트 리스너 안전 바인딩
   const yrSelect = container.querySelector('#analyticsYearSelect');
   if (yrSelect) {
     yrSelect.addEventListener('change', (e) => {
       window.switchAnalyticsYear(e.target.value);
+    });
+  }
+
+  const moSelect = container.querySelector('#analyticsMonthSelect');
+  if (moSelect) {
+    moSelect.addEventListener('change', (e) => {
+      window.switchAnalyticsMonth(e.target.value);
     });
   }
 
@@ -629,17 +809,25 @@ window.saveNewSalesMemo = async function() {
 };
 
 window.switchAnalyticsYear = function(year) {
-  currentYear = year;
-  fetchSalesAnalytics(year).then(() => {
+  currentYear = String(year);
+  fetchSalesAnalytics(currentYear, currentMonth).then(() => {
+    renderAnalyticsView('analyticsSection');
+  });
+};
+
+window.switchAnalyticsMonth = function(month) {
+  currentMonth = String(month);
+  fetchSalesAnalytics(currentYear, currentMonth).then(() => {
     renderAnalyticsView('analyticsSection');
   });
 };
 
 window.refreshSalesAnalytics = function() {
-  const select = document.getElementById('analyticsYearSelect');
-  const year = select ? select.value : currentYear;
-  currentYear = year;
-  fetchSalesAnalytics(year).then(() => {
+  const yrSelect = document.getElementById('analyticsYearSelect');
+  const moSelect = document.getElementById('analyticsMonthSelect');
+  if (yrSelect) currentYear = yrSelect.value;
+  if (moSelect) currentMonth = moSelect.value;
+  fetchSalesAnalytics(currentYear, currentMonth).then(() => {
     renderAnalyticsView('analyticsSection');
   });
 };

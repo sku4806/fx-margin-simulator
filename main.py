@@ -323,9 +323,9 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
 # 📊 매출 장부 및 실적 분석 (Book & Bill) API
 # ========================================================
 @app.get("/api/analytics/sales")
-def sales_analytics(year: Optional[str] = "2026"):
+def sales_analytics(year: Optional[str] = "2026", month: Optional[str] = "all"):
     try:
-        data = legacy_mssql.get_sales_analytics(year=year or "2026")
+        data = legacy_mssql.get_sales_analytics(year=year or "2026", month=month or "all")
         return {"status": "success", "analytics": data}
     except Exception as e:
         return {"status": "error", "message": str(e), "analytics": {}}
