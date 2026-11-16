@@ -509,6 +509,81 @@ def settle_unpaid(req: UnpaidSettlementRequest):
     }
 
 # ========================================================
+# 🚚 세일즈 마스터 [FrmShippedInfo] 공식 출하 원장 API
+# ========================================================
+@app.get("/api/shipped-info")
+def list_shipped_info(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mfg: Optional[str] = None,
+    supply: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 1500
+):
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            results = legacy_mssql.query_shipped_info(
+                start_date=start_date,
+                end_date=end_date,
+                mfg=mfg,
+                supply=supply,
+                search_query=query,
+                limit=limit
+            )
+            return {"status": "success", "total": len(results), "items": results}
+        except Exception as e:
+            print(f"[WARN] Local MS-SQL ShippedInfo query failed: {e}")
+
+    # Fallback to bundled data for Vercel / offline
+    items = get_bundled_shipped_data()
+    filtered = []
+    q_lower = query.lower().strip() if query else None
+
+    for item in items:
+        # Date filter
+        s_date = item.get("ship_date") or ""
+        if start_date and s_date and s_date < start_date:
+            continue
+        if end_date and s_date and s_date > end_date:
+            continue
+        # Mfg filter
+        if mfg and mfg.strip():
+            if (item.get("maker") or "").strip().lower() != mfg.strip().lower():
+                continue
+        # Supply filter
+        if supply and supply.strip():
+            if (item.get("supply") or "").strip().lower() != supply.strip().lower():
+                continue
+        # Search query
+        if q_lower:
+            text = f"{item.get('part_no','')} {item.get('customer','')} {item.get('real_cust','')} {item.get('po_no','')} {item.get('app','')} {item.get('invoice_no','')}".lower()
+            if q_lower not in text:
+                continue
+
+        filtered.append(item)
+        if len(filtered) >= limit:
+            break
+
+    return {"status": "success", "total": len(filtered), "items": filtered, "source": "bundled_fallback" if is_vercel else "fallback"}
+
+@app.get("/api/shipped-info/filters")
+def list_shipped_info_filters():
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            filters = legacy_mssql.get_shipped_info_filters()
+            return {"status": "success", **filters}
+        except Exception:
+            pass
+
+    # Extract distinct makers/supplies from bundled data
+    items = get_bundled_shipped_data()
+    makers = sorted(list({i.get("maker") for i in items if i.get("maker")}))
+    supplies = sorted(list({i.get("supply") for i in items if i.get("supply")}))
+    return {"status": "success", "makers": makers or ["ISSI", "ESMT", "SMI", "LUMISSIL"], "supplies": supplies or ["ISSI", "ESMT", "SMI", "BSHK"]}
+
+# ========================================================
 # 🏢 거래처 및 담당자 마스터 (CustomerFile & ContactFile) API
 # ========================================================
 @app.get("/api/customers/search")
@@ -785,6 +860,7 @@ def create_sales_memo(item: MemoInput):
 # ========================================================
 _BUNDLED_PO_DATA = None
 _BUNDLED_PH_DATA = None
+_BUNDLED_SHIPPED_DATA = None
 
 def get_bundled_po_data():
     global _BUNDLED_PO_DATA
@@ -825,6 +901,26 @@ def get_bundled_ph_data():
         if _BUNDLED_PH_DATA is None:
             _BUNDLED_PH_DATA = {"incomes": [], "sales": []}
     return _BUNDLED_PH_DATA
+
+def get_bundled_shipped_data():
+    global _BUNDLED_SHIPPED_DATA
+    if _BUNDLED_SHIPPED_DATA is None:
+        shipped_paths = [
+            os.path.join(BASE_DIR, "data", "shipped_info.json"),
+            os.path.join(os.path.dirname(BASE_DIR), "data", "shipped_info.json"),
+            os.path.join(BASE_DIR, "shipped_info.json")
+        ]
+        for p in shipped_paths:
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        _BUNDLED_SHIPPED_DATA = json.load(f)
+                        break
+                except Exception as e:
+                    print(f"[WARN] Failed to load {p}: {e}")
+        if _BUNDLED_SHIPPED_DATA is None:
+            _BUNDLED_SHIPPED_DATA = []
+    return _BUNDLED_SHIPPED_DATA
 
 def filter_purchase_orders(
     orders,

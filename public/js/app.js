@@ -772,7 +772,7 @@ function bindTabSwitch() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    if (csHeaderDesc) csHeaderDesc.innerText = "완료된 출하/수주 전체 실적 및 매출 통계를 확인합니다.";
+    if (csHeaderDesc) csHeaderDesc.innerText = "세일즈 마스터 MS-SQL 공식 출하 원장(SHIPPED INFO LIST) 및 기간별·제조사별 납품 실적을 조회합니다.";
   });
 
   // 4. [견적 이력 (Quotation List)] 탭 클릭 (세일즈 마스터 MS-SQL QuotationFile 연동)

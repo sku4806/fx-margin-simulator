@@ -184,6 +184,47 @@ def list_unpaid(
     except Exception as e:
         return {"status": "error", "message": str(e), "items": []}
 
+# ========================================================
+# 🚚 세일즈 마스터 [FrmShippedInfo] 공식 출하 원장 API
+# ========================================================
+@app.get("/api/shipped-info")
+def list_shipped_info(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mfg: Optional[str] = None,
+    supply: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 1500
+):
+    try:
+        results = legacy_mssql.query_shipped_info(
+            start_date=start_date,
+            end_date=end_date,
+            mfg=mfg,
+            supply=supply,
+            search_query=query,
+            limit=limit
+        )
+        return {"status": "success", "total": len(results), "items": results}
+    except Exception as e:
+        try:
+            p = os.path.join(os.path.dirname(__file__), "data", "shipped_info.json")
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                    return {"status": "success", "total": len(cached), "items": cached, "source": "bundled_fallback"}
+        except Exception:
+            pass
+        return {"status": "error", "message": str(e), "items": []}
+
+@app.get("/api/shipped-info/filters")
+def list_shipped_info_filters():
+    try:
+        filters = legacy_mssql.get_shipped_info_filters()
+        return {"status": "success", **filters}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "makers": [], "supplies": []}
+
 @app.get("/api/unpaid/summary")
 def unpaid_summary(min_date: Optional[str] = "2010-01-01"):
     try:

@@ -1,5 +1,6 @@
 # legacy_mssql.py
 import os
+import time
 import datetime
 from typing import List, Dict, Any, Optional
 
@@ -1204,6 +1205,159 @@ def get_part_price_history(part_no: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"[ERROR] get_part_price_history 에러: {e}")
         return {"part_no": p_clean, "summary": {}, "purchases": [], "sales": [], "quotations": [], "purchase_orders": []}
+
+# ========================================================
+# 🚚 세일즈 마스터 [Sales Daily Report - FrmShippedInfo] 공식 출하 원장 모듈
+# ========================================================
+_CACHED_SHIPPED_FILTERS = {"makers": [], "supplies": [], "updated_at": 0}
+
+def get_shipped_info_filters() -> Dict[str, Any]:
+    """출하 원장의 고유 제조사(MFG) 및 공급사(SUPPLY) 목록 반환 (캐싱 적용)"""
+    global _CACHED_SHIPPED_FILTERS
+    now = time.time()
+    if _CACHED_SHIPPED_FILTERS["makers"] and (now - _CACHED_SHIPPED_FILTERS["updated_at"] < 3600):
+        return _CACHED_SHIPPED_FILTERS
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+
+        cur.execute("""
+            SELECT DISTINCT LTRIM(RTRIM(m.Mfg)) as maker
+            FROM ShippingFile s
+            LEFT JOIN MainSubFile sub ON s.Idxsub = sub.IDX
+            LEFT JOIN MainFile m ON sub.Midx = m.IDX
+            WHERE m.Mfg IS NOT NULL AND LTRIM(RTRIM(m.Mfg)) <> ''
+            ORDER BY maker ASC
+        """)
+        makers = [clean_val(r['maker']) for r in cur.fetchall() if clean_val(r['maker'])]
+
+        cur.execute("""
+            SELECT DISTINCT LTRIM(RTRIM(m.SUPPLY)) as supply
+            FROM ShippingFile s
+            LEFT JOIN MainSubFile sub ON s.Idxsub = sub.IDX
+            LEFT JOIN MainFile m ON sub.Midx = m.IDX
+            WHERE m.SUPPLY IS NOT NULL AND LTRIM(RTRIM(m.SUPPLY)) <> ''
+            ORDER BY supply ASC
+        """)
+        supplies = [clean_val(r['supply']) for r in cur.fetchall() if clean_val(r['supply'])]
+
+        conn.close()
+
+        _CACHED_SHIPPED_FILTERS = {
+            "makers": [m for m in makers if m not in ('.', '0', '-')],
+            "supplies": [s for s in supplies if s not in ('.', '0', '-')],
+            "updated_at": now
+        }
+        return _CACHED_SHIPPED_FILTERS
+    except Exception as e:
+        print(f"[WARN] MS-SQL 출하 원장 필터 조회 실패: {e}")
+        return {
+            "makers": ["ISSI", "ESMT", "SMI", "LUMISSIL", "Giantec", "GigaDevice", "OTHERS"],
+            "supplies": ["ISSI", "ESMT", "SMI", "LUMISSIL", "BSHK", "BSTW", "OTHERS"],
+            "updated_at": now
+        }
+
+def query_shipped_info(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mfg: Optional[str] = None,
+    supply: Optional[str] = None,
+    search_query: Optional[str] = None,
+    limit: int = 1000
+) -> List[Dict[str, Any]]:
+    """
+    세일즈 마스터 [Sales Daily Report - FrmShippedInfo] 공식 출하 원장 조회
+    ShippingFile + CustomerFile + MainSubFile + MainFile 조인
+    """
+    conditions = []
+    params = []
+
+    if start_date:
+        conditions.append("s.SHIPDT >= %s")
+        params.append(start_date)
+    if end_date:
+        conditions.append("s.SHIPDT <= %s")
+        params.append(f"{end_date} 23:59:59")
+    if mfg and mfg.strip():
+        conditions.append("LTRIM(RTRIM(m.Mfg)) = %s")
+        params.append(mfg.strip())
+    if supply and supply.strip():
+        conditions.append("LTRIM(RTRIM(m.SUPPLY)) = %s")
+        params.append(supply.strip())
+    if search_query and search_query.strip():
+        term = f"%{search_query.strip()}%"
+        conditions.append("""(
+            s.PartNo LIKE %s OR 
+            s.PoNo LIKE %s OR 
+            c.CNAME LIKE %s OR 
+            c.KNAME LIKE %s OR 
+            sub.RealCust LIKE %s OR 
+            m.RealCust LIKE %s OR 
+            sub.APP LIKE %s OR 
+            m.App LIKE %s OR
+            s.INVOICENO LIKE %s
+        )""")
+        params.extend([term, term, term, term, term, term, term, term, term])
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    query = f"""
+        SELECT TOP {limit}
+            s.IDX as idx,
+            COALESCE(c.CNAME, c.KNAME, '기타') as customer,
+            COALESCE(sub.RealCust, m.RealCust, '') as real_cust,
+            s.PoNo as po_no,
+            s.PartNo as part_no,
+            CONVERT(VARCHAR, s.SHIPDT, 23) as ship_date,
+            s.SHIPQTY as ship_qty,
+            s.Netup as net_up,
+            s.ShipAmt as ship_amt,
+            COALESCE(sub.APP, m.App, '') as app,
+            m.Mfg as maker,
+            m.SUPPLY as supply,
+            s.INVOICENO as invoice_no,
+            s.AWBNO as awb_no,
+            s.Lotno as lot_no
+        FROM ShippingFile s
+        LEFT JOIN CustomerFile c ON s.Custid = c.CID
+        LEFT JOIN MainSubFile sub ON s.Idxsub = sub.IDX
+        LEFT JOIN MainFile m ON sub.Midx = m.IDX
+        {where_clause}
+        ORDER BY s.SHIPDT DESC, s.IDX DESC
+    """
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+
+        results = []
+        for r in rows:
+            results.append({
+                "idx": r["idx"],
+                "customer": clean_val(r["customer"]),
+                "real_cust": clean_val(r["real_cust"]),
+                "po_no": clean_val(r["po_no"]),
+                "part_no": clean_val(r["part_no"]),
+                "ship_date": clean_val(r["ship_date"]),
+                "ship_qty": int(r["ship_qty"] or 0),
+                "net_up": float(r["net_up"] or 0.0),
+                "ship_amt": float(r["ship_amt"] or 0.0),
+                "app": clean_val(r["app"]),
+                "maker": clean_val(r["maker"]) or "OTHERS",
+                "supply": clean_val(r["supply"]) or "OTHERS",
+                "invoice_no": clean_val(r["invoice_no"]),
+                "awb_no": clean_val(r["awb_no"]),
+                "lot_no": clean_val(r["lot_no"])
+            })
+        return results
+    except Exception as e:
+        print(f"[ERROR] query_shipped_info 에러: {e}")
+        return []
+
 
 
 
