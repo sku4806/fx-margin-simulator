@@ -81,20 +81,32 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
             🚢
           </div>
           <div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <h2 class="text-base font-black tracking-wide">발주(PO) 및 입고 예정(ETA) 종합 관리</h2>
-              <span class="text-[10px] bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full font-mono border border-blue-400/30">MS-SQL DPOFile 실시간 연동</span>
+              <span class="text-[10px] bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full font-mono border border-blue-400/30">MS-SQL DPOFile + 전자결재 실시간 연동</span>
             </div>
-            <p class="text-xs text-slate-300 mt-0.5">국내외 매입처 발주 내역 및 입고 예정일(CRD/ETA), 실수요처 납품 일정을 실시간 추적합니다.</p>
+            <p class="text-xs text-slate-300 mt-0.5">사내 공식 매입 발주 원장 및 전자결재 승인 발주의 입고예정일(CRD/ETA), 실수요처 납품 일정을 통합 추적합니다.</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
+          <button type="button" id="poNewRequisitionBtn" onclick="window.goToNewPurchaseRequisition && window.goToNewPurchaseRequisition()" 
+                  class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-colors">
+            <span>📑</span> + 구매 품의서 작성
+          </button>
           <button type="button" id="poExportExcelBtn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 cursor-pointer">
             <span>📥</span> Excel 저장
           </button>
           <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center cursor-pointer transition-colors">
             ✕
           </button>
+        </div>
+      </div>
+
+      <!-- 업무 구분 안내 바 -->
+      <div class="bg-indigo-50/90 border-b border-indigo-200/80 px-6 py-2 flex items-center justify-between text-xs text-indigo-950 font-medium">
+        <div class="flex items-center gap-2">
+          <span class="text-sm">💡</span>
+          <span><strong>[업무 구분 안내]</strong> 본 화면은 매입처(공급사)에 넣은 <strong>구매 발주(PO) 및 전자결재 승인 발주</strong>를 통합 관리합니다. 고객사로부터 받은 수주(주문) 건은 상단 <strong>[Tab 1/2 수주·출하 관리]</strong>에서 확인하실 수 있습니다.</span>
         </div>
       </div>
 
@@ -277,13 +289,16 @@ function renderPoTable(orders) {
 
   tbody.innerHTML = pageItems.map((o, idx) => {
     const rowNo = startIdx + idx + 1;
+    const isWebApproval = o.source === 'WEB_APPROVAL';
     const isPending = o.status === 'PO';
     const isArrived = o.status === 'IN';
     const isCnl = o.status === 'CNL';
 
     // 상태 뱃지
     let statusBadge = '';
-    if (isPending) {
+    if (isWebApproval) {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-900 border border-indigo-400 shadow-xs flex items-center justify-center gap-1"><span>📑</span> 전자결재 승인</span>`;
+    } else if (isPending) {
       statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300 flex items-center justify-center gap-1">🚢 입고대기</span>`;
     } else if (isArrived) {
       statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center gap-1">✅ 입고완료</span>`;
@@ -315,11 +330,16 @@ function renderPoTable(orders) {
       : `₩${Math.round(o.amount).toLocaleString()}`;
 
     return `
-      <tr class="hover:bg-blue-50/60 transition-colors border-b border-slate-200 text-[11px] ${isPending ? 'bg-blue-50/20' : ''}">
+      <tr class="hover:bg-blue-50/60 transition-colors border-b border-slate-200 text-[11px] ${isWebApproval ? 'bg-indigo-50/40 border-l-4 border-l-indigo-600' : (isPending ? 'bg-blue-50/20' : '')}">
         <td class="py-2 px-2 text-center text-slate-400 font-mono">${rowNo}</td>
         <td class="py-2 px-2 text-center whitespace-nowrap">${statusBadge}</td>
         <td class="py-2 px-2 text-center font-mono text-slate-700 whitespace-nowrap">${o.po_dt || '-'}</td>
-        <td class="py-2 px-3 font-mono font-bold text-slate-800 truncate max-w-[140px]" title="${o.po_no}">${o.po_no}</td>
+        <td class="py-2 px-3 font-mono font-bold text-slate-800 truncate max-w-[140px]" title="${o.po_no}">
+          <div class="flex items-center gap-1.5">
+            <span>${o.po_no}</span>
+            ${isWebApproval ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-100 text-indigo-800 border border-indigo-300 shrink-0">웹승인</span>' : ''}
+          </div>
+        </td>
         <td class="py-2 px-3">
           <div class="flex items-center gap-1.5">
             <span class="font-black text-slate-900 truncate max-w-[170px]" title="${o.part_no}">${o.part_no}</span>
@@ -478,3 +498,27 @@ function exportPoToCsv(items) {
 // 전역 바인딩
 window.openPurchaseOrdersModal = openPurchaseOrdersModal;
 window.fetchPurchaseOrdersSummary = fetchPurchaseOrdersSummary;
+window.goToNewPurchaseRequisition = function() {
+  const modal = document.getElementById('purchaseOrdersModal');
+  if (modal) modal.classList.add('hidden');
+
+  if (typeof window.switchToPaymentTab === 'function') {
+    window.switchToPaymentTab();
+    setTimeout(() => {
+      if (typeof window.switchPaymentSubTab === 'function') {
+        window.switchPaymentSubTab('approval');
+      }
+      const docTypeEl = document.getElementById('appDocType');
+      if (docTypeEl) {
+        docTypeEl.value = '구매품의서';
+        if (typeof window.toggleApprovalAmountField === 'function') {
+          window.toggleApprovalAmountField();
+        }
+      }
+      const titleEl = document.getElementById('appTitle');
+      if (titleEl) {
+        titleEl.focus();
+      }
+    }, 250);
+  }
+};

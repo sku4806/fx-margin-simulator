@@ -882,10 +882,11 @@ def list_purchase_orders(
     end_date: Optional[str] = None,
     limit: int = 150
 ):
+    rows = []
     if not is_vercel:
         try:
             import legacy_mssql
-            rows = legacy_mssql.query_purchase_orders(
+            mssql_rows = legacy_mssql.query_purchase_orders(
                 part_no=part_no,
                 po_no=po_no,
                 maker=maker,
@@ -896,66 +897,82 @@ def list_purchase_orders(
                 end_date=end_date,
                 limit=limit
             )
-            if rows is not None and len(rows) > 0:
-                return {"status": "success", "total": len(rows), "orders": rows}
+            if mssql_rows:
+                rows = mssql_rows
         except Exception:
             pass
 
-    # 클라우드/Vercel 및 백엔드 폴백: 번들된 DPOFile 2,828건 데이터 동적 필터링
-    all_orders = get_bundled_po_data()
-    filtered = filter_purchase_orders(
-        all_orders,
-        q=q,
-        part_no=part_no,
-        po_no=po_no,
-        maker=maker,
-        status=status,
-        sales_rep=sales_rep,
-        start_date=start_date,
-        end_date=end_date,
-        limit=limit
-    )
-    return {"status": "success", "total": len(filtered), "orders": filtered}
+    if not rows:
+        all_orders = get_bundled_po_data()
+        rows = filter_purchase_orders(
+            all_orders,
+            q=q,
+            part_no=part_no,
+            po_no=po_no,
+            maker=maker,
+            status=status,
+            sales_rep=sales_rep,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit
+        )
+
+    # 웹 전자결재 승인 발주 건 통합 병합
+    try:
+        import web_purchase_orders
+        all_web = web_purchase_orders.get_all_web_purchase_orders()
+        filtered_web = web_purchase_orders.filter_web_orders(
+            all_web,
+            status=status,
+            q=q,
+            sales_rep=sales_rep,
+            part_no=part_no,
+            po_no=po_no,
+            maker=maker
+        )
+        rows = filtered_web + rows
+    except Exception as we:
+        print(f"[WARN] Failed to merge web purchase orders: {we}")
+
+    return {"status": "success", "total": len(rows), "orders": rows[:limit]}
 
 @app.get("/api/purchase-orders/summary")
 def purchase_orders_summary():
+    summary = None
     if not is_vercel:
         try:
             import legacy_mssql
             summary = legacy_mssql.get_purchase_orders_summary()
-            if summary and summary.get("total_count", 0) > 0:
-                return {"status": "success", "summary": summary}
         except Exception:
             pass
 
-    orders = get_bundled_po_data()
-    total_count = len(orders)
-    pending_orders = [o for o in orders if (o.get("status") or "").strip().upper() == "PO"]
-    pending_count = len(pending_orders)
-    pending_qty = sum(o.get("qty", 0) for o in pending_orders)
-    arrived_count = sum(1 for o in orders if (o.get("status") or "").strip().upper() == "IN")
-    cnl_count = sum(1 for o in orders if (o.get("status") or "").strip().upper() == "CNL")
+    if not summary or summary.get("total_count", 0) == 0:
+        orders = get_bundled_po_data()
+        total_count = len(orders)
+        pending_orders = [o for o in orders if (o.get("status") or "").strip().upper() == "PO"]
+        pending_count = len(pending_orders)
+        pending_qty = sum(o.get("qty", 0) for o in pending_orders)
+        arrived_count = sum(1 for o in orders if (o.get("status") or "").strip().upper() == "IN")
+        cnl_count = sum(1 for o in orders if (o.get("status") or "").strip().upper() == "CNL")
 
-    recent_pending = [
-        {
-            "idx": o.get("idx"),
-            "po_dt": o.get("po_dt"),
-            "po_no": o.get("po_no"),
-            "part_no": o.get("part_no"),
-            "maker": o.get("maker"),
-            "qty": o.get("qty", 0),
-            "unit_price": o.get("unit_price", 0.0),
-            "eta_date": o.get("eta_date"),
-            "sales_rep": o.get("sales_rep"),
-            "real_cust": o.get("real_cust"),
-            "supplier_name": o.get("supplier_name")
-        }
-        for o in pending_orders[:10]
-    ]
+        recent_pending = [
+            {
+                "idx": o.get("idx"),
+                "po_dt": o.get("po_dt"),
+                "po_no": o.get("po_no"),
+                "part_no": o.get("part_no"),
+                "maker": o.get("maker"),
+                "qty": o.get("qty", 0),
+                "unit_price": o.get("unit_price", 0.0),
+                "eta_date": o.get("eta_date"),
+                "sales_rep": o.get("sales_rep"),
+                "real_cust": o.get("real_cust"),
+                "supplier_name": o.get("supplier_name")
+            }
+            for o in pending_orders[:10]
+        ]
 
-    return {
-        "status": "success",
-        "summary": {
+        summary = {
             "total_count": total_count,
             "pending_count": pending_count,
             "pending_qty": pending_qty,
@@ -963,7 +980,22 @@ def purchase_orders_summary():
             "cnl_count": cnl_count,
             "recent_pending_orders": recent_pending
         }
-    }
+
+    # 웹 전자결재 승인 발주 건수 실시간 합산
+    try:
+        import web_purchase_orders
+        all_web = web_purchase_orders.get_all_web_purchase_orders()
+        web_pending = [o for o in all_web if o.get("status") == "PO"]
+        summary["pending_count"] = summary.get("pending_count", 0) + len(web_pending)
+        summary["pending_qty"] = summary.get("pending_qty", 0) + sum(int(o.get("qty", 0)) for o in web_pending)
+        summary["total_count"] = summary.get("total_count", 0) + len(all_web)
+        summary["web_orders_count"] = len(all_web)
+        if "recent_pending_orders" in summary and isinstance(summary["recent_pending_orders"], list):
+            summary["recent_pending_orders"] = web_pending + summary["recent_pending_orders"]
+    except Exception as we:
+        print(f"[WARN] Failed to merge web summary: {we}")
+
+    return {"status": "success", "summary": summary}
 
 # ========================================================
 # 📈 품목별 과거 단가 및 마진 이력 추적 (Price History) API
@@ -1222,9 +1254,78 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
         raise HTTPException(status_code=ins_res.status_code, detail=f"ERP 재고 삽입 실패: {ins_res.text}")
 
     inserted = ins_res.json() if ins_res.text else items_to_insert
+
+    # 3. 발주·입고예정(PO/ETA) 종합 관리 모듈에 즉시 동기화 연동 적재
+    try:
+        import web_purchase_orders
+        if data.items and len(data.items) > 0:
+            for idx, itm in enumerate(data.items, 1):
+                sub_po = f"{data.doc_no}-{idx}" if len(data.items) > 1 else data.doc_no
+                p_name = (itm.get("part_no") or itm.get("part_name") or data.part_name or "부품").strip()
+                p_maker = (itm.get("maker") or data.maker or "기타").strip()
+                p_qty = int(itm.get("qty") or data.qty or 1)
+                p_curr = (itm.get("currency") or data.currency or "USD").strip().upper()
+                p_uprice = float(itm.get("unit_price") or data.unit_price or 0.0)
+                is_usd = p_curr == "USD"
+                up_krw = round(p_uprice * 1350) if is_usd else p_uprice
+                amt_krw = up_krw * p_qty
+                f_up = p_uprice if is_usd else round(p_uprice / 1350, 4)
+                f_amt = f_up * p_qty
+
+                web_purchase_orders.save_local_web_order({
+                    "idx": f"WEB-{sub_po}",
+                    "po_dt": today_str,
+                    "po_no": sub_po,
+                    "part_no": p_name,
+                    "maker": p_maker,
+                    "qty": p_qty,
+                    "unit_price": up_krw,
+                    "amount": amt_krw,
+                    "currency": p_curr,
+                    "foreign_up": f_up,
+                    "foreign_amount": f_amt,
+                    "eta_date": data.target_date or "-",
+                    "status": "PO",
+                    "status_label": "입고대기(전자결재)",
+                    "sales_rep": data.drafter_name or "기안자",
+                    "supplier_name": itm.get("vendor") or data.vendor or "공급사 미지정",
+                    "real_cust": itm.get("customer") or data.customer or "실수요처 미지정",
+                    "remark": f"[전자결재 승인 발주] {approver_info} / 기안자: {data.drafter_name}",
+                    "source": "WEB_APPROVAL"
+                })
+        else:
+            is_usd = (data.currency or "USD") == "USD"
+            up_krw = round(data.unit_price * 1350) if is_usd else data.unit_price
+            amt_krw = up_krw * data.qty
+            f_up = data.unit_price if is_usd else round(data.unit_price / 1350, 4)
+            f_amt = f_up * data.qty
+            web_purchase_orders.save_local_web_order({
+                "idx": f"WEB-{data.doc_no}",
+                "po_dt": today_str,
+                "po_no": data.doc_no,
+                "part_no": data.part_name,
+                "maker": data.maker or "기타",
+                "qty": data.qty,
+                "unit_price": up_krw,
+                "amount": amt_krw,
+                "currency": data.currency or "USD",
+                "foreign_up": f_up,
+                "foreign_amount": f_amt,
+                "eta_date": data.target_date or "-",
+                "status": "PO",
+                "status_label": "입고대기(전자결재)",
+                "sales_rep": data.drafter_name or "기안자",
+                "supplier_name": data.vendor or "공급사 미지정",
+                "real_cust": data.customer or "실수요처 미지정",
+                "remark": f"[전자결재 승인 발주] {approver_info} / 기안자: {data.drafter_name}",
+                "source": "WEB_APPROVAL"
+            })
+    except Exception as we:
+        print(f"[WARN] Failed to save web purchase order to cache: {we}")
+
     return {
         "status": "success",
-        "message": f"구매품의서({data.doc_no}) 총 {len(items_to_insert)}건의 품목이 ERP 재고관리에 성공적으로 등록되었습니다.",
+        "message": f"구매품의서({data.doc_no}) 총 {len(items_to_insert)}건의 품목이 ERP 재고 및 발주·입고예정(PO/ETA) 목록에 성공적으로 등록되었습니다.",
         "items_count": len(items_to_insert),
         "items": inserted
     }
