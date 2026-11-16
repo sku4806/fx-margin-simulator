@@ -196,11 +196,12 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
               <th class="py-2.5 px-3 text-left min-w-[110px]">실수요처(납품처)</th>
               <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">영업담당</th>
               <th class="py-2.5 px-3 text-left min-w-[120px]">비고</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">관리</th>
             </tr>
           </thead>
           <tbody id="poTableBody" class="divide-y divide-slate-200">
             <tr>
-              <td colspan="14" class="py-12 text-center text-slate-400">데이터를 불러오는 중입니다...</td>
+              <td colspan="15" class="py-12 text-center text-slate-400">데이터를 불러오는 중입니다...</td>
             </tr>
           </tbody>
         </table>
@@ -334,10 +335,18 @@ function renderPoTable(orders) {
         <td class="py-2 px-2 text-center text-slate-400 font-mono">${rowNo}</td>
         <td class="py-2 px-2 text-center whitespace-nowrap">${statusBadge}</td>
         <td class="py-2 px-2 text-center font-mono text-slate-700 whitespace-nowrap">${o.po_dt || '-'}</td>
-        <td class="py-2 px-3 font-mono font-bold text-slate-800 truncate max-w-[140px]" title="${o.po_no}">
+        <td class="py-2 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
           <div class="flex items-center gap-1.5">
-            <span>${o.po_no}</span>
-            ${isWebApproval ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-100 text-indigo-800 border border-indigo-300 shrink-0">웹승인</span>' : ''}
+            <span class="truncate max-w-[130px]" title="${o.po_no}">${o.po_no}</span>
+            ${isWebApproval ? `
+              <span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-100 text-indigo-800 border border-indigo-300 shrink-0">웹승인</span>
+              <button type="button" 
+                      onclick="event.stopPropagation(); window.deleteWebPurchaseOrder && window.deleteWebPurchaseOrder('${o.po_no}', '${(o.part_no || '').replace(/'/g, "\\'")}')" 
+                      class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-300 shrink-0 cursor-pointer transition-colors shadow-2xs flex items-center gap-0.5"
+                      title="이 웹 발주 내역 삭제">
+                <span>✕</span> 삭제
+              </button>
+            ` : ''}
           </div>
         </td>
         <td class="py-2 px-3">
@@ -358,6 +367,18 @@ function renderPoTable(orders) {
         <td class="py-2 px-3 text-indigo-900 font-bold truncate max-w-[120px]" title="${o.real_cust || o.end_cust}">${o.real_cust || o.end_cust || '-'}</td>
         <td class="py-2 px-2 text-center font-bold text-slate-700 whitespace-nowrap">${o.sales_rep || '-'}</td>
         <td class="py-2 px-3 text-slate-500 truncate max-w-[140px]" title="${o.remark}">${o.remark || '-'}</td>
+        <td class="py-2 px-2 text-center whitespace-nowrap">
+          ${isWebApproval ? `
+            <button type="button" 
+                    onclick="event.stopPropagation(); window.deleteWebPurchaseOrder && window.deleteWebPurchaseOrder('${o.po_no}', '${(o.part_no || '').replace(/'/g, "\\'")}')" 
+                    class="px-2 py-0.5 text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-300 rounded shadow-2xs cursor-pointer transition-colors"
+                    title="웹 승인 발주 내역 삭제">
+              ✕ 삭제
+            </button>
+          ` : `
+            <span class="text-slate-300 font-mono text-[10px]" title="사내 ERP 전산 원장 직접 관리">-</span>
+          `}
+        </td>
       </tr>
     `;
   }).join('');
@@ -520,5 +541,30 @@ window.goToNewPurchaseRequisition = function() {
         titleEl.focus();
       }
     }, 250);
+  }
+};
+
+window.deleteWebPurchaseOrder = async function(poNo, partNo) {
+  if (!confirm(`웹 전자결재 승인 발주 건을 목록에서 삭제하시겠습니까?\n\n• 발주번호: ${poNo}\n• 품번: ${partNo || '-'}\n\n※ 삭제 시 발주·입고예정 목록 및 대기 수량 통계에서 즉시 제외됩니다.`)) {
+    return;
+  }
+  try {
+    const params = new URLSearchParams({ po_no: poNo });
+    if (partNo) params.set('part_no', partNo);
+    const res = await fetch(`/api/purchase-orders/web?${params.toString()}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      alert(`발주(${poNo}) 건이 성공적으로 삭제되었습니다.`);
+      await loadPoData();
+      if (typeof window.refreshInventory === 'function') {
+        window.refreshInventory();
+      }
+    } else {
+      alert('삭제 실패: ' + (data.message || '오류 발생'));
+    }
+  } catch (err) {
+    alert('삭제 통신 오류: ' + err.message);
   }
 };

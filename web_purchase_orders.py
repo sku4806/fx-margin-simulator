@@ -253,3 +253,61 @@ def filter_web_orders(
         filtered.append(o)
 
     return filtered
+
+def delete_web_purchase_order(po_no: str, part_no: Optional[str] = None) -> bool:
+    """웹 전자결재 발주 건 삭제 (로컬 캐시 + Supabase approval_requests 취소 동기화)"""
+    deleted_local = False
+    orders = load_local_web_orders()
+    initial_len = len(orders)
+    new_orders = []
+
+    clean_po = (po_no or "").strip()
+    clean_part = (part_no or "").strip()
+
+    for o in orders:
+        match_po = (o.get("po_no") or "").strip() == clean_po
+        match_part = not clean_part or (o.get("part_no") or "").strip() == clean_part
+        if match_po and match_part:
+            deleted_local = True
+        else:
+            new_orders.append(o)
+
+    if len(new_orders) < initial_len:
+        for p in DATA_PATHS:
+            try:
+                _ensure_dir(p)
+                with open(p, "w", encoding="utf-8") as f:
+                    json.dump(new_orders, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"[WARN] Failed to write {p}: {e}")
+
+    # Supabase approval_requests 상태 CANCELLED 업데이트
+    try:
+        headers = {
+            "apikey": PAYMENT_SB_KEY,
+            "Authorization": f"Bearer {PAYMENT_SB_KEY}",
+            "Content-Type": "application/json"
+        }
+        base_po = clean_po.split("-")[0] if "-" in clean_po else clean_po
+        url = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{clean_po}"
+        requests.patch(url, headers=headers, json={"status": "CANCELLED"}, timeout=4)
+        if base_po != clean_po:
+            url_base = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{base_po}"
+            requests.patch(url_base, headers=headers, json={"status": "CANCELLED"}, timeout=4)
+    except Exception as se:
+        print(f"[WARN] Supabase approval cancel error: {se}")
+
+    # Supabase ERP 재고(inventory_items) 삭제 동기화
+    try:
+        from main import SUPABASE_URL, SUPABASE_SERVICE_KEY
+        if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+            h1 = {
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+            }
+            del_url = f"{SUPABASE_URL}/rest/v1/inventory_items?po_no=like.{clean_po}*"
+            requests.delete(del_url, headers=h1, timeout=4)
+    except Exception:
+        pass
+
+    return deleted_local

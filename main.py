@@ -458,6 +458,19 @@ def purchase_orders_summary():
     except Exception as e:
         return {"status": "error", "message": str(e), "summary": {}}
 
+@app.delete("/api/purchase-orders/web")
+def delete_web_order(po_no: str, part_no: Optional[str] = None):
+    try:
+        import web_purchase_orders
+        success = web_purchase_orders.delete_web_purchase_order(po_no=po_no, part_no=part_no)
+        return {
+            "status": "success",
+            "deleted": success,
+            "message": f"웹 발주({po_no}) 건이 정상적으로 삭제되었습니다."
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 # ========================================================
 # 📈 품목별 과거 단가 및 마진 이력 추적 (Price History) API
 # ========================================================
