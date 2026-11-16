@@ -1170,6 +1170,7 @@ class PurchaseBridgeInput(BaseModel):
     target_date: Optional[str] = None
     approver_email: Optional[str] = None
     items: Optional[List[Dict[str, Any]]] = None
+    fx_rate: Optional[float] = None
 
 @app.post("/api/approvals/bridge-purchase-order")
 def bridge_purchase_order(data: PurchaseBridgeInput):
@@ -1201,6 +1202,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
     today_str = datetime.date.today().isoformat()
     entry_date = data.target_date or today_str
     approver_info = f"승인자: {data.approver_email}" if data.approver_email else "승인자: 지정 결재권자"
+    applied_fx = float(data.fx_rate or 1350.0)
     items_to_insert = []
 
     if data.items and len(data.items) > 0:
@@ -1211,7 +1213,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
             p_qty = int(itm.get("qty") or data.qty or 1)
             p_curr = (itm.get("currency") or data.currency or "USD").strip().upper()
             p_uprice = float(itm.get("unit_price") or data.unit_price or 0.0)
-            p_unit_usd = p_uprice if p_curr == "USD" else round(p_uprice / 1350.0, 4)
+            p_unit_usd = p_uprice if p_curr == "USD" else round(p_uprice / applied_fx, 4)
             p_memo = (itm.get("memo") or data.memo or "").strip()
 
             items_to_insert.append({
@@ -1228,7 +1230,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
                 "stock": max(1, p_qty),
                 "unit_usd": p_unit_usd,
                 "sold_price_usd": 0,
-                "ship_fx": 1350,
+                "ship_fx": applied_fx,
                 "margin": 20,
                 "order_status": "배정요청",
                 "payment_terms": "Net 30",
@@ -1237,7 +1239,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
                 "memo": f"[전자결재 승인 발주] 문서번호: {sub_po} / {approver_info} / 기안자: {data.drafter_name} / 승인일: {today_str} | {p_memo}".strip()
             })
     else:
-        unit_usd = data.unit_price if data.currency == "USD" else round(data.unit_price / 1350.0, 4)
+        unit_usd = data.unit_price if data.currency == "USD" else round(data.unit_price / applied_fx, 4)
         items_to_insert.append({
             "maker": data.maker or "기타",
             "part_name": data.part_name,
@@ -1252,7 +1254,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
             "stock": max(1, data.qty),
             "unit_usd": unit_usd,
             "sold_price_usd": 0,
-            "ship_fx": 1350,
+            "ship_fx": applied_fx,
             "margin": 20,
             "order_status": "배정요청",
             "payment_terms": "Net 30",
@@ -1280,9 +1282,9 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
                 p_curr = (itm.get("currency") or data.currency or "USD").strip().upper()
                 p_uprice = float(itm.get("unit_price") or data.unit_price or 0.0)
                 is_usd = p_curr == "USD"
-                up_krw = round(p_uprice * 1350) if is_usd else p_uprice
+                up_krw = round(p_uprice * applied_fx) if is_usd else p_uprice
                 amt_krw = up_krw * p_qty
-                f_up = p_uprice if is_usd else round(p_uprice / 1350, 4)
+                f_up = p_uprice if is_usd else round(p_uprice / applied_fx, 4)
                 f_amt = f_up * p_qty
 
                 web_purchase_orders.save_local_web_order({
@@ -1308,9 +1310,9 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
                 })
         else:
             is_usd = (data.currency or "USD") == "USD"
-            up_krw = round(data.unit_price * 1350) if is_usd else data.unit_price
+            up_krw = round(data.unit_price * applied_fx) if is_usd else data.unit_price
             amt_krw = up_krw * data.qty
-            f_up = data.unit_price if is_usd else round(data.unit_price / 1350, 4)
+            f_up = data.unit_price if is_usd else round(data.unit_price / applied_fx, 4)
             f_amt = f_up * data.qty
             web_purchase_orders.save_local_web_order({
                 "idx": f"WEB-{data.doc_no}",

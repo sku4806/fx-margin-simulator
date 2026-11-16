@@ -375,6 +375,93 @@ def create_sales_memo(item: MemoInput):
 # ========================================================
 # 🚢 발주(PO) 및 입고 예정(ETA) 조회 API (DPOFile + 웹 전자결재 승인 발주 통합 연동)
 # ========================================================
+_BUNDLED_PO_DATA = None
+_BUNDLED_PH_DATA = None
+
+def get_bundled_po_data():
+    global _BUNDLED_PO_DATA
+    if _BUNDLED_PO_DATA is None:
+        po_paths = [
+            os.path.join(BASE_DIR, "data", "purchase_orders.json"),
+            os.path.join(BASE_DIR, "api", "data", "purchase_orders.json"),
+            os.path.join(BASE_DIR, "purchase_orders.json")
+        ]
+        for p in po_paths:
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        _BUNDLED_PO_DATA = json.load(f)
+                        break
+                except Exception as e:
+                    print(f"[WARN] Failed to load {p}: {e}")
+        if _BUNDLED_PO_DATA is None:
+            _BUNDLED_PO_DATA = []
+    return _BUNDLED_PO_DATA
+
+def get_bundled_ph_data():
+    global _BUNDLED_PH_DATA
+    if _BUNDLED_PH_DATA is None:
+        ph_paths = [
+            os.path.join(BASE_DIR, "data", "price_history.json"),
+            os.path.join(BASE_DIR, "api", "data", "price_history.json"),
+            os.path.join(BASE_DIR, "price_history.json")
+        ]
+        for p in ph_paths:
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        _BUNDLED_PH_DATA = json.load(f)
+                        break
+                except Exception as e:
+                    print(f"[WARN] Failed to load {p}: {e}")
+        if _BUNDLED_PH_DATA is None:
+            _BUNDLED_PH_DATA = {"incomes": [], "sales": []}
+    return _BUNDLED_PH_DATA
+
+def filter_purchase_orders(
+    orders,
+    q: Optional[str] = None,
+    part_no: Optional[str] = None,
+    po_no: Optional[str] = None,
+    maker: Optional[str] = None,
+    status: Optional[str] = None,
+    sales_rep: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 150
+):
+    res = []
+    q_lower = q.strip().lower() if q and q.strip() else None
+    part_lower = part_no.strip().lower() if part_no and part_no.strip() else None
+    po_lower = po_no.strip().lower() if po_no and po_no.strip() else None
+    maker_lower = maker.strip().lower() if maker and maker.strip() else None
+    status_clean = status.strip().upper() if status and status.strip() and status != 'ALL' else None
+    sales_clean = sales_rep.strip().upper() if sales_rep and sales_rep.strip() and sales_rep != 'ALL' else None
+
+    for item in orders:
+        if status_clean and (item.get("status") or "").strip().upper() != status_clean:
+            continue
+        if part_lower and part_lower not in (item.get("part_no") or "").lower():
+            continue
+        if po_lower and po_lower not in (item.get("po_no") or "").lower():
+            continue
+        if maker_lower and maker_lower != (item.get("maker") or "").strip().lower():
+            continue
+        if sales_clean and sales_clean != (item.get("sales_rep") or "").strip().upper():
+            continue
+        if start_date and (item.get("po_dt") or "") < start_date:
+            continue
+        if end_date and (item.get("po_dt") or "") > f"{end_date} 23:59:59":
+            continue
+        if q_lower:
+            searchable = f"{item.get('part_no','')} {item.get('po_no','')} {item.get('maker','')} {item.get('supplier_name','')} {item.get('supplier_cname','')} {item.get('real_cust','')} {item.get('end_cust','')} {item.get('sales_rep','')} {item.get('remark','')}".lower()
+            if q_lower not in searchable:
+                continue
+        res.append(item)
+        if len(res) >= limit:
+            break
+    return res
+
 @app.get("/api/purchase-orders")
 def list_purchase_orders(
     q: Optional[str] = None,
@@ -388,9 +475,10 @@ def list_purchase_orders(
     limit: int = 150
 ):
     try:
-        # 1. 레거시 MS-SQL DPOFile 조회
+        rows = []
+        # 1. 레거시 MS-SQL DPOFile 조회 시도
         try:
-            rows = legacy_mssql.query_purchase_orders(
+            mssql_rows = legacy_mssql.query_purchase_orders(
                 part_no=part_no,
                 po_no=po_no,
                 maker=maker,
@@ -401,10 +489,28 @@ def list_purchase_orders(
                 end_date=end_date,
                 limit=limit
             )
+            if mssql_rows:
+                rows = mssql_rows
         except Exception:
-            rows = []
+            pass
 
-        # 2. 웹 시스템 전자결재(구매 품의서) 승인 발주 건 통합 병합
+        # 2. MS-SQL 미연결/실패 시 번들 데이터(DPOFile 2,828건) 자동 폴백
+        if not rows:
+            all_orders = get_bundled_po_data()
+            rows = filter_purchase_orders(
+                all_orders,
+                q=q,
+                part_no=part_no,
+                po_no=po_no,
+                maker=maker,
+                status=status,
+                sales_rep=sales_rep,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit
+            )
+
+        # 3. 웹 시스템 전자결재(구매 품의서) 승인 발주 건 통합 병합
         try:
             import web_purchase_orders
             all_web = web_purchase_orders.get_all_web_purchase_orders()
@@ -429,15 +535,45 @@ def list_purchase_orders(
 @app.get("/api/purchase-orders/summary")
 def purchase_orders_summary():
     try:
+        summary = None
         try:
             summary = legacy_mssql.get_purchase_orders_summary()
         except Exception:
+            pass
+
+        if not summary or summary.get("total_count", 0) == 0:
+            orders = get_bundled_po_data()
+            total_count = len(orders)
+            pending_orders = [o for o in orders if (o.get("status") or "").strip().upper() == "PO"]
+            pending_count = len(pending_orders)
+            pending_qty = sum(o.get("qty", 0) for o in pending_orders)
+            arrived_count = sum(1 for o in orders if (o.get("status") or "").strip().upper() == "IN")
+            cnl_count = sum(1 for o in orders if (o.get("status") or "").strip().upper() == "CNL")
+
+            recent_pending = [
+                {
+                    "idx": o.get("idx"),
+                    "po_dt": o.get("po_dt"),
+                    "po_no": o.get("po_no"),
+                    "part_no": o.get("part_no"),
+                    "maker": o.get("maker"),
+                    "qty": o.get("qty", 0),
+                    "unit_price": o.get("unit_price", 0.0),
+                    "eta_date": o.get("eta_date"),
+                    "sales_rep": o.get("sales_rep"),
+                    "real_cust": o.get("real_cust"),
+                    "supplier_name": o.get("supplier_name")
+                }
+                for o in pending_orders[:10]
+            ]
+
             summary = {
-                "total_count": 0,
-                "pending_count": 0,
-                "pending_qty": 0,
-                "arrived_count": 0,
-                "cnl_count": 0
+                "total_count": total_count,
+                "pending_count": pending_count,
+                "pending_qty": pending_qty,
+                "arrived_count": arrived_count,
+                "cnl_count": cnl_count,
+                "recent_pending_orders": recent_pending
             }
 
         # 웹 전자결재 승인 발주 건수 실시간 합산
@@ -476,8 +612,51 @@ def delete_web_order(po_no: str, part_no: Optional[str] = None):
 # ========================================================
 @app.get("/api/price-history")
 def price_history(part_no: str):
+    p_clean = part_no.strip() if part_no else ""
+    if not p_clean:
+        return {
+            "status": "success",
+            "data": {
+                "part_no": "",
+                "summary": {},
+                "purchases": [],
+                "sales": [],
+                "quotes": []
+            }
+        }
     try:
-        data = legacy_mssql.get_part_price_history(part_no=part_no)
+        data = None
+        try:
+            data = legacy_mssql.get_part_price_history(part_no=p_clean)
+        except Exception:
+            pass
+
+        if not data or (not data.get("purchases") and not data.get("sales")):
+            # MS-SQL 미연결 시 번들 데이터 폴백
+            all_ph = get_bundled_ph_data()
+            purchases = [p for p in all_ph.get("incomes", []) if p_clean.lower() in (p.get("part_no") or "").lower()]
+            sales = [s for s in all_ph.get("sales", []) if p_clean.lower() in (s.get("part_no") or "").lower()]
+
+            last_buy = purchases[0].get("in_up", 0.0) if purchases else 0.0
+            last_sell = sales[0].get("out_up", 0.0) if sales else 0.0
+            avg_buy = sum(p.get("in_up", 0.0) for p in purchases) / len(purchases) if purchases else 0.0
+            avg_sell = sum(s.get("out_up", 0.0) for s in sales) / len(sales) if sales else 0.0
+
+            data = {
+                "part_no": p_clean,
+                "summary": {
+                    "last_buy_price": last_buy,
+                    "last_sell_price": last_sell,
+                    "avg_buy_price": round(avg_buy, 2),
+                    "avg_sell_price": round(avg_sell, 2),
+                    "total_purchases_count": len(purchases),
+                    "total_sales_count": len(sales)
+                },
+                "purchases": purchases[:50],
+                "sales": sales[:50],
+                "quotes": []
+            }
+
         return {"status": "success", "data": data}
     except Exception as e:
         return {"status": "error", "message": str(e), "data": {}}
@@ -505,6 +684,7 @@ class PurchaseBridgeInput(BaseModel):
     target_date: Optional[str] = None
     approver_email: Optional[str] = None
     items: Optional[List[Dict[str, Any]]] = None
+    fx_rate: Optional[float] = None
 
 @app.post("/api/approvals/bridge-purchase-order")
 def bridge_purchase_order(data: PurchaseBridgeInput):
@@ -536,6 +716,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
     today_str = datetime.date.today().isoformat()
     entry_date = data.target_date or today_str
     approver_info = f"승인자: {data.approver_email}" if data.approver_email else "승인자: 지정 결재권자"
+    applied_fx = float(data.fx_rate or 1350.0)
     items_to_insert = []
 
     if data.items and len(data.items) > 0:
@@ -546,7 +727,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
             p_qty = int(itm.get("qty") or data.qty or 1)
             p_curr = (itm.get("currency") or data.currency or "USD").strip().upper()
             p_uprice = float(itm.get("unit_price") or data.unit_price or 0.0)
-            p_unit_usd = p_uprice if p_curr == "USD" else round(p_uprice / 1350.0, 4)
+            p_unit_usd = p_uprice if p_curr == "USD" else round(p_uprice / applied_fx, 4)
             p_memo = (itm.get("memo") or data.memo or "").strip()
 
             items_to_insert.append({
@@ -563,7 +744,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
                 "stock": max(1, p_qty),
                 "unit_usd": p_unit_usd,
                 "sold_price_usd": 0,
-                "ship_fx": 1350,
+                "ship_fx": applied_fx,
                 "margin": 20,
                 "order_status": "배정요청",
                 "payment_terms": "Net 30",
@@ -572,7 +753,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
                 "memo": f"[전자결재 승인 발주] 문서번호: {sub_po} / {approver_info} / 기안자: {data.drafter_name} / 승인일: {today_str} | {p_memo}".strip()
             })
     else:
-        unit_usd = data.unit_price if data.currency == "USD" else round(data.unit_price / 1350.0, 4)
+        unit_usd = data.unit_price if data.currency == "USD" else round(data.unit_price / applied_fx, 4)
         items_to_insert.append({
             "maker": data.maker or "기타",
             "part_name": data.part_name,
@@ -587,7 +768,7 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
             "stock": max(1, data.qty),
             "unit_usd": unit_usd,
             "sold_price_usd": 0,
-            "ship_fx": 1350,
+            "ship_fx": applied_fx,
             "margin": 20,
             "order_status": "배정요청",
             "payment_terms": "Net 30",
@@ -615,9 +796,9 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
                 p_curr = (itm.get("currency") or data.currency or "USD").strip().upper()
                 p_uprice = float(itm.get("unit_price") or data.unit_price or 0.0)
                 is_usd = p_curr == "USD"
-                up_krw = round(p_uprice * 1350) if is_usd else p_uprice
+                up_krw = round(p_uprice * applied_fx) if is_usd else p_uprice
                 amt_krw = up_krw * p_qty
-                f_up = p_uprice if is_usd else round(p_uprice / 1350, 4)
+                f_up = p_uprice if is_usd else round(p_uprice / applied_fx, 4)
                 f_amt = f_up * p_qty
 
                 web_purchase_orders.save_local_web_order({
@@ -643,9 +824,9 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
                 })
         else:
             is_usd = (data.currency or "USD") == "USD"
-            up_krw = round(data.unit_price * 1350) if is_usd else data.unit_price
+            up_krw = round(data.unit_price * applied_fx) if is_usd else data.unit_price
             amt_krw = up_krw * data.qty
-            f_up = data.unit_price if is_usd else round(data.unit_price / 1350, 4)
+            f_up = data.unit_price if is_usd else round(data.unit_price / applied_fx, 4)
             f_amt = f_up * data.qty
             web_purchase_orders.save_local_web_order({
                 "idx": f"WEB-{data.doc_no}",

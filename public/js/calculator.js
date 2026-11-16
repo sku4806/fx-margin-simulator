@@ -34,7 +34,14 @@ export function computeQuotation({
     unitMinPriceActualKrw = unitActualCostKrw * targetMultiplier;
     unitMinPriceReplaceKrw = unitReplaceCostKrw * targetMultiplier;
   } else {
-    const rate = (typeof targetMarginRate === 'number' && targetMarginRate < 1) ? targetMarginRate : 0.20;
+    let rate = 0.20;
+    if (typeof targetMarginRate === 'number' && !isNaN(targetMarginRate)) {
+      if (targetMarginRate >= 1) {
+        rate = Math.min(0.99, targetMarginRate / 100.0);
+      } else if (targetMarginRate >= 0) {
+        rate = targetMarginRate;
+      }
+    }
     unitMinPriceActualKrw = (1 - rate) > 0 ? (unitActualCostKrw / (1 - rate)) : 0;
     unitMinPriceReplaceKrw = (1 - rate) > 0 ? (unitReplaceCostKrw / (1 - rate)) : 0;
   }

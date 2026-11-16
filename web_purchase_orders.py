@@ -297,17 +297,18 @@ def delete_web_purchase_order(po_no: str, part_no: Optional[str] = None) -> bool
     except Exception as se:
         print(f"[WARN] Supabase approval cancel error: {se}")
 
-    # Supabase ERP 재고(inventory_items) 삭제 동기화
+    # Supabase ERP 재고(inventory_items) 삭제 동기화 (로컬 및 Vercel 환경 안전 처리)
     try:
-        from main import SUPABASE_URL, SUPABASE_SERVICE_KEY
-        if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+        sb_url = os.getenv("SUPABASE_URL", "https://qheijtepveajdrqerxef.supabase.co")
+        sb_key = os.getenv("SUPABASE_SERVICE_KEY", "sb_publishable_0TB2JQq4BVfvihySxCbbkw_v4ZRAF80")
+        if sb_url and sb_key:
             h1 = {
-                "apikey": SUPABASE_SERVICE_KEY,
-                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+                "apikey": sb_key,
+                "Authorization": f"Bearer {sb_key}"
             }
-            del_url = f"{SUPABASE_URL}/rest/v1/inventory_items?po_no=like.{clean_po}*"
+            del_url = f"{sb_url}/rest/v1/inventory_items?po_no=like.{clean_po}*"
             requests.delete(del_url, headers=h1, timeout=4)
-    except Exception:
-        pass
+    except Exception as ie:
+        print(f"[WARN] Failed to delete bridged inventory item: {ie}")
 
     return deleted_local

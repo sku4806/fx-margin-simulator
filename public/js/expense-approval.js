@@ -2261,7 +2261,8 @@ async function bridgePurchaseRequisitionToInventory(doc) {
           memo: meta.memo || '',
           target_date: targetDate,
           approver_email: currentEmail,
-          items: items
+          items: items,
+          fx_rate: meta.fx_rate || parseFloat(document.getElementById('appPurchaseFxRate')?.value) || (typeof window.getLiveFxRate === 'function' ? window.getLiveFxRate() : 1334.0)
         })
       });
       const data = await resp.json();
