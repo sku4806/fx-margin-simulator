@@ -706,12 +706,35 @@ function renderUnpaidPagination(total, totalPages) {
 window.goToUnpaidPage = function(page) {
   unpaidPage = page;
   updateUnpaidCurrentPage();
+
+  // 🚀 목록 스크롤 최상단 자동 이동 (내부 테이블 스크롤 + 윈도우 스크롤)
+  const tableContainer = document.getElementById("unpaidTableBody")?.closest(".overflow-y-auto");
+  if (tableContainer) tableContainer.scrollTop = 0;
+  const mobileContainer = document.getElementById("unpaidCardContainer");
+  if (mobileContainer) mobileContainer.scrollTop = 0;
+
+  const headerEl = document.querySelector("#unpaidSection .bg-amber-50\\/90") || document.getElementById("unpaidSection");
+  if (headerEl) {
+    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+  }
 };
 
 window.setUnpaidPageSize = function(size) {
   unpaidPageSize = (size === 'ALL') ? 'ALL' : parseInt(size, 10);
   unpaidPage = 1;
   updateUnpaidCurrentPage();
+
+  const tableContainer = document.getElementById("unpaidTableBody")?.closest(".overflow-y-auto");
+  if (tableContainer) tableContainer.scrollTop = 0;
+  const mobileContainer = document.getElementById("unpaidCardContainer");
+  if (mobileContainer) mobileContainer.scrollTop = 0;
+
+  const headerEl = document.querySelector("#unpaidSection .bg-amber-50\\/90") || document.getElementById("unpaidSection");
+  if (headerEl) {
+    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+  }
 };
 
 /**

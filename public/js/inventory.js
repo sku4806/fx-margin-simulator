@@ -773,14 +773,35 @@ function renderPagination(total, totalPages) {
 window.goToInventoryPage = function(page) {
   currentPage = page;
   renderCurrentPage();
-  const tableEl = document.querySelector('.overflow-y-auto');
+
+  // 🚀 목록 스크롤 최상단 자동 이동 (내부 테이블 스크롤 + 윈도우 스크롤)
+  const tableEl = document.getElementById("inventoryTableBody")?.closest(".overflow-y-auto") || document.querySelector('.overflow-y-auto');
   if (tableEl) tableEl.scrollTop = 0;
+  const mobileContainer = document.getElementById("mobileCardList");
+  if (mobileContainer) mobileContainer.scrollTop = 0;
+
+  const headerEl = document.getElementById("inventoryGrandSummary") || document.getElementById("inventoryHeaderBar") || document.getElementById("inventoryMainArea");
+  if (headerEl) {
+    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+  }
 };
 
 window.setInventoryPageSize = function(size) {
   pageSize = (size === 'ALL') ? 'ALL' : parseInt(size, 10);
   currentPage = 1;
   renderCurrentPage();
+
+  const tableEl = document.getElementById("inventoryTableBody")?.closest(".overflow-y-auto") || document.querySelector('.overflow-y-auto');
+  if (tableEl) tableEl.scrollTop = 0;
+  const mobileContainer = document.getElementById("mobileCardList");
+  if (mobileContainer) mobileContainer.scrollTop = 0;
+
+  const headerEl = document.getElementById("inventoryGrandSummary") || document.getElementById("inventoryHeaderBar") || document.getElementById("inventoryMainArea");
+  if (headerEl) {
+    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+  }
 };
 
 function renderDesktopTable(items, activeTab, onEdit, onDelete, onSplit, canEdit) {

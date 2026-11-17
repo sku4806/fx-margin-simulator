@@ -40,7 +40,7 @@ const HEAL_INTERVAL_MS = 10 * 60 * 1000;
 
 function debounce(func, wait = 200) {
   let timeout;
-  return function(...args) {
+  return function (...args) {
     clearTimeout(timeout);
     timeout = setTimeout(() => func.apply(this, args), wait);
   };
@@ -452,7 +452,7 @@ function bindShipmentToolbarEvents() {
       lastFilteredShipments = raw;
     } else {
       const q = term.toLowerCase().trim();
-      lastFilteredShipments = raw.filter(item => 
+      lastFilteredShipments = raw.filter(item =>
         (item.part_no && item.part_no.toLowerCase().includes(q)) ||
         (item.customer && item.customer.toLowerCase().includes(q)) ||
         (item.real_cust && item.real_cust.toLowerCase().includes(q)) ||
@@ -476,7 +476,7 @@ function bindShipmentToolbarEvents() {
 /**
  * 날짜 프리셋 변경
  */
-window.setShipmentDatePreset = async function(preset) {
+window.setShipmentDatePreset = async function (preset) {
   const now = new Date();
   const end = now.toISOString().slice(0, 10);
   let start = end;
@@ -772,26 +772,49 @@ function renderShipmentPaginationUI() {
   `;
 }
 
-window.goToShipmentPage = function(page) {
+window.goToShipmentPage = function (page) {
   shipmentPage = page;
   updateShipmentCurrentPage();
+
+  // 🚀 목록 스크롤 최상단 자동 이동 (내부 테이블 스크롤 + 윈도우 스크롤)
+  const tableContainer = document.getElementById("shipmentTableBody")?.closest(".overflow-y-auto");
+  if (tableContainer) tableContainer.scrollTop = 0;
+  const mobileContainer = document.getElementById("shipmentCardContainer");
+  if (mobileContainer) mobileContainer.scrollTop = 0;
+
+  const headerEl = document.querySelector("#shipmentsSection .bg-amber-50\\/90") || document.getElementById("shipmentsSection");
+  if (headerEl) {
+    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+  }
 };
 
-window.getShipmentByIndex = function(idx) {
+window.getShipmentByIndex = function (idx) {
   const paged = getPagedShipments();
   return paged[idx] || null;
 };
 
-window.setShipmentPageSize = function(size) {
+window.setShipmentPageSize = function (size) {
   shipmentPageSize = (size === 'ALL') ? 'ALL' : parseInt(size, 10);
   shipmentPage = 1;
   updateShipmentCurrentPage();
+
+  const tableContainer = document.getElementById("shipmentTableBody")?.closest(".overflow-y-auto");
+  if (tableContainer) tableContainer.scrollTop = 0;
+  const mobileContainer = document.getElementById("shipmentCardContainer");
+  if (mobileContainer) mobileContainer.scrollTop = 0;
+
+  const headerEl = document.querySelector("#shipmentsSection .bg-amber-50\\/90") || document.getElementById("shipmentsSection");
+  if (headerEl) {
+    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+  }
 };
 
 /**
  * 📥 세일즈 마스터 규격 Excel 내보내기 (UTF-8 BOM CSV 생성)
  */
-window.exportShipmentLedgerExcel = function() {
+window.exportShipmentLedgerExcel = function () {
   const items = lastFilteredShipments;
   if (!items || items.length === 0) {
     alert("내보낼 출하 원장 데이터가 없습니다.");

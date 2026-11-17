@@ -651,12 +651,35 @@ function renderQuotePagination(total, totalPages) {
 window.goToQuotePage = function(page) {
   quotePage = page;
   updateQuoteCurrentPage();
+
+  // 🚀 목록 스크롤 최상단 자동 이동 (내부 테이블 스크롤 + 윈도우 스크롤)
+  const tableContainer = document.getElementById("quotationTableBody")?.closest(".overflow-y-auto");
+  if (tableContainer) tableContainer.scrollTop = 0;
+  const mobileContainer = document.getElementById("quoteCardContainer");
+  if (mobileContainer) mobileContainer.scrollTop = 0;
+
+  const headerEl = document.querySelector("#quotationsSection .bg-amber-50\\/90") || document.getElementById("quotationsSection");
+  if (headerEl) {
+    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+  }
 };
 
 window.setQuotePageSize = function(size) {
   quotePageSize = (size === 'ALL') ? 'ALL' : parseInt(size, 10);
   quotePage = 1;
   updateQuoteCurrentPage();
+
+  const tableContainer = document.getElementById("quotationTableBody")?.closest(".overflow-y-auto");
+  if (tableContainer) tableContainer.scrollTop = 0;
+  const mobileContainer = document.getElementById("quoteCardContainer");
+  if (mobileContainer) mobileContainer.scrollTop = 0;
+
+  const headerEl = document.querySelector("#quotationsSection .bg-amber-50\\/90") || document.getElementById("quotationsSection");
+  if (headerEl) {
+    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+  }
 };
 
 /**
