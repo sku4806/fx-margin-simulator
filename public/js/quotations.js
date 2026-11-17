@@ -17,6 +17,21 @@ let currentEndDate = initDates.end;
 let currentMfg = '';
 let currentPreset = '2M';
 
+const SALES_ALIAS_MAP = {
+  'william': ['고기봉', 'william'],
+  'willam': ['고기봉', 'willam'],
+  'joey': ['조지윤', '조재윤', 'joey'],
+  'joye': ['조지윤', '조재윤', 'joye'],
+  'allen': ['박재범', 'allen'],
+  'kelly': ['김경래', 'kelly'],
+  'steve': ['황환', 'steve'],
+  'dustin': ['김명호', 'dustin'],
+  'eric': ['이재상', 'eric'],
+  'timothy': ['박대원', 'timothy'],
+  'paul': ['김현진', 'paul'],
+  'logan': ['이민수', 'logan']
+};
+
 function debounce(fn, delay = 200) {
   let timer = null;
   return function(...args) {
@@ -89,7 +104,22 @@ export async function fetchQuotations(params = {}) {
       if (end) qb = qb.lte('quote_date', end);
       if (mfg) qb = qb.eq('maker', mfg);
       if (query) {
-        qb = qb.or(`part_name.ilike.%${query}%,customer_name.ilike.%${query}%,sales_rep.ilike.%${query}%,quote_no.ilike.%${query}%`);
+        const qTrim = query.trim();
+        const orClauses = [
+          `part_name.ilike.%${qTrim}%`,
+          `customer_name.ilike.%${qTrim}%`,
+          `sales_rep.ilike.%${qTrim}%`,
+          `quote_no.ilike.%${qTrim}%`
+        ];
+        const qLower = qTrim.toLowerCase();
+        for (const [k, vals] of Object.entries(SALES_ALIAS_MAP)) {
+          if (qLower.includes(k)) {
+            for (const v of vals) {
+              orClauses.push(`sales_rep.ilike.%${v}%`);
+            }
+          }
+        }
+        qb = qb.or(orClauses.join(','));
       }
       qb = qb.order('quote_date', { ascending: false }).order('quote_no', { ascending: true }).order('line_no', { ascending: true });
 
@@ -872,14 +902,26 @@ function bindQuotationEvents() {
     if (!term) {
       lastFilteredQuotes = cachedQuotations;
     } else {
-      lastFilteredQuotes = cachedQuotations.filter(q => 
-        (q.part_no && q.part_no.toLowerCase().includes(term)) ||
-        (q.cname && q.cname.toLowerCase().includes(term)) ||
-        (q.contact && q.contact.toLowerCase().includes(term)) ||
-        (q.sales && q.sales.toLowerCase().includes(term)) ||
-        (q.mfg && q.mfg.toLowerCase().includes(term)) ||
-        (q.quote_no && q.quote_no.toLowerCase().includes(term))
-      );
+      const qLower = term.toLowerCase().trim();
+      const extraMatches = [];
+      for (const [k, vals] of Object.entries(SALES_ALIAS_MAP)) {
+        if (qLower.includes(k)) {
+          extraMatches.push(...vals);
+        }
+      }
+
+      lastFilteredQuotes = cachedQuotations.filter(q => {
+        const partMatch = q.part_no && q.part_no.toLowerCase().includes(qLower);
+        const cnameMatch = q.cname && q.cname.toLowerCase().includes(qLower);
+        const contactMatch = q.contact && q.contact.toLowerCase().includes(qLower);
+        const salesMatch = q.sales && (
+          q.sales.toLowerCase().includes(qLower) || 
+          extraMatches.some(m => q.sales.toLowerCase().includes(m.toLowerCase()))
+        );
+        const mfgMatch = q.mfg && q.mfg.toLowerCase().includes(qLower);
+        const quoteNoMatch = q.quote_no && q.quote_no.toLowerCase().includes(qLower);
+        return partMatch || cnameMatch || contactMatch || salesMatch || mfgMatch || quoteNoMatch;
+      });
     }
     quotePage = 1;
     updateQuoteCurrentPage();

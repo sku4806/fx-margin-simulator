@@ -116,6 +116,27 @@ def get_fx_rate():
 # ========================================================
 # 📋 Vercel Serverless Supabase 견적 이력 API (Service Key 권한 우회)
 # ========================================================
+SALES_ALIAS_MAP = {
+    "william": ["고기봉", "william"],
+    "willam": ["고기봉", "willam"],
+    "joey": ["조지윤", "조재윤", "joey"],
+    "joye": ["조지윤", "조재윤", "joye"],
+    "allen": ["박재범", "allen"],
+    "kelly": ["김경래", "kelly"],
+    "steve": ["황환", "황 환", "steve"],
+    "dustin": ["김명호", "dustin"],
+    "eric": ["이재상", "eric"],
+    "timothy": ["박대원", "timothy"],
+    "paul": ["김현진", "paul"],
+    "logan": ["이민수", "logan"],
+    "tony": ["이동일", "tony"],
+    "susan": ["최연아", "susan"],
+    "raina": ["손유경", "raina"],
+    "trisha": ["진혜영", "trisha"],
+    "jane": ["문숙정", "jane"],
+    "lily": ["고유진", "lily"]
+}
+
 @app.get("/api/quotations")
 def list_quotations(
     start_date: Optional[str] = None,
@@ -143,7 +164,18 @@ def list_quotations(
             params.append(("maker", f"eq.{mfg.strip()}"))
         if query and query.strip():
             term = query.strip()
-            params.append(("or", f"(part_name.ilike.%{term}%,customer_name.ilike.%{term}%,sales_rep.ilike.%{term}%,quote_no.ilike.%{term}%)"))
+            or_parts = [
+                f"part_name.ilike.%{term}%",
+                f"customer_name.ilike.%{term}%",
+                f"sales_rep.ilike.%{term}%",
+                f"quote_no.ilike.%{term}%"
+            ]
+            q_lower = term.lower()
+            for a_key, a_vals in SALES_ALIAS_MAP.items():
+                if a_key in q_lower:
+                    for v in a_vals:
+                        or_parts.append(f"sales_rep.ilike.%{v}%")
+            params.append(("or", f"({','.join(or_parts)})"))
 
         res = requests.get(f"{SUPABASE_URL}/rest/v1/legacy_quotations", headers=headers, params=params, timeout=10)
         if res.status_code == 200:

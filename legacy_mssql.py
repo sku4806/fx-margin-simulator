@@ -66,6 +66,27 @@ def get_quotation_mfgs() -> List[str]:
         print(f"[WARN] MS-SQL MFG 목록 조회 실패: {e}")
         return _CACHED_MFGS["data"] or ["ISSI", "Giantec", "GigaDevice", "CCSS", "SMI", "XMOS", "OTHERS"]
 
+SALES_ALIAS_MAP = {
+    "william": ["고기봉", "william"],
+    "willam": ["고기봉", "willam"],
+    "joey": ["조지윤", "조재윤", "joey"],
+    "joye": ["조지윤", "조재윤", "joye"],
+    "allen": ["박재범", "allen"],
+    "kelly": ["김경래", "kelly"],
+    "steve": ["황환", "황 환", "steve"],
+    "dustin": ["김명호", "dustin"],
+    "eric": ["이재상", "eric"],
+    "timothy": ["박대원", "timothy"],
+    "paul": ["김현진", "paul"],
+    "logan": ["이민수", "logan"],
+    "tony": ["이동일", "tony"],
+    "susan": ["최연아", "susan"],
+    "raina": ["손유경", "raina"],
+    "trisha": ["진혜영", "trisha"],
+    "jane": ["문숙정", "jane"],
+    "lily": ["고유진", "lily"]
+}
+
 def query_quotations(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -91,15 +112,29 @@ def query_quotations(
         params.append(mfg.strip())
     if search_query and search_query.strip():
         term = f"%{search_query.strip()}%"
-        conditions.append("""(
+        sq_clean = search_query.strip().lower()
+        alias_conds = []
+        alias_params = []
+        for a_key, a_vals in SALES_ALIAS_MAP.items():
+            if a_key in sq_clean:
+                for v in a_vals:
+                    alias_conds.append("q.Sales LIKE %s")
+                    alias_params.append(f"%{v}%")
+
+        if alias_conds:
+            extra_or = " OR " + " OR ".join(alias_conds)
+        else:
+            extra_or = ""
+
+        conditions.append(f"""(
             q.PartNo LIKE %s OR 
             c.Cname LIKE %s OR 
             q.CNAME LIKE %s OR 
             q.CONTACT LIKE %s OR 
             q.Sales LIKE %s OR 
-            q.QuoteNo LIKE %s
+            q.QuoteNo LIKE %s{extra_or}
         )""")
-        params.extend([term, term, term, term, term, term])
+        params.extend([term, term, term, term, term, term] + alias_params)
 
     where_clause = ""
     if conditions:
