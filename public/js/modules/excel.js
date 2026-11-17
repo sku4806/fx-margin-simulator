@@ -207,19 +207,37 @@ export function exportToExcel(items) {
     alert("다운로드할 데이터가 없습니다.");
     return;
   }
-  const rows = items.map(it => ({
-    'KIND': it.biz_type || it.bizType || 'DOMESTIC',
-    'CNAME': it.customer || '-',
-    'SALES': it.owner || '본사',
-    'PART#': it.part_name || it.partName || '-',
-    '재고량': it.stock || 0,
-    '원가': it.unit_usd || it.unitUsd || 0,
-    'AMOUNT': (it.stock || 0) * (it.unit_usd || it.unitUsd || 0),
-    '입고일': it.entry_date || it.entryDate || '-',
-    'MFG': it.maker || '-',
-    'PONO': it.po_no || it.poNo || '',
-    'REMARK': it.memo || ''
-  }));
+  const rows = items.map(it => {
+    const stock = Number(it.stock) || 0;
+    const arranged = Number(it.arranged_qty ?? it.arrangedQty) || 0;
+    const available = Math.max(0, stock - arranged);
+    const unitUsd = Number(it.unit_usd ?? it.unitUsd) || 0;
+    const shipFx = Number(it.ship_fx ?? it.shipFx) || 1350;
+    const unitKrw = Math.round(unitUsd * shipFx);
+    const amountKrw = Math.round(stock * unitUsd * shipFx);
+    const amountUsd = Math.round(stock * unitUsd * 100) / 100;
+
+    return {
+      '구분(KIND)': it.biz_type || it.bizType || 'DOMESTIC',
+      '고객사(CNAME)': it.customer || '-',
+      '실수요처(REAL_CUST)': it.real_customer || it.realCustomer || '-',
+      '영업담당(SALES)': it.owner || '본사',
+      '품번(PART#)': it.part_name || it.partName || '-',
+      '제조사(MFG)': it.maker || '-',
+      '보유재고(EA)': stock,
+      '배정수량(EA)': arranged,
+      '가용수량(EA)': available,
+      '원가(USD)': unitUsd,
+      '원가(₩)': unitKrw,
+      '재고금액(₩)': amountKrw,
+      '재고금액(USD)': amountUsd,
+      '입고일': it.entry_date || it.entryDate || '-',
+      '발주번호(PONO)': it.po_no || it.poNo || '',
+      'DateCode': it.date_code || it.dateCode || '',
+      '용도(APP)': it.application || '',
+      '비고': it.memo || ''
+    };
+  });
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Inventory");

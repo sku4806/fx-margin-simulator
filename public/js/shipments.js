@@ -173,7 +173,7 @@ export async function fetchWebShipments() {
         part_no: item.part_name || '-',
         ship_date: item.order_date || '-',
         ship_qty: item.qty || 0,
-        net_up: (item.cost_price && currentFxRate > 0) ? (item.cost_price / currentFxRate) : 0.0,
+        net_up: (item.unit_price && currentFxRate > 0) ? (item.unit_price / currentFxRate) : ((item.cost_price && currentFxRate > 0) ? (item.cost_price / currentFxRate) : 0.0),
         ship_amt: (item.total_sales_amount && currentFxRate > 0) ? (item.total_sales_amount / currentFxRate) : 0.0,
         unit_krw: item.unit_price || 0,
         total_krw: item.total_sales_amount || 0,

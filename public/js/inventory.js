@@ -1021,3 +1021,7 @@ export function handleStockToOrder(itemId) {
 }
 window.handleStockToOrder = handleStockToOrder;
 window.getCachedItem = getCachedItem;
+export function getLastFilteredItems() {
+  return lastFilteredItems;
+}
+window.getLastFilteredItems = getLastFilteredItems;

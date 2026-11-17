@@ -1952,7 +1952,11 @@ function bindInputs() {
 
   safeAddListener('excelExportBtn', 'click', () => {
     try {
-      exportToExcel(cachedItems);
+      const filtered = (typeof InventoryModule.getLastFilteredItems === 'function') 
+        ? InventoryModule.getLastFilteredItems() 
+        : (window.getLastFilteredItems ? window.getLastFilteredItems() : null);
+      const itemsToExport = (filtered && filtered.length > 0) ? filtered : cachedItems;
+      exportToExcel(itemsToExport);
     } catch (err) {
       alert("엑셀 다운로드 오류: " + err.message);
     }
