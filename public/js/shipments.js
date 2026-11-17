@@ -776,17 +776,11 @@ window.goToShipmentPage = function (page) {
   shipmentPage = page;
   updateShipmentCurrentPage();
 
-  // 🚀 목록 스크롤 최상단 자동 이동 (내부 테이블 스크롤 + 윈도우 스크롤)
+  // 🚀 테이블 내부 목록 스크롤만 최상단으로 리셋 (전체 페이지 윈도우 스크롤은 유지)
   const tableContainer = document.getElementById("shipmentTableBody")?.closest(".overflow-y-auto");
   if (tableContainer) tableContainer.scrollTop = 0;
   const mobileContainer = document.getElementById("shipmentCardContainer");
   if (mobileContainer) mobileContainer.scrollTop = 0;
-
-  const headerEl = document.querySelector("#shipmentsSection .bg-amber-50\\/90") || document.getElementById("shipmentsSection");
-  if (headerEl) {
-    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
-    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
-  }
 };
 
 window.getShipmentByIndex = function (idx) {
@@ -803,12 +797,6 @@ window.setShipmentPageSize = function (size) {
   if (tableContainer) tableContainer.scrollTop = 0;
   const mobileContainer = document.getElementById("shipmentCardContainer");
   if (mobileContainer) mobileContainer.scrollTop = 0;
-
-  const headerEl = document.querySelector("#shipmentsSection .bg-amber-50\\/90") || document.getElementById("shipmentsSection");
-  if (headerEl) {
-    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
-    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
-  }
 };
 
 /**

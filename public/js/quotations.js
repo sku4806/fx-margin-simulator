@@ -652,17 +652,11 @@ window.goToQuotePage = function(page) {
   quotePage = page;
   updateQuoteCurrentPage();
 
-  // 🚀 목록 스크롤 최상단 자동 이동 (내부 테이블 스크롤 + 윈도우 스크롤)
+  // 🚀 테이블 내부 목록 스크롤만 최상단으로 리셋 (전체 페이지 윈도우 스크롤은 유지)
   const tableContainer = document.getElementById("quotationTableBody")?.closest(".overflow-y-auto");
   if (tableContainer) tableContainer.scrollTop = 0;
   const mobileContainer = document.getElementById("quoteCardContainer");
   if (mobileContainer) mobileContainer.scrollTop = 0;
-
-  const headerEl = document.querySelector("#quotationsSection .bg-amber-50\\/90") || document.getElementById("quotationsSection");
-  if (headerEl) {
-    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
-    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
-  }
 };
 
 window.setQuotePageSize = function(size) {
@@ -674,12 +668,6 @@ window.setQuotePageSize = function(size) {
   if (tableContainer) tableContainer.scrollTop = 0;
   const mobileContainer = document.getElementById("quoteCardContainer");
   if (mobileContainer) mobileContainer.scrollTop = 0;
-
-  const headerEl = document.querySelector("#quotationsSection .bg-amber-50\\/90") || document.getElementById("quotationsSection");
-  if (headerEl) {
-    const topOffset = headerEl.getBoundingClientRect().top + window.pageYOffset - 16;
-    window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
-  }
 };
 
 /**
