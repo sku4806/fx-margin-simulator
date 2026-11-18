@@ -295,76 +295,78 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
         </div>
       </div>
 
-      <!-- 세일즈 마스터 규격 툴바 (기간, MFG, SUPPLY, 검색, Excel) -->
-      <div class="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 space-y-3">
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
+      <!-- 세일즈 마스터 규격 툴바 (기간, MFG, SUPPLY, 검색, Excel — 모바일 완전 최적화) -->
+      <div class="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 space-y-2.5 sm:space-y-3">
+        <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-2.5 text-xs">
           
-          <!-- DATE 기간 설정 -->
-          <div class="flex items-center gap-1.5">
-            <span class="font-bold text-slate-700 font-mono text-[11px]">DATE:</span>
-            <input type="date" id="shipmentStartDate" value="${currentStartDate}" 
-                   class="px-2 py-1 text-xs font-mono font-semibold bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
-            <span class="text-slate-400 font-bold">~</span>
-            <input type="date" id="shipmentEndDate" value="${currentEndDate}" 
-                   class="px-2 py-1 text-xs font-mono font-semibold bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
+          <!-- DATE 기간 설정 (모바일 2열 그리드 / 데스크톱 인라인) -->
+          <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-1.5 w-full sm:w-auto">
+            <span class="font-bold text-slate-700 font-mono text-[11px] shrink-0">DATE</span>
+            <div class="grid grid-cols-[1fr_auto_1fr] sm:flex items-center gap-1.5 w-full sm:w-auto">
+              <input type="date" id="shipmentStartDate" value="${currentStartDate}" 
+                     class="w-full min-w-0 px-2 py-1.5 sm:py-1 text-xs font-mono font-semibold bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
+              <span class="text-slate-400 font-bold text-center">~</span>
+              <input type="date" id="shipmentEndDate" value="${currentEndDate}" 
+                     class="w-full min-w-0 px-2 py-1.5 sm:py-1 text-xs font-mono font-semibold bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
           </div>
 
-          <!-- 기간 빠른 선택 프리셋 버튼 -->
-          <div class="flex items-center gap-1 flex-wrap">
-            <button type="button" onclick="window.setShipmentDatePreset('curMonth')" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[10px] font-bold rounded border border-slate-200 transition cursor-pointer">당월(11월)</button>
-            <button type="button" onclick="window.setShipmentDatePreset('3M')" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[10px] font-bold rounded border border-slate-200 transition cursor-pointer">최근 3개월</button>
-            <button type="button" onclick="window.setShipmentDatePreset('6M')" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[10px] font-bold rounded border border-slate-200 transition cursor-pointer">최근 6개월</button>
-            <button type="button" onclick="window.setShipmentDatePreset('YTD')" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[10px] font-bold rounded border border-slate-200 transition cursor-pointer">2026 연간</button>
-            <button type="button" onclick="window.setShipmentDatePreset('ALL')" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[10px] font-bold rounded border border-slate-200 transition cursor-pointer">전체</button>
+          <!-- 기간 빠른 선택 프리셋 버튼 (모바일 1열 가로 스와이프) -->
+          <div class="flex items-center gap-1 overflow-x-auto scrollbar-none pb-0.5 sm:pb-0">
+            <button type="button" onclick="window.setShipmentDatePreset('curMonth')" class="shrink-0 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] sm:text-[10px] font-bold rounded-lg border border-slate-200 transition cursor-pointer whitespace-nowrap">당월</button>
+            <button type="button" onclick="window.setShipmentDatePreset('3M')" class="shrink-0 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] sm:text-[10px] font-bold rounded-lg border border-slate-200 transition cursor-pointer whitespace-nowrap">최근 3개월</button>
+            <button type="button" onclick="window.setShipmentDatePreset('6M')" class="shrink-0 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] sm:text-[10px] font-bold rounded-lg border border-slate-200 transition cursor-pointer whitespace-nowrap">최근 6개월</button>
+            <button type="button" onclick="window.setShipmentDatePreset('YTD')" class="shrink-0 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] sm:text-[10px] font-bold rounded-lg border border-slate-200 transition cursor-pointer whitespace-nowrap">2026 연간</button>
+            <button type="button" onclick="window.setShipmentDatePreset('ALL')" class="shrink-0 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] sm:text-[10px] font-bold rounded-lg border border-slate-200 transition cursor-pointer whitespace-nowrap">전체</button>
           </div>
 
-          <!-- MFG 제조사 필터 -->
-          <div class="flex items-center gap-1.5">
-            <span class="font-bold text-slate-700 text-[11px]">MFG:</span>
-            <select id="shipmentMfgSelect" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-[140px]">
-              ${makerOptionsHtml}
-            </select>
+          <!-- MFG / SUPPLY 필터 (모바일 2열 균등 분할) -->
+          <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+            <div class="flex items-center gap-1 min-w-0">
+              <span class="font-bold text-slate-700 text-[10px] sm:text-[11px] shrink-0">MFG</span>
+              <select id="shipmentMfgSelect" class="w-full min-w-0 sm:max-w-[140px] bg-white border border-slate-300 rounded-lg px-2 py-1.5 sm:py-1 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                ${makerOptionsHtml}
+              </select>
+            </div>
+            <div class="flex items-center gap-1 min-w-0">
+              <span class="font-bold text-slate-700 text-[10px] sm:text-[11px] shrink-0">SUP</span>
+              <select id="shipmentSupplySelect" class="w-full min-w-0 sm:max-w-[140px] bg-white border border-slate-300 rounded-lg px-2 py-1.5 sm:py-1 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                ${supplyOptionsHtml}
+              </select>
+            </div>
           </div>
 
-          <!-- SUPPLY 공급사 필터 -->
-          <div class="flex items-center gap-1.5">
-            <span class="font-bold text-slate-700 text-[11px]">SUPPLY:</span>
-            <select id="shipmentSupplySelect" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-[140px]">
-              ${supplyOptionsHtml}
-            </select>
+          <!-- 검색 & Excel 버튼 (모바일 2열 풀폭) -->
+          <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto sm:ml-auto">
+            <button type="button" id="btnShipmentSearch" class="px-3.5 py-2 sm:py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-xs transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap">
+              <span>🔍</span> 검색
+            </button>
+            <button type="button" id="btnShipmentExcelExport" class="px-3.5 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap">
+              <span>📥</span> Excel
+            </button>
           </div>
-
-          <!-- 검색 버튼 -->
-          <button type="button" id="btnShipmentSearch" class="px-3.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-xs transition flex items-center gap-1 cursor-pointer">
-            <span>🔍</span> 검색
-          </button>
-
-          <!-- Excel 내보내기 버튼 -->
-          <button type="button" id="btnShipmentExcelExport" class="px-3.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs transition flex items-center gap-1 cursor-pointer ml-auto">
-            <span>📥</span> Excel 내보내기
-          </button>
         </div>
 
         <!-- 실시간 라이브 필터 검색창 -->
         <div class="relative w-full">
-          <input type="text" id="shipmentLiveFilterInput" placeholder="고객사(CUSTOMER), 실수요처(REALCUST), 품번(PARTNO), 발주번호(PONO), 용도(APP) 실시간 빠른 검색..." 
-                 class="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-800 shadow-2xs">
-          <span class="absolute left-2.5 top-2 text-slate-400 text-xs">⚡</span>
+          <input type="text" id="shipmentLiveFilterInput" placeholder="고객사, 실수요처, 품번(PARTNO), 발주번호, 용도 빠른 검색..." 
+                 class="w-full pl-8 pr-3 py-2 sm:py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-800 shadow-2xs">
+          <span class="absolute left-2.5 top-2.5 sm:top-2 text-slate-400 text-xs">⚡</span>
         </div>
       </div>
 
-      <!-- 요약 바 (Grand Summaries 규격 일치) -->
-      <div class="bg-amber-50/90 border border-amber-200 rounded-xl p-3 text-xs font-mono font-bold text-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-        <div class="flex items-center gap-2">
-          <span class="text-amber-900 font-sans font-black text-sm">🚚 SHIPPED INFO GRAND SUMMARIES</span>
-          <span id="shipmentSummaryCount" class="text-slate-600 font-sans font-bold text-xs">(${totalCount.toLocaleString()}건)</span>
+      <!-- 요약 바 (Grand Summaries — 모바일 3단 그리드 / 데스크톱 1열) -->
+      <div class="bg-amber-50/90 border border-amber-200 rounded-xl p-3 text-xs font-mono font-bold text-slate-800 flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2.5 shadow-xs">
+        <div class="flex items-center justify-between sm:justify-start gap-2">
+          <span class="text-amber-900 font-sans font-black text-xs sm:text-sm">🚚 SHIPPED INFO GRAND SUMMARIES</span>
+          <span id="shipmentSummaryCount" class="text-slate-600 font-sans font-bold text-xs bg-white/70 px-2 py-0.5 rounded-full border border-amber-200">${totalCount.toLocaleString()}건</span>
         </div>
-        <div class="flex flex-wrap items-center gap-4 text-xs font-mono">
-          <div>총 출하수량: <span id="shipmentSumQty" class="text-indigo-900 font-black text-sm">${totalQty.toLocaleString()}</span> EA</div>
-          <span class="text-slate-300">|</span>
-          <div>총 외화금액: <span id="shipmentSumUsd" class="text-blue-700 font-black text-sm">$${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-          <span class="text-slate-300">|</span>
-          <div>원화 환산액(@${currentFxRate.toLocaleString()}): <span id="shipmentSumKrw" class="text-rose-700 font-black text-sm">₩${Math.round(totalKrw).toLocaleString()}</span></div>
+        <div class="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center gap-1.5 sm:gap-4 text-xs font-mono">
+          <div class="flex justify-between sm:block"><span>총 출하수량:</span> <span id="shipmentSumQty" class="text-indigo-900 font-black text-sm">${totalQty.toLocaleString()} EA</span></div>
+          <span class="text-slate-300 hidden sm:inline">|</span>
+          <div class="flex justify-between sm:block"><span>총 외화금액:</span> <span id="shipmentSumUsd" class="text-blue-700 font-black text-sm">$${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+          <span class="text-slate-300 hidden sm:inline">|</span>
+          <div class="flex justify-between sm:block"><span>원화 환산(@${currentFxRate.toLocaleString()}):</span> <span id="shipmentSumKrw" class="text-rose-700 font-black text-sm">₩${Math.round(totalKrw).toLocaleString()}</span></div>
         </div>
       </div>
 
@@ -378,17 +380,17 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
         <table class="w-full text-left text-xs border-collapse">
           <thead class="bg-slate-100/95 backdrop-blur-sm text-slate-700 border-b uppercase font-bold sticky top-0 z-10 shadow-xs text-[11px]">
             <tr>
-              <th class="py-2.5 px-2 text-center whitespace-nowrap w-10">#</th>
-              <th class="py-2.5 px-3 text-left min-w-[130px]">CUSTOMER (계약처)</th>
-              <th class="py-2.5 px-3 text-left min-w-[120px]">REALCUST (실수요처)</th>
-              <th class="py-2.5 px-3 text-left min-w-[140px]">PONO (발주번호)</th>
-              <th class="py-2.5 px-3 text-left min-w-[170px]">PARTNO (품번)</th>
-              <th class="py-2.5 px-3 text-center whitespace-nowrap w-24">SHIP_DATE</th>
-              <th class="py-2.5 px-3 text-right whitespace-nowrap w-24">SHIP_QTY</th>
-              <th class="py-2.5 px-3 text-right whitespace-nowrap w-24">NET_UP ($)</th>
-              <th class="py-2.5 px-3 text-right whitespace-nowrap w-28">SHIP_AMT ($)</th>
-              <th class="py-2.5 px-3 text-left min-w-[150px]">APP (용도)</th>
-              <th class="py-2.5 px-3 text-center whitespace-nowrap w-24 no-print">문서</th>
+              <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-8">#</th>
+              <th class="py-2.5 px-2 text-left min-w-[115px]">CUSTOMER</th>
+              <th class="py-2.5 px-2 text-left min-w-[105px]">REALCUST</th>
+              <th class="py-2.5 px-2 text-left min-w-[120px]">PONO</th>
+              <th class="py-2.5 px-2 text-left min-w-[155px]">PARTNO</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-22">SHIP_DATE</th>
+              <th class="py-2.5 px-2 text-right whitespace-nowrap w-20">SHIP_QTY</th>
+              <th class="py-2.5 px-2 text-right whitespace-nowrap w-20">NET_UP($)</th>
+              <th class="py-2.5 px-2 text-right whitespace-nowrap w-24">SHIP_AMT($)</th>
+              <th class="py-2.5 px-2 text-left min-w-[120px]">APP (용도)</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-28 no-print">문서</th>
             </tr>
           </thead>
           <tbody id="shipmentTableBody" class="divide-y divide-slate-100 font-medium bg-white text-slate-700">
@@ -709,7 +711,7 @@ function generateShipmentMobileCards(items) {
                   class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold transition cursor-pointer">
             📈 단가이력
           </button>
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1 flex-wrap justify-end">
             <button type="button" onclick="window.openTradeInvoice && window.openTradeInvoice(window.getShipmentByIndex(${idx}))" 
                     class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-bold transition cursor-pointer">
               📄 명세서
@@ -718,6 +720,12 @@ function generateShipmentMobileCards(items) {
                     class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition cursor-pointer">
               📦 패킹
             </button>
+            ${(item.is_web && item.id && typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+              <button type="button" onclick="window.openShipmentCrudModal && window.openShipmentCrudModal(window.getShipmentByIndex(${idx}))" 
+                      class="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 text-[10px] font-bold cursor-pointer">✏️</button>
+              <button type="button" onclick="window.deleteWebShipmentByIndex && window.deleteWebShipmentByIndex(${idx})" 
+                      class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded border border-rose-200 text-[10px] font-bold cursor-pointer">🗑️</button>
+            ` : ''}
           </div>
         </div>
       </div>

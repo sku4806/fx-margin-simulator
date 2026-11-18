@@ -72,120 +72,128 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
 
   modal.classList.remove('hidden');
   modal.innerHTML = `
-    <div class="bg-white w-full max-w-7xl h-[92vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+    <div class="bg-white w-full max-w-7xl h-[93dvh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
       
-      <!-- 상단 헤더 -->
-      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-6 py-4 flex items-center justify-between shadow-md">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-xl shadow-inner">
-            🚢
-          </div>
-          <div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <h2 class="text-base font-black tracking-wide">발주(PO) 및 입고 예정(ETA) 종합 관리</h2>
-              <span class="text-[10px] bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full font-mono border border-blue-400/30">MS-SQL DPOFile + 전자결재 실시간 연동</span>
+      <!-- 상단 헤더 (모바일·데스크톱 완벽 대응) -->
+      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-md shrink-0">
+        <div class="flex items-start sm:items-center justify-between gap-2 w-full sm:w-auto">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-lg sm:text-xl shadow-inner shrink-0">
+              🚢
             </div>
-            <p class="text-xs text-slate-300 mt-0.5">사내 공식 매입 발주 원장 및 전자결재 승인 발주의 입고예정일(CRD/ETA), 실수요처 납품 일정을 통합 추적합니다.</p>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <h2 class="text-sm sm:text-base font-black tracking-wide truncate">발주(PO) 및 입고 예정(ETA)</h2>
+                <span class="hidden sm:inline-block text-[10px] bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full font-mono border border-blue-400/30">DPOFile + 전자결재 연동</span>
+              </div>
+              <p class="text-[10px] sm:text-xs text-slate-300 mt-0.5 truncate">공식 매입 발주 및 전자결재 승인 발주의 ETA·입고 현황</p>
+            </div>
           </div>
+          <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="sm:hidden w-8 h-8 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold flex items-center justify-center cursor-pointer shrink-0">✕</button>
         </div>
-        <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5 sm:pb-0 shrink-0">
           ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
             <button type="button" onclick="window.openDirectPoCrudModal && window.openDirectPoCrudModal(null)" 
-                    class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-black rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-colors">
-              <span>➕</span> 직접 발주 등록
+                    class="shrink-0 px-2.5 sm:px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 text-[11px] sm:text-xs font-black rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap">
+              <span>➕</span> 직접 발주
             </button>
           ` : ''}
           <button type="button" id="poNewRequisitionBtn" onclick="window.goToNewPurchaseRequisition && window.goToNewPurchaseRequisition()" 
-                  class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-colors">
-            <span>📑</span> + 구매 품의서 작성
+                  class="shrink-0 px-2.5 sm:px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] sm:text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap">
+            <span>📑</span> 구매품의
           </button>
-          <button type="button" id="poExportExcelBtn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 cursor-pointer">
-            <span>📥</span> Excel 저장
+          <button type="button" id="poExportExcelBtn" class="shrink-0 px-2.5 sm:px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] sm:text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 cursor-pointer whitespace-nowrap">
+            <span>📥</span> Excel
           </button>
-          <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center cursor-pointer transition-colors">
+          <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="hidden sm:flex w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold items-center justify-center cursor-pointer transition-colors shrink-0">
             ✕
           </button>
         </div>
       </div>
 
-      <!-- 업무 구분 안내 바 -->
-      <div class="bg-indigo-50/90 border-b border-indigo-200/80 px-6 py-2 flex items-center justify-between text-xs text-indigo-950 font-medium">
+      <!-- 업무 구분 안내 바 (데스크톱 전용) -->
+      <div class="hidden sm:flex bg-indigo-50/90 border-b border-indigo-200/80 px-6 py-2 items-center justify-between text-xs text-indigo-950 font-medium shrink-0">
         <div class="flex items-center gap-2">
           <span class="text-sm">💡</span>
           <span><strong>[업무 구분 안내]</strong> 본 화면은 매입처(공급사)에 넣은 <strong>구매 발주(PO) 및 전자결재 승인 발주</strong>를 통합 관리합니다. 고객사로부터 받은 수주(주문) 건은 상단 <strong>[Tab 1/2 수주·출하 관리]</strong>에서 확인하실 수 있습니다.</span>
         </div>
       </div>
 
-      <!-- 요약 KPI 지표 카드 4종 -->
-      <div id="poKpiBar" class="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div class="bg-white p-3 rounded-xl border border-blue-200 shadow-xs flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-bold text-slate-500">🚢 입고대기 발주(PO)</div>
-            <div id="kpiPendingCount" class="text-lg font-black text-blue-700 mt-0.5">로딩중...</div>
-            <div id="kpiPendingQty" class="text-[10px] text-slate-500 mt-0.5">-</div>
+      <!-- 요약 KPI 지표 카드 4종 (모바일 콤팩트 2x2 / 데스크톱 4열) -->
+      <div id="poKpiBar" class="p-2.5 sm:p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 shrink-0">
+        <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-blue-200 shadow-xs flex items-center justify-between">
+          <div class="min-w-0">
+            <div class="text-[10px] sm:text-[11px] font-bold text-slate-500 truncate">🚢 입고대기(PO)</div>
+            <div id="kpiPendingCount" class="text-base sm:text-lg font-black text-blue-700 mt-0.5">로딩중...</div>
+            <div id="kpiPendingQty" class="text-[9px] sm:text-[10px] text-slate-500 mt-0.5 truncate">-</div>
           </div>
-          <span class="text-2xl">⏳</span>
+          <span class="text-lg sm:text-2xl shrink-0">⏳</span>
         </div>
-        <div class="bg-white p-3 rounded-xl border border-emerald-200 shadow-xs flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-bold text-slate-500">✅ 입고 완료(IN)</div>
-            <div id="kpiArrivedCount" class="text-lg font-black text-emerald-700 mt-0.5">-</div>
-            <div class="text-[10px] text-slate-500 mt-0.5">정상 입고 및 재고 반영</div>
+        <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-emerald-200 shadow-xs flex items-center justify-between">
+          <div class="min-w-0">
+            <div class="text-[10px] sm:text-[11px] font-bold text-slate-500 truncate">✅ 입고완료(IN)</div>
+            <div id="kpiArrivedCount" class="text-base sm:text-lg font-black text-emerald-700 mt-0.5">-</div>
+            <div class="text-[9px] sm:text-[10px] text-slate-500 mt-0.5 truncate">정상 재고 반영</div>
           </div>
-          <span class="text-2xl">📦</span>
+          <span class="text-lg sm:text-2xl shrink-0">📦</span>
         </div>
-        <div class="bg-white p-3 rounded-xl border border-purple-200 shadow-xs flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-bold text-slate-500">📊 총 발주 누적 건수</div>
-            <div id="kpiTotalCount" class="text-lg font-black text-purple-700 mt-0.5">-</div>
-            <div class="text-[10px] text-slate-500 mt-0.5">전체 발주 기록 관리</div>
+        <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-purple-200 shadow-xs flex items-center justify-between">
+          <div class="min-w-0">
+            <div class="text-[10px] sm:text-[11px] font-bold text-slate-500 truncate">📊 누적 발주</div>
+            <div id="kpiTotalCount" class="text-base sm:text-lg font-black text-purple-700 mt-0.5">-</div>
+            <div class="text-[9px] sm:text-[10px] text-slate-500 mt-0.5 truncate">전체 발주 기록</div>
           </div>
-          <span class="text-2xl">📋</span>
+          <span class="text-lg sm:text-2xl shrink-0">📋</span>
         </div>
-        <div class="bg-white p-3 rounded-xl border border-rose-200 shadow-xs flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-bold text-slate-500">🚫 취소 건수(CNL)</div>
-            <div id="kpiCnlCount" class="text-lg font-black text-rose-700 mt-0.5">-</div>
-            <div class="text-[10px] text-slate-500 mt-0.5">발주 취소 내역</div>
+        <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-rose-200 shadow-xs flex items-center justify-between">
+          <div class="min-w-0">
+            <div class="text-[10px] sm:text-[11px] font-bold text-slate-500 truncate">🚫 취소(CNL)</div>
+            <div id="kpiCnlCount" class="text-base sm:text-lg font-black text-rose-700 mt-0.5">-</div>
+            <div class="text-[9px] sm:text-[10px] text-slate-500 mt-0.5 truncate">발주 취소 내역</div>
           </div>
-          <span class="text-2xl">❌</span>
+          <span class="text-lg sm:text-2xl shrink-0">❌</span>
         </div>
       </div>
 
       <!-- 필터 및 검색 툴바 -->
-      <div class="p-3 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-        <!-- 상태 토글 버튼 -->
-        <div class="flex items-center gap-1.5" id="poStatusTabs">
-          <button type="button" data-status="PO" class="po-status-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activePoStatus === 'PO' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
-            🚢 입고 대기 (PO)
+      <div class="p-2.5 sm:p-3 bg-white border-b border-slate-200 flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2 sm:gap-3 shrink-0">
+        <!-- 상태 토글 버튼 (모바일 1열 가로 스와이프) -->
+        <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5 sm:pb-0" id="poStatusTabs">
+          <button type="button" data-status="PO" class="po-status-tab shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activePoStatus === 'PO' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+            🚢 입고대기(PO)
           </button>
-          <button type="button" data-status="IN" class="po-status-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activePoStatus === 'IN' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
-            ✅ 입고 완료 (IN)
+          <button type="button" data-status="IN" class="po-status-tab shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activePoStatus === 'IN' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+            ✅ 입고완료(IN)
           </button>
-          <button type="button" data-status="ALL" class="po-status-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activePoStatus === 'ALL' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
-            전체 발주 (ALL)
+          <button type="button" data-status="ALL" class="po-status-tab shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activePoStatus === 'ALL' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+            전체(ALL)
           </button>
-          <button type="button" data-status="CNL" class="po-status-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activePoStatus === 'CNL' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
-            취소 (CNL)
+          <button type="button" data-status="CNL" class="po-status-tab shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activePoStatus === 'CNL' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+            취소(CNL)
           </button>
         </div>
 
         <!-- 실시간 검색 및 필터 -->
-        <div class="flex items-center gap-2 flex-1 max-w-lg">
+        <div class="flex items-center gap-2 flex-1 sm:max-w-lg">
           <div class="relative w-full">
-            <input type="text" id="poSearchInput" value="${activePoSearch}" placeholder="품번(Part#), 발주번호(PONO), 공급사, 실수요처, 담당자 검색..." 
+            <input type="text" id="poSearchInput" value="${activePoSearch}" placeholder="품번, 발주번호, 공급사, 실수요처 검색..." 
                    class="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-            <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
+            <span class="absolute left-2.5 top-2.5 sm:top-2 text-slate-400 text-xs">🔍</span>
           </div>
-          <button type="button" id="poRefreshBtn" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg whitespace-nowrap cursor-pointer">
-            🔄 새로고침
+          <button type="button" id="poRefreshBtn" class="px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg whitespace-nowrap cursor-pointer shrink-0">
+            🔄
           </button>
         </div>
       </div>
 
-      <!-- 데이터 테이블 영역 -->
-      <div class="flex-1 overflow-x-auto overflow-y-auto">
-        <table class="w-full text-left text-xs border-collapse">
+      <!-- 데이터 영역 (모바일 전용 카드 뷰 + 데스크톱 테이블 뷰) -->
+      <div id="poListScrollWrap" class="flex-1 overflow-x-auto overflow-y-auto bg-slate-50/70 md:bg-white">
+        <!-- 모바일 전용 카드 뷰 -->
+        <div id="poMobileCards" class="block md:hidden p-3 space-y-2.5">
+          <div class="py-10 text-center text-slate-400 text-xs">⏳ 발주 데이터를 불러오는 중...</div>
+        </div>
+        <!-- 데스크톱 전용 테이블 뷰 -->
+        <table class="hidden md:table w-full text-left text-xs border-collapse">
           <thead class="bg-slate-800 text-white sticky top-0 z-10 text-[11px] font-bold">
             <tr>
               <th class="py-2.5 px-2 text-center w-10">#</th>
@@ -265,19 +273,25 @@ async function loadPoData() {
 
 function renderPoTable(orders) {
   const tbody = document.getElementById('poTableBody');
+  const mobileWrap = document.getElementById('poMobileCards');
   const countInfo = document.getElementById('poCountInfo');
-  if (!tbody) return;
+  if (!tbody && !mobileWrap) return;
 
   if (!orders || orders.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="15" class="py-16 text-center text-slate-400">
-          <div class="text-3xl mb-2">🔍</div>
-          <div class="font-bold text-sm text-slate-600">조건에 일치하는 발주 내역이 없습니다.</div>
-          <div class="text-xs text-slate-400 mt-1">검색어나 상태 필터를 변경해 보세요.</div>
-        </td>
-      </tr>
-    `;
+    if (tbody) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="15" class="py-16 text-center text-slate-400">
+            <div class="text-3xl mb-2">🔍</div>
+            <div class="font-bold text-sm text-slate-600">조건에 일치하는 발주 내역이 없습니다.</div>
+            <div class="text-xs text-slate-400 mt-1">검색어나 상태 필터를 변경해 보세요.</div>
+          </td>
+        </tr>
+      `;
+    }
+    if (mobileWrap) {
+      mobileWrap.innerHTML = `<div class="py-12 text-center text-slate-400 text-xs bg-white rounded-xl border border-slate-200">🔍 조건에 일치하는 발주 내역이 없습니다.</div>`;
+    }
     if (countInfo) countInfo.textContent = '조회 결과: 0건';
     renderPoPagination(0, 1);
     return;
@@ -294,6 +308,8 @@ function renderPoTable(orders) {
   }
 
   const todayStr = new Date().toISOString().slice(0, 10);
+  const canEdit = (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
+  const mobileCardsHtml = [];
 
   tbody.innerHTML = pageItems.map((o, idx) => {
     const rowNo = startIdx + idx + 1;
@@ -304,19 +320,20 @@ function renderPoTable(orders) {
 
     // 상태 뱃지
     let statusBadge = '';
-    if (isWebApproval) {
-      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-900 border border-indigo-400 shadow-xs flex items-center justify-center gap-1"><span>📑</span> 전자결재 승인</span>`;
+    if (isWebApproval && isArrived) {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center justify-center gap-1">✅ 입고완료(웹)</span>`;
+    } else if (isWebApproval) {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-900 border border-indigo-400 shadow-xs inline-flex items-center justify-center gap-1"><span>📑</span> 전자결재 승인</span>`;
     } else if (isPending) {
-      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300 flex items-center justify-center gap-1">🚢 입고대기</span>`;
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300 inline-flex items-center justify-center gap-1">🚢 입고대기</span>`;
     } else if (isArrived) {
-      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center gap-1">✅ 입고완료</span>`;
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center justify-center gap-1">✅ 입고완료</span>`;
     } else {
-      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 flex items-center justify-center gap-1">취소</span>`;
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center justify-center gap-1">취소</span>`;
     }
 
     // 입고예정일 D-Day 계산
     let etaDisplay = o.eta_date || '-';
-    let etaClass = 'text-slate-600';
     if (isPending && o.eta_date && /^\d{4}-\d{2}-\d{2}$/.test(o.eta_date)) {
       const diffDays = Math.ceil((new Date(o.eta_date) - new Date(todayStr)) / (1000 * 60 * 60 * 24));
       if (diffDays === 0) {
@@ -336,6 +353,54 @@ function renderPoTable(orders) {
     const amtStr = isForeign
       ? `$${(o.foreign_amount || o.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : `₩${Math.round(o.amount).toLocaleString()}`;
+
+    // 모바일 카드 HTML 축적
+    mobileCardsHtml.push(`
+      <div class="bg-white rounded-xl border ${isWebApproval ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-slate-200'} p-3 shadow-2xs space-y-2 text-xs">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[10px] font-mono text-slate-400">#${rowNo}</span>
+              ${statusBadge}
+              <span class="text-[10px] font-mono text-slate-500">${o.po_dt || '-'}</span>
+            </div>
+            <div class="font-black text-sm text-slate-900 font-mono mt-1 break-all">${o.part_no || '-'}</div>
+            <div class="text-[11px] text-slate-500 font-semibold">${o.maker || '-'} · PO: <span class="font-mono text-slate-700">${o.po_no || '-'}</span></div>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="font-black text-sm text-blue-700 font-mono">${amtStr}</div>
+            <div class="text-[10px] text-slate-500 font-mono">${Number(o.qty || 0).toLocaleString()} EA · ${upStr}</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px]">
+          <div><span class="text-[9px] text-slate-400 block font-semibold">입고예정 (ETA)</span><div class="font-mono">${etaDisplay}</div></div>
+          <div><span class="text-[9px] text-slate-400 block font-semibold">담당 영업</span><div class="font-bold text-slate-800">${o.sales_rep || '-'}</div></div>
+          <div><span class="text-[9px] text-slate-400 block font-semibold">매입처 (공급사)</span><div class="truncate text-slate-700">${o.supplier_name || '-'}</div></div>
+          <div><span class="text-[9px] text-slate-400 block font-semibold">실수요처</span><div class="truncate font-bold text-indigo-900">${o.real_cust || o.end_cust || '-'}</div></div>
+          ${o.remark ? `<div class="col-span-2 text-[10px] text-slate-500 truncate">💬 ${o.remark}</div>` : ''}
+        </div>
+        <div class="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
+          <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${(o.part_no || '').replace(/'/g, "\\'")}')" 
+                  class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 font-bold text-[11px] cursor-pointer">
+            📈 단가이력
+          </button>
+          <div class="flex items-center gap-1">
+            ${(isPending && canEdit) ? `
+              <button type="button" onclick="window.receivePoByIdx && window.receivePoByIdx(${idx})"
+                      class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] cursor-pointer">
+                📦 입고완료
+              </button>
+            ` : ''}
+            ${(isWebApproval && canEdit) ? `
+              <button type="button" onclick="window.editWebPoByIdx && window.editWebPoByIdx(${idx})"
+                      class="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg font-bold text-[11px] cursor-pointer">✏️</button>
+              <button type="button" onclick="window.deleteWebPurchaseOrder && window.deleteWebPurchaseOrder('${o.po_no}', '${(o.part_no || '').replace(/'/g, "\\'")}')"
+                      class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-300 rounded-lg font-bold text-[11px] cursor-pointer">✕</button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `);
 
     return `
       <tr class="hover:bg-blue-50/60 transition-colors border-b border-slate-200 text-[11px] ${isWebApproval ? 'bg-indigo-50/40 border-l-4 border-l-indigo-600' : (isPending ? 'bg-blue-50/20' : '')}">
@@ -403,6 +468,12 @@ function renderPoTable(orders) {
       </tr>
     `;
   }).join('');
+
+  if (mobileWrap) {
+    mobileWrap.innerHTML = mobileCardsHtml.join('');
+  }
+  const scrollWrap = document.getElementById('poListScrollWrap');
+  if (scrollWrap) scrollWrap.scrollTop = 0;
 
   renderPoPagination(orders.length, totalPages);
 }

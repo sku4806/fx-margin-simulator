@@ -12,6 +12,7 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
+    html, body { overflow-x: clip; }
     input, select, button { -webkit-tap-highlight-color: transparent; }
     .word-keep { word-break: keep-all; }
     /* 🚀 대용량 테이블 스크롤 가속 및 브라우저 오프스크린 렌더링 최적화 */
@@ -19,16 +20,31 @@
       content-visibility: auto;
       contain-intrinsic-size: 1px 36px;
     }
+    /* 모바일/데스크톱 가로 스크롤 탭바의 네이티브 스크롤바 숨김 */
+    .scrollbar-none::-webkit-scrollbar { display: none; }
+    .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+    /* 데스크톱 세련된 얇은 스크롤바 */
+    @media (min-width: 768px) {
+      ::-webkit-scrollbar { width: 7px; height: 7px; }
+      ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 999px; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    }
   </style>
 
 <style id="mobile-font-fix">
   @media (max-width: 640px) {
+    body { padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px)) !important; }
     /* 검색 및 필터 박스가 상단에 눌리지 않도록 패딩 및 세로 정렬 보장 */
     #searchQuery, #searchInput {
       width: 100% !important;
-      font-size: 13px !important;
-      padding: 8px 12px !important;
+      font-size: 14px !important;
+      padding: 9px 12px !important;
       box-sizing: border-box !important;
+    }
+    /* 모바일 터치 입력 편의성 (날짜/셀렉트 최소 높이 보장) */
+    input[type="date"], input[type="text"], input[type="number"], select {
+      min-height: 36px;
     }
     /* Grand Summaries 요약 박스 내부 넘침 방지 및 2열 줄바꿈 */
     .bg-amber-50, [class*="bg-amber-50"] {
@@ -45,16 +61,16 @@
       font-size: 11px !important;
       line-height: 1.3 !important;
     }
-    /* 상단 네비 및 필터 상단 잘림 방지 여백 */
-    header, nav, #dynamicSubTabNav {
-      margin-top: 4px !important;
+    /* 모달 화면 높이를 모바일 주소창 대응 dvh로 안전 최적화 */
+    [id$="Modal"] > div {
+      max-height: 94dvh !important;
     }
   }
 </style>
 
 </head>
-<body class="bg-slate-100 text-slate-800 p-2 sm:p-5 md:p-8 min-h-screen font-sans antialiased">
-  <div class="max-w-6xl mx-auto space-y-3 sm:space-y-5">
+<body class="bg-slate-100 text-slate-800 p-2 sm:p-5 md:p-6 min-h-screen font-sans antialiased">
+  <div class="max-w-[1400px] mx-auto space-y-3 sm:space-y-4">
     
     <!-- 1. 헤더 -->
     <header class="bg-[#0b2046] text-white p-3.5 sm:p-6 rounded-2xl shadow-md border border-slate-700/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
@@ -105,8 +121,8 @@
       </div>
     </header>
 
-    <!-- 2. 비즈니스 탭 스위처 바 (가로 1열 콤팩트 통합 탭) -->
-    <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between gap-2 relative">
+    <!-- 2. 비즈니스 탭 스위처 바 (모바일·데스크톱 상단 고정 Sticky 탭 바) -->
+    <div class="sticky top-1 sm:top-2 z-30 bg-white/95 backdrop-blur-md p-1.5 rounded-xl border border-slate-200/90 shadow-sm flex items-center justify-between gap-2">
       <div id="mainTabScrollContainer" class="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none py-0.5 scroll-smooth" style="-webkit-overflow-scrolling: touch;">
         <!-- [영업·물류 부문] -->
         <button id="tabSales" class="py-1.5 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm text-center transition-colors whitespace-nowrap flex items-center gap-1 shrink-0" title="영업 견적 시뮬레이터 및 보유 재고 관리">
@@ -686,34 +702,34 @@
           <span id="lockStatusBadge" class="text-[9px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full inline-block mt-0.5">🔒 로그인 필요</span>
         </div>
 
-        <div class="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-end">
+        <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 w-full sm:w-auto sm:justify-end">
           <span id="selectedQuoteCountBadge" class="hidden text-[10px] bg-amber-400 text-slate-900 font-bold px-1.5 py-0.5 rounded-full">0</span>
-          <button type="button" id="openPoModalBtn" onclick="window.openPurchaseOrdersModal && window.openPurchaseOrdersModal('PO')" class="text-[11px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer" title="국내외 매입처 발주 및 입고예정일(CRD/ETA) 조회">
-            <span>🚢</span> 발주·입고예정 (PO/ETA)
+          <button type="button" id="openPoModalBtn" onclick="window.openPurchaseOrdersModal && window.openPurchaseOrdersModal('PO')" class="text-[11px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap" title="국내외 매입처 발주 및 입고예정일(CRD/ETA) 조회">
+            <span>🚢</span> 발주·입고예정
             <span id="poPendingBadge" class="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full hidden">0</span>
           </button>
-          <button type="button" id="openCustomerMasterBtn" onclick="window.openCustomerMasterModal && window.openCustomerMasterModal()" class="text-[11px] bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors cursor-pointer" title="거래처 및 담당자 마스터 조회·등록·수정·삭제">
+          <button type="button" id="openCustomerMasterBtn" onclick="window.openCustomerMasterModal && window.openCustomerMasterModal()" class="text-[11px] bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap" title="거래처 및 담당자 마스터 조회·등록·수정·삭제">
             <span>🏢</span> 거래처 관리
           </button>
-          <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors cursor-pointer">
-            <span>📄</span> 공식 견적서 발행 (PDF)
+          <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap">
+            <span>📄</span> 공식 견적서
           </button>
-          <button type="button" id="batchPurchaseRequisitionBtn" onclick="window.openBatchPurchaseRequisition && window.openBatchPurchaseRequisition()" class="hidden text-[11px] bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer" title="선택한 다중 부품들을 전자결재 구매품의서에 일괄 등록">
-            <span>✍️</span> 선택 부품 구매품의 (<span id="batchPurchaseCount">0</span>)
+          <button type="button" id="batchPurchaseRequisitionBtn" onclick="window.openBatchPurchaseRequisition && window.openBatchPurchaseRequisition()" class="hidden text-[11px] bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap" title="선택한 다중 부품들을 전자결재 구매품의서에 일괄 등록">
+            <span>✍️</span> 선택 구매품의 (<span id="batchPurchaseCount">0</span>)
           </button>
-          <button id="excelExportBtn"  class="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors">
+          <button id="excelExportBtn"  class="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors whitespace-nowrap">
             <span>📥</span> 엑셀 다운로드
           </button>
           
-          <label id="excelImportLabel" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1 cursor-pointer transition-colors shadow-sm">
-            <span>📤</span> 패킹리스트 업로드
+          <label id="excelImportLabel" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-2 sm:py-1.5 rounded-lg border border-slate-300 flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-sm whitespace-nowrap">
+            <span>📤</span> 패킹리스트
             <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden">
           </label>
 
-          <button id="changePwdBtn" onclick="openChangePasswordModal()" class="hidden text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2 py-1 rounded-lg border border-slate-300">
+          <button id="changePwdBtn" onclick="openChangePasswordModal()" class="hidden text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-2 sm:py-1.5 rounded-lg border border-slate-300 flex items-center justify-center whitespace-nowrap">
             비밀번호 변경
           </button>
-          <button id="authActionBtn" class="text-[11px] sm:text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm">
+          <button id="authActionBtn" class="text-[11px] sm:text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm whitespace-nowrap">
             🔑 로그인
           </button>
         </div>

@@ -538,16 +538,22 @@ function generateUnpaidMobileCards(items, offset = 0) {
           </div>
         </div>
 
-        <!-- 3) 하단: 수금/약속 관리 액션 버튼 -->
+        <!-- 3) 하단: 수금/약속 관리 + 수정/삭제 액션 버튼 -->
         <div class="flex items-center gap-1.5 pt-1">
           <button type="button" onclick="window.openPaymentSettlementModal && window.openPaymentSettlementModal(${realIdx})" 
-                  class="flex-1 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1 cursor-pointer">
-            <span>💰</span> 수금 / 부분입금 / 일정연기
+                  class="flex-1 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap">
+            <span>💰</span> 수금/약속
           </button>
           <button type="button" onclick="window.openStatementOfAccount && window.openStatementOfAccount('${(u.cname || '').replace(/'/g, "\\'")}')" 
-                  class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-lg border border-rose-200 shadow-2xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer" title="청구서 발행">
+                  class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-lg border border-rose-200 shadow-2xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer whitespace-nowrap" title="청구서 발행">
             <span>📄</span> 청구서
           </button>
+          ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+            <button type="button" onclick="window.editUnpaidByIndex && window.editUnpaidByIndex(${realIdx})"
+                    class="px-2 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-lg border border-blue-200 shrink-0 cursor-pointer" title="미수금 수정">✏️</button>
+            <button type="button" onclick="window.deleteUnpaidByIndex && window.deleteUnpaidByIndex(${realIdx})"
+                    class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-lg border border-rose-200 shrink-0 cursor-pointer" title="미수금 삭제">🗑️</button>
+          ` : ''}
         </div>
       </div>
     `;
