@@ -2203,11 +2203,17 @@ export async function updateApprovalStatus(id, newStatus) {
 
   if (error) return alert('품의 결재 실패: ' + error.message);
 
-  // 2. 구매품의서 승인 시 ERP 재고관리(inventory_items) 자동 브릿지 실행!
-  if (newStatus === 'APPROVED') {
-    const doc = allApprovals.find(d => String(d.id) === String(id));
-    if (doc && doc.doc_type === '구매품의서') {
-      await bridgePurchaseRequisitionToInventory(doc);
+  // 2. 구매품의서 승인 시 ERP 재고관리(inventory_items) 자동 브릿지 / 반려 시 회수 실행!
+  const targetDoc = allApprovals.find(d => String(d.id) === String(id));
+  if (newStatus === 'APPROVED' && targetDoc && targetDoc.doc_type === '구매품의서') {
+    await bridgePurchaseRequisitionToInventory(targetDoc);
+  } else if (newStatus === 'REJECTED' && targetDoc && targetDoc.doc_type === '구매품의서' && targetDoc.doc_no) {
+    try {
+      await fetch(`/api/purchase-orders/web?po_no=${encodeURIComponent(targetDoc.doc_no)}`, { method: 'DELETE' });
+      if (typeof window.refreshInventory === 'function') window.refreshInventory();
+      if (typeof window.refreshPoHeaderBadge === 'function') window.refreshPoHeaderBadge();
+    } catch (re) {
+      console.warn('[Bridge] 반려 품의 ERP 회수 경고:', re);
     }
   }
 
@@ -2272,6 +2278,9 @@ async function bridgePurchaseRequisitionToInventory(doc) {
         if (typeof window.refreshInventory === 'function') {
           window.refreshInventory();
         }
+        if (typeof window.refreshPoHeaderBadge === 'function') {
+          window.refreshPoHeaderBadge();
+        }
         return;
       }
     } catch (apiErr) {
@@ -2322,9 +2331,20 @@ async function bridgePurchaseRequisitionToInventory(doc) {
 
 export async function deleteApprovalDoc(id) {
   if (!checkApproverAuthority()) return;
-  if (!confirm('이 품의 문서를 영구 삭제하시겠습니까?')) return;
+  if (!confirm('이 품의 문서를 영구 삭제하시겠습니까?\n(승인된 구매품의서인 경우 ERP 재고 및 발주 대기 목록에서도 함께 회수됩니다.)')) return;
+  const doc = allApprovals.find(d => String(d.id) === String(id));
   const { error } = await paymentSupabase.from('approval_requests').delete().eq('id', id);
   if (error) return alert('삭제 실패: ' + error.message);
+
+  if (doc && doc.doc_type === '구매품의서' && doc.doc_no) {
+    try {
+      await fetch(`/api/purchase-orders/web?po_no=${encodeURIComponent(doc.doc_no)}`, { method: 'DELETE' });
+      if (typeof window.refreshInventory === 'function') window.refreshInventory();
+      if (typeof window.refreshPoHeaderBadge === 'function') window.refreshPoHeaderBadge();
+    } catch (ce) {
+      console.warn('[Bridge] 품의 삭제 후 ERP 회수 경고:', ce);
+    }
+  }
   await loadAllAdminPaymentData();
 }
 
@@ -2682,9 +2702,11 @@ if (typeof window !== 'undefined') {
   window.updateExpenseStatusAction = updateExpenseStatus;
   window.deleteExpenseAction = deleteExpense;
   window.filterAdminExpenseStatus = filterAdminExpenseStatus;
+  window.renderAdminExpenseTable = renderAdminExpenseTable;
   window.updateApprovalStatusAction = updateApprovalStatus;
   window.deleteApprovalDocAction = deleteApprovalDoc;
   window.filterAdminApprovalStatus = filterAdminApprovalStatus;
+  window.renderAdminApprovalTable = renderAdminApprovalTable;
   window.exportPaymentExpensesToCSV = exportPaymentExpensesToCSV;
   window.openPaymentDocModal = openApprovalDocModal;
   window.openPaymentReceiptModal = openReceiptModalByUrl;

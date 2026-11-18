@@ -35,6 +35,16 @@ def load_local_web_orders() -> List[Dict[str, Any]]:
                 print(f"[WARN] Failed to read {p}: {e}")
     return []
 
+def write_local_web_orders(orders: List[Dict[str, Any]]) -> None:
+    for p in DATA_PATHS:
+        try:
+            _ensure_dir(p)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(orders, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[WARN] Failed to write {p}: {e}")
+
+
 def save_local_web_order(order_dict: Dict[str, Any]) -> bool:
     orders = load_local_web_orders()
     # 중복 체크 (po_no + part_no 기준)
@@ -44,15 +54,35 @@ def save_local_web_order(order_dict: Dict[str, Any]) -> bool:
     )
     if not exists:
         orders.insert(0, order_dict)
-        for p in DATA_PATHS:
-            try:
-                _ensure_dir(p)
-                with open(p, "w", encoding="utf-8") as f:
-                    json.dump(orders, f, ensure_ascii=False, indent=2)
-            except Exception as e:
-                print(f"[WARN] Failed to write {p}: {e}")
+        write_local_web_orders(orders)
         return True
     return False
+
+
+def _fetch_supabase_po_status_sets() -> tuple:
+    """Vercel 읽기 전용 환경에서도 취소/입고완료된 PO가 되살아나지 않도록 Supabase 상태 조회"""
+    cancelled = set()
+    received = set()
+    try:
+        headers = {
+            "apikey": PAYMENT_SB_KEY,
+            "Authorization": f"Bearer {PAYMENT_SB_KEY}"
+        }
+        url = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?status=in.(CANCELLED,REJECTED,RECEIVED)&select=doc_no,status"
+        res = requests.get(url, headers=headers, timeout=4)
+        if res.status_code == 200:
+            for r in res.json() or []:
+                dn = (r.get("doc_no") or "").strip()
+                st = (r.get("status") or "").upper().strip()
+                if not dn:
+                    continue
+                if st in ("CANCELLED", "REJECTED"):
+                    cancelled.add(dn)
+                elif st == "RECEIVED":
+                    received.add(dn)
+    except Exception:
+        pass
+    return cancelled, received
 
 def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
     """전자결재(approval_requests)에서 승인된 구매품의서 조회 및 표준 변환"""
@@ -61,7 +91,7 @@ def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
             "apikey": PAYMENT_SB_KEY,
             "Authorization": f"Bearer {PAYMENT_SB_KEY}"
         }
-        url = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?status=eq.APPROVED&select=*&order=created_at.desc"
+        url = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?status=in.(APPROVED,RECEIVED)&select=*&order=created_at.desc"
         res = requests.get(url, headers=headers, timeout=4)
         if res.status_code != 200:
             return []
@@ -113,6 +143,13 @@ def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
                 if not items and meta and meta.get("items"):
                     items = meta.get("items")
 
+            doc_fx = float(meta.get("fx_rate") or 1350.0)
+            if doc_fx <= 0:
+                doc_fx = 1350.0
+            raw_status = (r.get("status") or "APPROVED").upper().strip()
+            po_status = "IN" if raw_status == "RECEIVED" else "PO"
+            po_status_label = "입고완료(웹)" if raw_status == "RECEIVED" else "입고대기(전자결재)"
+
             if items and isinstance(items, list) and len(items) > 0:
                 for idx, itm in enumerate(items, 1):
                     sub_po = f"{doc_no}-{idx}" if len(items) > 1 else doc_no
@@ -126,9 +163,9 @@ def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
                     memo = itm.get("memo") or r.get("memo") or ""
 
                     is_usd = curr == "USD"
-                    up_krw = round(uprice * 1350) if is_usd else uprice
+                    up_krw = round(uprice * doc_fx) if is_usd else uprice
                     amt_krw = up_krw * qty
-                    foreign_up = uprice if is_usd else round(uprice / 1350, 4)
+                    foreign_up = uprice if is_usd else round(uprice / doc_fx, 4)
                     foreign_amt = foreign_up * qty
 
                     converted.append({
@@ -144,8 +181,8 @@ def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
                         "foreign_up": foreign_up,
                         "foreign_amount": foreign_amt,
                         "eta_date": eta_date,
-                        "status": "PO",
-                        "status_label": "입고대기(전자결재)",
+                        "status": po_status,
+                        "status_label": po_status_label,
                         "sales_rep": drafter,
                         "supplier_name": vendor,
                         "real_cust": cust,
@@ -163,9 +200,9 @@ def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
                 memo = meta.get("memo") or r.get("memo") or ""
 
                 is_usd = curr == "USD"
-                up_krw = round(uprice * 1350) if is_usd else uprice
+                up_krw = round(uprice * doc_fx) if is_usd else uprice
                 amt_krw = up_krw * qty
-                foreign_up = uprice if is_usd else round(uprice / 1350, 4)
+                foreign_up = uprice if is_usd else round(uprice / doc_fx, 4)
                 foreign_amt = foreign_up * qty
 
                 converted.append({
@@ -181,8 +218,8 @@ def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
                     "foreign_up": foreign_up,
                     "foreign_amount": foreign_amt,
                     "eta_date": eta_date,
-                    "status": "PO",
-                    "status_label": "입고대기(전자결재)",
+                    "status": po_status,
+                    "status_label": po_status_label,
                     "sales_rep": drafter,
                     "supplier_name": vendor,
                     "real_cust": cust,
@@ -195,16 +232,26 @@ def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
         return []
 
 def get_all_web_purchase_orders() -> List[Dict[str, Any]]:
-    """로컬 캐시와 Supabase 승인 건을 통합하여 최신 웹 발주 리스트 반환"""
+    """로컬 캐시와 Supabase 승인 건을 통합하여 최신 웹 발주 리스트 반환 (취소/입고 상태 반영)"""
     local_orders = load_local_web_orders()
     sb_orders = fetch_supabase_approved_purchases()
+    cancelled_set, received_set = _fetch_supabase_po_status_sets()
 
     # 중복 제거 (po_no + part_no 기준)
     seen = set()
     combined = []
 
     for o in sb_orders + local_orders:
-        key = (o.get("po_no"), o.get("part_no"))
+        po_val = (o.get("po_no") or "").strip()
+        base_val = re.sub(r"-\d+$", "", po_val) if po_val else ""
+        if po_val in cancelled_set or base_val in cancelled_set:
+            continue
+        if po_val in received_set or base_val in received_set:
+            o = dict(o)
+            o["status"] = "IN"
+            o["status_label"] = "입고완료(웹)"
+
+        key = (po_val, o.get("part_no"))
         if key not in seen:
             seen.add(key)
             combined.append(o)
@@ -273,25 +320,19 @@ def delete_web_purchase_order(po_no: str, part_no: Optional[str] = None) -> bool
             new_orders.append(o)
 
     if len(new_orders) < initial_len:
-        for p in DATA_PATHS:
-            try:
-                _ensure_dir(p)
-                with open(p, "w", encoding="utf-8") as f:
-                    json.dump(new_orders, f, ensure_ascii=False, indent=2)
-            except Exception as e:
-                print(f"[WARN] Failed to write {p}: {e}")
+        write_local_web_orders(new_orders)
 
-    # Supabase approval_requests 상태 CANCELLED 업데이트
+    # Supabase approval_requests 상태 CANCELLED 업데이트 (다품목 접미사 -1, -2 정확 제거)
     try:
         headers = {
             "apikey": PAYMENT_SB_KEY,
             "Authorization": f"Bearer {PAYMENT_SB_KEY}",
             "Content-Type": "application/json"
         }
-        base_po = clean_po.split("-")[0] if "-" in clean_po else clean_po
+        base_po = re.sub(r"-\d+$", "", clean_po) if clean_po else clean_po
         url = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{clean_po}"
         requests.patch(url, headers=headers, json={"status": "CANCELLED"}, timeout=4)
-        if base_po != clean_po:
+        if base_po and base_po != clean_po:
             url_base = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{base_po}"
             requests.patch(url_base, headers=headers, json={"status": "CANCELLED"}, timeout=4)
     except Exception as se:
@@ -312,3 +353,45 @@ def delete_web_purchase_order(po_no: str, part_no: Optional[str] = None) -> bool
         print(f"[WARN] Failed to delete bridged inventory item: {ie}")
 
     return deleted_local
+
+
+def mark_web_order_received(po_no: str, part_no: Optional[str] = None) -> bool:
+    """웹 발주 건을 입고완료(IN / RECEIVED) 상태로 전환"""
+    clean_po = (po_no or "").strip()
+    clean_part = (part_no or "").strip()
+    orders = load_local_web_orders()
+    updated = False
+    for o in orders:
+        match_po = (o.get("po_no") or "").strip() == clean_po
+        match_part = not clean_part or (o.get("part_no") or "").strip() == clean_part
+        if match_po and match_part:
+            o["status"] = "IN"
+            o["status_label"] = "입고완료(웹)"
+            updated = True
+    if updated:
+        write_local_web_orders(orders)
+
+    try:
+        headers = {
+            "apikey": PAYMENT_SB_KEY,
+            "Authorization": f"Bearer {PAYMENT_SB_KEY}",
+            "Content-Type": "application/json"
+        }
+        base_po = re.sub(r"-\d+$", "", clean_po) if clean_po else clean_po
+        requests.patch(
+            f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{clean_po}",
+            headers=headers,
+            json={"status": "RECEIVED"},
+            timeout=4,
+        )
+        if base_po and base_po != clean_po:
+            requests.patch(
+                f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{base_po}",
+                headers=headers,
+                json={"status": "RECEIVED"},
+                timeout=4,
+            )
+    except Exception as se:
+        print(f"[WARN] Supabase approval received error: {se}")
+
+    return updated

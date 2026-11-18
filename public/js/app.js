@@ -32,6 +32,10 @@ window.openStatementOfAccount = openStatementOfAccountModal;
 import { openPurchaseOrdersModal, fetchPurchaseOrdersSummary } from './purchase-orders.js';
 window.openPurchaseOrdersModal = openPurchaseOrdersModal;
 window.fetchPurchaseOrdersSummary = fetchPurchaseOrdersSummary;
+window.refreshPoHeaderBadge = fetchPurchaseOrdersSummary;
+
+import { openCustomerMasterModal } from './customers.js';
+window.openCustomerMasterModal = openCustomerMasterModal;
 
 import { openPriceHistoryModal } from './price-history.js';
 window.openPriceHistoryModal = openPriceHistoryModal;
@@ -555,10 +559,9 @@ function initCustomerMasterAutocomplete() {
   if (drawerCust) {
     attachCustomerAutocomplete(drawerCust, (cust) => {
       if (cust.sales_rep) {
-        const ownerEl = document.getElementById('drawerOwner');
-        if (ownerEl) {
-          const opt = Array.from(ownerEl.options).find(o => o.value.toLowerCase().includes(cust.sales_rep.toLowerCase()));
-          if (opt) ownerEl.value = opt.value;
+        const salesEl = document.getElementById('drawerSales');
+        if (salesEl) {
+          salesEl.value = cust.sales_rep;
         }
       }
     });

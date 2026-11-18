@@ -88,7 +88,13 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
             <p class="text-xs text-slate-300 mt-0.5">사내 공식 매입 발주 원장 및 전자결재 승인 발주의 입고예정일(CRD/ETA), 실수요처 납품 일정을 통합 추적합니다.</p>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+            <button type="button" onclick="window.openDirectPoCrudModal && window.openDirectPoCrudModal(null)" 
+                    class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-black rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-colors">
+              <span>➕</span> 직접 발주 등록
+            </button>
+          ` : ''}
           <button type="button" id="poNewRequisitionBtn" onclick="window.goToNewPurchaseRequisition && window.goToNewPurchaseRequisition()" 
                   class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-colors">
             <span>📑</span> + 구매 품의서 작성
@@ -281,6 +287,7 @@ function renderPoTable(orders) {
   if (currentPoPage > totalPages) currentPoPage = 1;
   const startIdx = (currentPoPage - 1) * PO_PAGE_SIZE;
   const pageItems = orders.slice(startIdx, startIdx + PO_PAGE_SIZE);
+  window._lastRenderedPoPageItems = pageItems;
 
   if (countInfo) {
     countInfo.innerHTML = `총 <strong class="text-blue-700">${orders.length.toLocaleString()}건</strong> 중 ${startIdx + 1} ~ ${Math.min(startIdx + PO_PAGE_SIZE, orders.length)}건 표시`;
@@ -368,16 +375,30 @@ function renderPoTable(orders) {
         <td class="py-2 px-2 text-center font-bold text-slate-700 whitespace-nowrap">${o.sales_rep || '-'}</td>
         <td class="py-2 px-3 text-slate-500 truncate max-w-[140px]" title="${o.remark}">${o.remark || '-'}</td>
         <td class="py-2 px-2 text-center whitespace-nowrap">
-          ${isWebApproval ? `
-            <button type="button" 
-                    onclick="event.stopPropagation(); window.deleteWebPurchaseOrder && window.deleteWebPurchaseOrder('${o.po_no}', '${(o.part_no || '').replace(/'/g, "\\'")}')" 
-                    class="px-2 py-0.5 text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-300 rounded shadow-2xs cursor-pointer transition-colors"
-                    title="웹 승인 발주 내역 삭제">
-              ✕ 삭제
-            </button>
-          ` : `
-            <span class="text-slate-300 font-mono text-[10px]" title="사내 ERP 전산 원장 직접 관리">-</span>
-          `}
+          <div class="inline-flex items-center gap-1">
+            ${(o.status === 'PO' && typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+              <button type="button"
+                      onclick="event.stopPropagation(); window.receivePoByIdx && window.receivePoByIdx(${idx})"
+                      class="px-2 py-0.5 text-[10px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded shadow-2xs cursor-pointer transition-colors"
+                      title="실물 입고 처리 및 재고 마스터 자동 반영">
+                📦 입고
+              </button>
+            ` : ''}
+            ${(isWebApproval && typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+              <button type="button"
+                      onclick="event.stopPropagation(); window.editWebPoByIdx && window.editWebPoByIdx(${idx})"
+                      class="px-1.5 py-0.5 text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded shadow-2xs cursor-pointer transition-colors"
+                      title="웹 발주 내역 수정">
+                ✏️
+              </button>
+              <button type="button" 
+                      onclick="event.stopPropagation(); window.deleteWebPurchaseOrder && window.deleteWebPurchaseOrder('${o.po_no}', '${(o.part_no || '').replace(/'/g, "\\'")}')" 
+                      class="px-1.5 py-0.5 text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-300 rounded shadow-2xs cursor-pointer transition-colors"
+                      title="웹 승인 발주 내역 삭제">
+                ✕
+              </button>
+            ` : (!isWebApproval && o.status !== 'PO' ? `<span class="text-slate-300 font-mono text-[10px]" title="사내 ERP 전산 원장 직접 관리">-</span>` : '')}
+          </div>
         </td>
       </tr>
     `;
@@ -558,6 +579,7 @@ window.deleteWebPurchaseOrder = async function(poNo, partNo) {
     if (data.status === 'success') {
       alert(`발주(${poNo}) 건이 성공적으로 삭제되었습니다.`);
       await loadPoData();
+      await fetchPurchaseOrdersSummary();
       if (typeof window.refreshInventory === 'function') {
         window.refreshInventory();
       }
@@ -566,5 +588,207 @@ window.deleteWebPurchaseOrder = async function(poNo, partNo) {
     }
   } catch (err) {
     alert('삭제 통신 오류: ' + err.message);
+  }
+};
+
+// ========================================================
+// ➕ 웹 발주(PO) 직접 등록 · 수정 · 📦 입고완료(IN) 전환 모달
+// ========================================================
+let isEditingDirectPo = false;
+
+window.openDirectPoCrudModal = function(poItem = null) {
+  if (typeof window.isCsOrAdminUser === 'function' && !window.isCsOrAdminUser()) {
+    alert('발주 직접 등록·수정은 CS 및 관리자 권한만 가능합니다.');
+    return;
+  }
+  isEditingDirectPo = !!(poItem && poItem.po_no);
+
+  const modalId = 'directPoCrudModal';
+  let modal = document.getElementById(modalId);
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = modalId;
+    modal.className = 'fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[100000] flex items-center justify-center p-3 overflow-y-auto';
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+    document.body.appendChild(modal);
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const esc = (v) => String(v ?? '').replace(/"/g, '&quot;');
+  const curr = (poItem?.currency || 'USD').toUpperCase().includes('US') || poItem?.currency === '$' ? 'USD' : 'KRW';
+  const displayPrice = curr === 'USD' ? (poItem?.foreign_up || 0) : (poItem?.unit_price || 0);
+
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto" onclick="event.stopPropagation()">
+      <div class="bg-gradient-to-r from-blue-700 to-indigo-700 text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="text-sm font-black">${isEditingDirectPo ? `✏️ 웹 발주 수정 (${esc(poItem.po_no)})` : '➕ 신규 발주(PO) 직접 등록'}</h3>
+        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="text-white/80 hover:text-white font-bold cursor-pointer">✕</button>
+      </div>
+      <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">발주번호 (PO NO)</label>
+          <input type="text" id="poCrudNo" value="${esc(poItem?.po_no)}" ${isEditingDirectPo ? 'readonly class="w-full px-3 py-2 border border-slate-200 bg-slate-100 rounded-lg font-mono text-slate-500"' : 'placeholder="미입력 시 자동 채번 (PO-WEB-...)" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-blue-500"'}>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">입고예정일 (CRD/ETA) *</label>
+          <input type="date" id="poCrudEta" value="${esc(poItem?.eta_date && poItem.eta_date !== '-' ? poItem.eta_date.slice(0,10) : todayStr)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">품번 (PART NO) *</label>
+          <input type="text" id="poCrudPart" value="${esc(poItem?.part_no)}" placeholder="예: IS25LP128F-JBLE-TR" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">제조사 (MFG)</label>
+          <input type="text" id="poCrudMaker" value="${esc(poItem?.maker || 'ISSI')}" placeholder="ISSI, ESMT, SMI..." class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">발주 수량 (EA) *</label>
+          <input type="number" id="poCrudQty" value="${Number(poItem?.qty || 1000)}" min="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold outline-none focus:border-blue-500">
+        </div>
+        <div class="grid grid-cols-3 gap-1.5">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 mb-1">통화</label>
+            <select id="poCrudCurr" class="w-full px-2 py-2 border border-slate-300 rounded-lg font-bold bg-white outline-none">
+              <option value="USD" ${curr === 'USD' ? 'selected' : ''}>USD ($)</option>
+              <option value="KRW" ${curr === 'KRW' ? 'selected' : ''}>KRW (₩)</option>
+            </select>
+          </div>
+          <div class="col-span-2">
+            <label class="block text-[11px] font-bold text-slate-600 mb-1">발주 단가 *</label>
+            <input type="number" step="0.0001" id="poCrudPrice" value="${Number(displayPrice || 0)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-blue-700 outline-none focus:border-blue-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">매입처 (공급사)</label>
+          <input type="text" id="poCrudSupplier" value="${esc(poItem?.supplier_name)}" placeholder="예: ISSI 공식대리점" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">실수요처 (고객사)</label>
+          <input type="text" id="poCrudCust" value="${esc(poItem?.real_cust || poItem?.end_cust)}" placeholder="예: 유라(주)" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">담당 영업 (SALES)</label>
+          <input type="text" id="poCrudSales" value="${esc(poItem?.sales_rep)}" placeholder="예: WILLIAM, ERIC" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">비고 (REMARK)</label>
+          <input type="text" id="poCrudRemark" value="${esc(poItem?.remark)}" placeholder="특이사항 / 납기 메모" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg cursor-pointer">취소</button>
+        <button type="button" id="btnSaveDirectPoCrud" class="px-5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-lg shadow-xs cursor-pointer">💾 발주 저장</button>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+  document.getElementById('btnSaveDirectPoCrud')?.addEventListener('click', saveDirectPoCrudForm);
+};
+
+async function saveDirectPoCrudForm() {
+  const part_no = document.getElementById('poCrudPart')?.value.trim() || '';
+  if (!part_no) return alert('품번(PART NO)을 입력해 주세요.');
+
+  const liveFx = (typeof window.getLiveFxRate === 'function' && window.getLiveFxRate() > 0) ? window.getLiveFxRate() : 1350;
+  const payload = {
+    po_no: document.getElementById('poCrudNo')?.value.trim() || '',
+    part_no,
+    maker: document.getElementById('poCrudMaker')?.value.trim() || 'OTHERS',
+    qty: parseInt(document.getElementById('poCrudQty')?.value || '1', 10) || 1,
+    unit_price: parseFloat(document.getElementById('poCrudPrice')?.value || '0') || 0,
+    currency: document.getElementById('poCrudCurr')?.value || 'USD',
+    fx_rate: liveFx,
+    eta_date: document.getElementById('poCrudEta')?.value || new Date().toISOString().slice(0, 10),
+    supplier_name: document.getElementById('poCrudSupplier')?.value.trim() || '',
+    real_cust: document.getElementById('poCrudCust')?.value.trim() || '',
+    sales_rep: document.getElementById('poCrudSales')?.value.trim() || '',
+    remark: document.getElementById('poCrudRemark')?.value.trim() || ''
+  };
+
+  const btn = document.getElementById('btnSaveDirectPoCrud');
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ 저장 중...'; }
+
+  try {
+    const method = isEditingDirectPo ? 'PUT' : 'POST';
+    const res = await fetch('/api/purchase-orders/web', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || data.message || '저장 실패');
+
+    document.getElementById('directPoCrudModal')?.classList.add('hidden');
+    alert(isEditingDirectPo ? '✅ 웹 발주 내역이 수정되었습니다.' : '✅ 신규 발주(PO)가 등록되었습니다.');
+    await loadPoData();
+    await fetchPurchaseOrdersSummary();
+  } catch (err) {
+    alert('발주 저장 오류: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '💾 발주 저장'; }
+  }
+}
+
+window.editWebPoByIdx = function(idx) {
+  const list = window._lastRenderedPoPageItems || [];
+  if (list[idx]) window.openDirectPoCrudModal(list[idx]);
+};
+
+window.receivePoByIdx = async function(idx) {
+  if (typeof window.isCsOrAdminUser === 'function' && !window.isCsOrAdminUser()) {
+    alert('입고 완료 전환은 CS 및 관리자 권한만 가능합니다.');
+    return;
+  }
+  const list = window._lastRenderedPoPageItems || [];
+  const o = list[idx];
+  if (!o) return;
+
+  const dc = prompt(
+    `[📦 발주 실물 입고완료 전환 ➔ 재고 마스터 자동 입고]\n\n` +
+    `• 발주번호: ${o.po_no}\n` +
+    `• 품번: [${o.maker}] ${o.part_no}\n` +
+    `• 수량: ${Number(o.qty).toLocaleString()} EA\n\n` +
+    `입고 부품의 Date Code(D/C)를 입력하세요 (미입력 시 '-'):`,
+    '-'
+  );
+  if (dc === null) return;
+
+  const liveFx = (typeof window.getLiveFxRate === 'function' && window.getLiveFxRate() > 0) ? window.getLiveFxRate() : 1350;
+  const isWeb = o.source === 'WEB_APPROVAL' || String(o.idx || '').startsWith('WEB-');
+
+  try {
+    const res = await fetch('/api/purchase-orders/receive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        po_no: o.po_no,
+        part_no: o.part_no,
+        maker: o.maker || 'OTHERS',
+        qty: Number(o.qty) || 1,
+        unit_usd: Number(o.foreign_up) || 0,
+        unit_krw: Number(o.unit_price) || 0,
+        currency: o.currency || 'USD',
+        fx_rate: liveFx,
+        entry_date: new Date().toISOString().slice(0, 10),
+        supplier_name: o.supplier_name || '',
+        real_cust: o.real_cust || o.end_cust || '',
+        sales_rep: o.sales_rep || 'BSK',
+        date_code: dc.trim() || '-',
+        remark: o.remark || '',
+        is_web: isWeb
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || data.message || '입고 처리 실패');
+
+    alert(`✅ [${o.part_no}] ${Number(o.qty).toLocaleString()} EA 입고완료 처리 및 재고 마스터 반영이 완료되었습니다!`);
+    await loadPoData();
+    await fetchPurchaseOrdersSummary();
+    if (typeof window.refreshInventory === 'function') {
+      window.refreshInventory();
+    }
+  } catch (err) {
+    alert('입고 완료 처리 오류: ' + err.message);
   }
 };

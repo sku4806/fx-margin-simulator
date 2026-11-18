@@ -165,24 +165,34 @@ export async function fetchWebShipments() {
       .order('last_synced_at', { ascending: false, nullsFirst: false });
 
     if (!error && data) {
-      cachedWebShipments = data.map(item => ({
-        idx: item.id || item.legacy_out_id,
-        customer: item.customer_name || '웹 수주 거래처',
-        real_cust: item.real_cust || '-',
-        po_no: item.po_no || 'WEB-MANUAL',
-        part_no: item.part_name || '-',
-        ship_date: item.order_date || '-',
-        ship_qty: item.qty || 0,
-        net_up: (item.unit_price && currentFxRate > 0) ? (item.unit_price / currentFxRate) : ((item.cost_price && currentFxRate > 0) ? (item.cost_price / currentFxRate) : 0.0),
-        ship_amt: (item.total_sales_amount && currentFxRate > 0) ? (item.total_sales_amount / currentFxRate) : 0.0,
-        unit_krw: item.unit_price || 0,
-        total_krw: item.total_sales_amount || 0,
-        app: item.application || '-',
-        maker: item.maker || 'OTHERS',
-        supply: 'WEB',
-        is_web: true,
-        status: item.status || 'SHIPPED'
-      }));
+      cachedWebShipments = data.map(item => {
+        const rawStatus = String(item.status || 'SHIPPED');
+        const stParts = rawStatus.split('||');
+        const baseStatus = stParts[0] || 'SHIPPED';
+        const parsedCust = stParts[1] || item.customer_name || '웹 수주 거래처';
+        const parsedRealCust = stParts[2] || item.real_cust || '-';
+        const parsedApp = stParts[3] || item.application || '-';
+        return {
+          id: item.id,
+          idx: item.id || item.legacy_out_id,
+          customer: parsedCust,
+          real_cust: parsedRealCust,
+          po_no: item.po_no || 'WEB-MANUAL',
+          part_no: item.part_name || '-',
+          ship_date: item.order_date || '-',
+          ship_qty: item.qty || 0,
+          net_up: (item.unit_price && currentFxRate > 0) ? (item.unit_price / currentFxRate) : ((item.cost_price && currentFxRate > 0) ? (item.cost_price / currentFxRate) : 0.0),
+          ship_amt: (item.total_sales_amount && currentFxRate > 0) ? (item.total_sales_amount / currentFxRate) : 0.0,
+          unit_krw: item.unit_price || 0,
+          cost_krw: item.cost_price || 0,
+          total_krw: item.total_sales_amount || 0,
+          app: parsedApp,
+          maker: item.maker || 'OTHERS',
+          supply: 'WEB',
+          is_web: true,
+          status: baseStatus
+        };
+      });
       return cachedWebShipments;
     }
   } catch (err) {
@@ -267,14 +277,21 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
           <p class="text-[11px] text-slate-400 mt-1">세일즈 마스터 FrmShippedInfo 규격과 100% 동일한 출하 원장, 실수요처, 외화단가 및 용도(APP) 통합 장부입니다.</p>
         </div>
 
-        <!-- 모드 전환 탭 (MS-SQL 공식 원장 vs 웹 수주 출하내역) -->
-        <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl shrink-0 self-start lg:self-center">
-          <button type="button" id="btnModeLedger" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeShipmentMode === 'ledger' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
-            🚚 MS-SQL 출하 원장
-          </button>
-          <button type="button" id="btnModeWeb" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeShipmentMode === 'web' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
-            📦 웹 수주 출하완료건
-          </button>
+        <!-- 모드 전환 탭 (MS-SQL 공식 원장 vs 웹 수주 출하내역) + 신규 등록 -->
+        <div class="flex items-center gap-2 flex-wrap shrink-0 self-start lg:self-center">
+          ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+            <button type="button" onclick="window.openShipmentCrudModal && window.openShipmentCrudModal(null)" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-xs cursor-pointer transition-colors">
+              + 신규 출하 등록
+            </button>
+          ` : ''}
+          <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+            <button type="button" id="btnModeLedger" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeShipmentMode === 'ledger' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+              🚚 MS-SQL 출하 원장
+            </button>
+            <button type="button" id="btnModeWeb" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeShipmentMode === 'web' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+              📦 웹 수주 출하완료건
+            </button>
+          </div>
         </div>
       </div>
 
@@ -620,7 +637,7 @@ function generateTableRows(items) {
           ${hasApp ? `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">${item.app}</span>` : '<span class="text-slate-300">-</span>'}
         </td>
 
-        <!-- 문서 (명세서 / 패킹) -->
+        <!-- 문서 / 관리 -->
         <td class="py-2 px-3 text-center whitespace-nowrap no-print" onclick="event.stopPropagation()">
           <div class="inline-flex items-center gap-1">
             <button type="button" onclick="window.openTradeInvoice && window.openTradeInvoice(window.getShipmentByIndex(${idx}))" 
@@ -631,6 +648,12 @@ function generateTableRows(items) {
                     class="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 text-[10px] font-bold transition-colors cursor-pointer" title="공식 패킹리스트 출력">
               📦 패킹
             </button>
+            ${(item.is_web && item.id && typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+              <button type="button" onclick="window.openShipmentCrudModal && window.openShipmentCrudModal(window.getShipmentByIndex(${idx}))" 
+                      class="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 text-[10px] font-bold cursor-pointer" title="웹 출하 내역 수정">✏️</button>
+              <button type="button" onclick="window.deleteWebShipmentByIndex && window.deleteWebShipmentByIndex(${idx})" 
+                      class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded border border-rose-200 text-[10px] font-bold cursor-pointer" title="웹 출하 내역 삭제">🗑️</button>
+            ` : ''}
           </div>
         </td>
       </tr>
@@ -882,6 +905,10 @@ export async function syncShipmentLifecycle(itemId, payload, origItem = null) {
       const partName = payload.part_name || payload.partName || origItem?.part_name || origItem?.partName || 'UNKNOWN';
       const maker = payload.maker || origItem?.maker || 'OTHERS';
       const poNo = payload.po_no || payload.poNo || payload.tracking_no || payload.trackingNo || origItem?.po_no || origItem?.tracking_no || 'WEB-MANUAL';
+      const custName = (payload.customer || origItem?.customer || '').replace(/\|\|/g, ' ').trim();
+      const realCust = (payload.real_customer || payload.realCustomer || origItem?.real_customer || origItem?.realCustomer || '').replace(/\|\|/g, ' ').trim();
+      const appStr = (payload.application || origItem?.application || '').replace(/\|\|/g, ' ').trim();
+      const encodedStatus = (custName || realCust || appStr) ? `SHIPPED||${custName}||${realCust}||${appStr}` : 'SHIPPED';
 
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(itemId));
 
@@ -895,7 +922,7 @@ export async function syncShipmentLifecycle(itemId, payload, origItem = null) {
         total_sales_amount: totalSales,
         po_no: poNo,
         order_date: shipDate,
-        status: 'SHIPPED',
+        status: encodedStatus,
         last_synced_at: new Date().toISOString()
       };
 
@@ -915,6 +942,44 @@ export async function syncShipmentLifecycle(itemId, payload, origItem = null) {
       } else {
         await sbClient.from('legacy_shipments').insert([shipmentRecord]);
         console.log(`✅ [legacy_shipments] 출하 이력 신규 등록 성공: ${partName} (${itemId})`);
+      }
+
+      // 💰 출하완료 시 미수(미결제) 상태인 경우 미수금(legacy_unpaid)에도 자동 연동 (중복 방지)
+      const payStatus = String(payload.payment_status || payload.paymentStatus || origItem?.payment_status || '미수').trim();
+      if (payStatus !== '완료' && payStatus !== '수금완료' && totalSales > 0) {
+        try {
+          const { data: exUnpaid } = await sbClient
+            .from('legacy_unpaid')
+            .select('id')
+            .eq('po_no', poNo)
+            .eq('part_name', partName)
+            .eq('out_date', shipDate)
+            .limit(1);
+
+          if (!exUnpaid || exUnpaid.length === 0) {
+            const dueDt = payload.due_date || payload.dueDate || origItem?.due_date || '';
+            await fetch('/api/unpaid', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customer_name: custName || '웹 수주 거래처',
+                out_date: shipDate,
+                po_no: poNo,
+                part_name: partName,
+                maker: maker,
+                qty: shipQty,
+                amount_vat: Math.round(totalSales * 1.1),
+                due_date: dueDt || undefined,
+                sales_rep: payload.owner || origItem?.owner || 'BSK',
+                contact: `[수주 출하 자동연동]`,
+                pay_status: '미결제'
+              })
+            });
+            console.log(`✅ [legacy_unpaid] 출하완료 미수금 자동 등록 완료: ${partName} (${poNo})`);
+          }
+        } catch (unpaidErr) {
+          console.warn('⚠️ [legacy_unpaid] 미수금 자동 연동 경고:', unpaidErr);
+        }
       }
     } catch (shipErr) {
       console.error("❌ [legacy_shipments] 출하 이력 동기화 에러:", shipErr);
@@ -937,3 +1002,169 @@ export async function syncShipmentLifecycle(itemId, payload, origItem = null) {
     }
   }
 }
+
+// ========================================================
+// ✏️ 웹 출하 원장 직접 등록 · 수정 · 삭제 (CRUD Modal)
+// ========================================================
+let editingShipmentId = null;
+
+export function openShipmentCrudModal(item = null) {
+  if (typeof window.isCsOrAdminUser === 'function' && !window.isCsOrAdminUser()) {
+    alert('출하 내역 등록·수정은 CS 및 관리자 권한만 가능합니다.');
+    return;
+  }
+  editingShipmentId = item ? (item.id || null) : null;
+
+  const modalId = 'shipmentCrudModal';
+  let modal = document.getElementById(modalId);
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = modalId;
+    modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[99995] flex items-center justify-center p-3 overflow-y-auto';
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+    document.body.appendChild(modal);
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const esc = (v) => String(v ?? '').replace(/"/g, '&quot;');
+
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto" onclick="event.stopPropagation()">
+      <div class="bg-gradient-to-r from-indigo-700 to-blue-700 text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="text-sm font-black">${editingShipmentId ? '✏️ 웹 출하 내역 수정' : '➕ 신규 출하 내역 직접 등록'}</h3>
+        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="text-white/80 hover:text-white font-bold cursor-pointer">✕</button>
+      </div>
+      <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">계약처 (CUSTOMER) *</label>
+          <input type="text" id="shipCrudCustomer" value="${esc(item?.customer === '웹 수주 거래처' ? '' : item?.customer)}" placeholder="예: LG이노텍" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">실수요처 (REALCUST)</label>
+          <input type="text" id="shipCrudRealCust" value="${esc(item?.real_cust === '-' ? '' : item?.real_cust)}" placeholder="실수요처명" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">품번 (PARTNO) *</label>
+          <input type="text" id="shipCrudPart" value="${esc(item?.part_no)}" placeholder="예: IS25LP128F-JBLE-TR" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">제조사 (MFG)</label>
+          <input type="text" id="shipCrudMaker" value="${esc(item?.maker || 'ISSI')}" placeholder="ISSI, ESMT, SMI..." class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">발주번호 (PONO)</label>
+          <input type="text" id="shipCrudPoNo" value="${esc(item?.po_no)}" placeholder="PO 번호" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">출하일자 (SHIP_DATE) *</label>
+          <input type="date" id="shipCrudDate" value="${esc(item?.ship_date && item.ship_date !== '-' ? item.ship_date.slice(0,10) : todayStr)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">출하수량 (EA) *</label>
+          <input type="number" id="shipCrudQty" value="${Number(item?.ship_qty || 1000)}" min="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">외화 판매단가 (NET_UP, USD)</label>
+          <input type="number" step="0.0001" id="shipCrudNetUp" value="${Number(item?.net_up || 0).toFixed(4)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-blue-700 outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">원화 판매단가 (KRW, 선택)</label>
+          <input type="number" id="shipCrudUnitKrw" value="${Math.round(Number(item?.unit_krw || 0))}" placeholder="USD 입력 시 자동환산" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">용도 (APP)</label>
+          <input type="text" id="shipCrudApp" value="${esc(item?.app === '-' ? '' : item?.app)}" placeholder="예: AU04 : REAR CAMERA" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+        </div>
+        ${!editingShipmentId ? `
+          <div class="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center gap-2">
+            <input type="checkbox" id="shipCrudCreateUnpaid" checked class="rounded cursor-pointer">
+            <label for="shipCrudCreateUnpaid" class="text-[11px] font-bold text-amber-900 cursor-pointer">미수금 관리 탭에도 자동으로 미결제 채권(VAT 포함, 30일 만기) 등록하기</label>
+          </div>
+        ` : ''}
+      </div>
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg cursor-pointer">취소</button>
+        <button type="button" id="btnSaveShipmentCrud" class="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-lg shadow-xs cursor-pointer">💾 저장</button>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+  document.getElementById('btnSaveShipmentCrud')?.addEventListener('click', saveShipmentCrudForm);
+}
+
+async function saveShipmentCrudForm() {
+  const part_name = document.getElementById('shipCrudPart')?.value.trim() || '';
+  if (!part_name) return alert('품번(PARTNO)을 입력해 주세요.');
+
+  const unitKrwVal = parseFloat(document.getElementById('shipCrudUnitKrw')?.value || '0') || 0;
+  const netUpVal = parseFloat(document.getElementById('shipCrudNetUp')?.value || '0') || 0;
+
+  const payload = {
+    customer_name: document.getElementById('shipCrudCustomer')?.value.trim() || '웹 출하 거래처',
+    real_cust: document.getElementById('shipCrudRealCust')?.value.trim() || '',
+    part_name,
+    maker: document.getElementById('shipCrudMaker')?.value.trim() || 'OTHERS',
+    po_no: document.getElementById('shipCrudPoNo')?.value.trim() || 'WEB-SHIP',
+    order_date: document.getElementById('shipCrudDate')?.value || new Date().toISOString().slice(0, 10),
+    qty: parseInt(document.getElementById('shipCrudQty')?.value || '1', 10) || 1,
+    unit_usd: netUpVal > 0 ? netUpVal : null,
+    unit_price: unitKrwVal > 0 ? unitKrwVal : 0,
+    fx_rate: currentFxRate || 1350,
+    app: document.getElementById('shipCrudApp')?.value.trim() || '',
+    create_unpaid: !!document.getElementById('shipCrudCreateUnpaid')?.checked
+  };
+
+  const btn = document.getElementById('btnSaveShipmentCrud');
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ 저장 중...'; }
+
+  try {
+    const url = editingShipmentId ? `/api/shipments/${encodeURIComponent(editingShipmentId)}` : '/api/shipments';
+    const method = editingShipmentId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || data.message || '저장 실패');
+
+    document.getElementById('shipmentCrudModal')?.classList.add('hidden');
+    alert(editingShipmentId ? '✅ 웹 출하 내역이 수정되었습니다.' : '✅ 신규 출하 내역이 등록되었습니다. [📦 웹 수주 출하완료건] 뷰에서 확인됩니다.');
+
+    activeShipmentMode = 'web';
+    await fetchWebShipments();
+    lastFilteredShipments = cachedWebShipments;
+    shipmentPage = 1;
+    renderShipmentsView('shipmentsSection');
+  } catch (err) {
+    alert('출하 저장 오류: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '💾 저장'; }
+  }
+}
+
+export async function deleteWebShipmentByIndex(idx) {
+  if (typeof window.isCsOrAdminUser === 'function' && !window.isCsOrAdminUser()) {
+    alert('출하 내역 삭제는 CS 및 관리자 권한만 가능합니다.');
+    return;
+  }
+  const item = window.getShipmentByIndex(idx);
+  if (!item || !item.id) return alert('삭제할 수 있는 웹 출하 항목이 아닙니다.');
+  if (!confirm(`[${item.customer}] ${item.part_no} (${Number(item.ship_qty).toLocaleString()} EA)\n\n이 웹 출하 내역을 삭제하시겠습니까?`)) return;
+
+  try {
+    const res = await fetch(`/api/shipments/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || '삭제 실패');
+    alert('🗑️ 웹 출하 내역이 삭제되었습니다.');
+    await fetchWebShipments();
+    lastFilteredShipments = cachedWebShipments;
+    renderShipmentsView('shipmentsSection');
+  } catch (err) {
+    alert('출하 삭제 오류: ' + err.message);
+  }
+}
+
+window.openShipmentCrudModal = openShipmentCrudModal;
+window.deleteWebShipmentByIndex = deleteWebShipmentByIndex;

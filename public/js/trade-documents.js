@@ -53,12 +53,20 @@ export function openInvoiceModal(item) {
   }
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const shipDate = item.order_date || item.shipped_date || item.entry_date || todayStr;
+  const shipDate = item.ship_date || item.order_date || item.shipped_date || item.entry_date || todayStr;
   const cname = item.customer_name || item.cname || item.customer || '(주)거래처';
   const partNo = item.part_name || item.part_no || item.partName || '-';
   const maker = item.maker || item.mfg || '-';
-  const qty = Number(item.qty || item.stock || 1);
-  const unitPrice = Math.round(Number(item.unit_price || item.unitKrw || item.amount_vat / 1.1 / qty || 0));
+  const qty = Number(item.ship_qty || item.qty || item.stock || 1);
+  const liveFx = (typeof window.getLiveFxRate === 'function' && window.getLiveFxRate() > 0) ? window.getLiveFxRate() : 1350;
+  let unitPrice = 0;
+  if (Number(item.unit_krw) > 0) unitPrice = Math.round(Number(item.unit_krw));
+  else if (Number(item.unit_price) > 0) unitPrice = Math.round(Number(item.unit_price));
+  else if (Number(item.unitKrw) > 0) unitPrice = Math.round(Number(item.unitKrw));
+  else if (Number(item.net_up) > 0) unitPrice = Math.round(Number(item.net_up) * liveFx);
+  else if (Number(item.total_krw) > 0 && qty > 0) unitPrice = Math.round(Number(item.total_krw) / qty);
+  else if (Number(item.ship_amt) > 0 && qty > 0) unitPrice = Math.round((Number(item.ship_amt) * liveFx) / qty);
+  else if (Number(item.amount_vat) > 0 && qty > 0) unitPrice = Math.round(Number(item.amount_vat) / 1.1 / qty);
   const supplyPrice = unitPrice * qty;
   const vat = Math.round(supplyPrice * 0.1);
   const totalAmount = supplyPrice + vat;
@@ -205,13 +213,13 @@ export function openPackingListModal(item) {
   }
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const shipDate = item.order_date || item.shipped_date || item.entry_date || todayStr;
+  const shipDate = item.ship_date || item.order_date || item.shipped_date || item.entry_date || todayStr;
   const cname = item.customer_name || item.cname || item.customer || 'BIGSHINE OVERSEAS CLIENT';
   const partNo = item.part_name || item.part_no || item.partName || '-';
   const maker = item.maker || item.mfg || '-';
-  const qty = Number(item.qty || item.stock || 1);
+  const qty = Number(item.ship_qty || item.qty || item.stock || 1);
   const poNo = item.po_no || item.poNo || 'PO-2026-EXPORT';
-  const trackingNo = item.tracking_no || item.trackingNo || 'DHL Express';
+  const trackingNo = item.awb_no || item.tracking_no || item.trackingNo || 'DHL Express';
 
   modal.innerHTML = `
     <div class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-300 p-4 sm:p-8 flex flex-col space-y-4 my-auto print:p-0 print:border-none print:shadow-none" onclick="event.stopPropagation()">

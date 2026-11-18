@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import json
 import time
@@ -11,6 +12,9 @@ from pydantic import BaseModel
 app = FastAPI(title="FX Margin Simulator API")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 # .env 로드
 def load_env():
@@ -854,14 +858,24 @@ global_vercel_memos = [
 
 @app.get("/api/sales/memos")
 def list_sales_memos(sales_rep: Optional[str] = None, limit: int = 40):
+    cloud_memos = []
+    try:
+        import erp_crud
+        cloud_memos = erp_crud.list_cloud_sales_memos(sales_rep=sales_rep, limit=limit)
+    except Exception:
+        pass
+
+    legacy_memos = []
     if not is_vercel:
         try:
             import legacy_mssql
-            rows = legacy_mssql.query_sales_memos(sales_rep=sales_rep, limit=limit)
-            if rows is not None:
-                return {"status": "success", "total": len(rows), "memos": rows}
+            legacy_memos = legacy_mssql.query_sales_memos(sales_rep=sales_rep, limit=limit) or []
         except Exception:
             pass
+
+    if cloud_memos or legacy_memos:
+        combined = (cloud_memos + legacy_memos)[:limit]
+        return {"status": "success", "total": len(combined), "memos": combined}
 
     if sales_rep and sales_rep != "ALL":
         filtered = [m for m in global_vercel_memos if m.get("sales_rep", "").upper() == sales_rep.upper()]
@@ -871,13 +885,11 @@ def list_sales_memos(sales_rep: Optional[str] = None, limit: int = 40):
 
 @app.post("/api/sales/memos")
 def create_sales_memo(item: MemoInput):
-    if not is_vercel:
-        try:
-            import legacy_mssql
-            ok = legacy_mssql.insert_sales_memo(item.sales_rep, item.memo, item.input_date)
-            return {"status": "success" if ok else "error"}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+    try:
+        import erp_crud
+        return erp_crud.create_cloud_sales_memo(item.sales_rep, item.memo, item.input_date)
+    except Exception as e:
+        print(f"[WARN] 클라우드 메모 저장 실패, 인메모리 폴백: {e}")
 
     global_vercel_memos.insert(0, {
         "sales_rep": item.sales_rep,
@@ -1263,16 +1275,23 @@ def price_history(part_no: str):
         "po_count": len(matching_pos)
     }
 
+    result_data = {
+        "part_no": p_clean,
+        "summary": summary,
+        "purchases": purchases,
+        "sales": sales,
+        "quotations": quotations,
+        "purchase_orders": matching_pos
+    }
+    try:
+        import erp_crud
+        result_data = erp_crud.merge_cloud_price_history(result_data, p_clean)
+    except Exception:
+        pass
+
     return {
         "status": "success",
-        "data": {
-            "part_no": p_clean,
-            "summary": summary,
-            "purchases": purchases,
-            "sales": sales,
-            "quotations": quotations,
-            "purchase_orders": matching_pos
-        }
+        "data": result_data
     }
 
 # ========================================================
@@ -1472,3 +1491,8 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
         "items_count": len(items_to_insert),
         "items": inserted
     }
+
+
+# 통합 웹 ERP 클라우드(Supabase) CRUD 라우트 등록
+import erp_crud
+erp_crud.register_crud_routes(app)

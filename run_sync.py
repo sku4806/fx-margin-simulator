@@ -134,10 +134,11 @@ def sync_inventory(conn, sb):
     po_count = sum(1 for it in items if it["po_no"])
     print(f"[*] 레거시 유효 재고 {len(items)}건 변환 완료 (실제 PO 번호 확인: {po_count}건, 기타/실사재고: {len(items)-po_count}건)")
 
+    # 웹 ERP에서 수동 등록·수주·입고·결재 연동된 항목은 보호하고, 레거시 보유 재고만 안전 교체
     try:
-        sb.table("inventory_items").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+        sb.table("inventory_items").delete().eq("order_status", "보유").not_.ilike("memo", "%[전자결재%").not_.ilike("memo", "%[부분 출하%").not_.ilike("memo", "%[PO 입고완료%").not_.ilike("memo", "%[웹 직접%").execute()
     except Exception as e:
-        print(f"⚠️ 테이블 초기화 알림: {e}")
+        print(f"⚠️ 레거시 재고 선택 초기화 알림: {e}")
 
     chunk_size = 100
     success_count = 0
@@ -489,6 +490,33 @@ def sync_bundled_files(conn):
         with open(os.path.join(p_dir, "price_history.json"), "w", encoding="utf-8") as f:
             json.dump(ph_data, f, ensure_ascii=False, default=float)
     print(f"[*] price_history.json: 매입 {len(incomes)}건, 매출 {len(sales)}건 저장 완료")
+
+    # 3. 출하 종합 원장 (shipped_info.json)
+    try:
+        shipped_rows = legacy_mssql.query_shipped_info(limit=3000)
+        for p_dir in ["api/data", "data"]:
+            with open(os.path.join(p_dir, "shipped_info.json"), "w", encoding="utf-8") as f:
+                json.dump(shipped_rows, f, ensure_ascii=False, default=float)
+        print(f"[*] shipped_info.json: 총 {len(shipped_rows)}건 저장 완료")
+    except Exception as se:
+        print(f"⚠️ shipped_info.json 갱신 예외: {se}")
+
+    # 4. 매출/실적 분석 캐시 (sales_analytics_cache.json)
+    try:
+        curr_year = str(datetime.date.today().year)
+        prev_year = str(datetime.date.today().year - 1)
+        analytics_cache = {}
+        for y in (curr_year, prev_year):
+            analytics_cache[y] = {"all": legacy_mssql.get_sales_analytics(year=y, month="all")}
+            for m in range(1, 13):
+                analytics_cache[y][str(m)] = legacy_mssql.get_sales_analytics(year=y, month=str(m))
+        for p_dir in ["api/data", "data"]:
+            with open(os.path.join(p_dir, "sales_analytics_cache.json"), "w", encoding="utf-8") as f:
+                json.dump(analytics_cache, f, ensure_ascii=False, default=float)
+        print(f"[*] sales_analytics_cache.json ({prev_year}~{curr_year}년 월별/연간) 저장 완료")
+    except Exception as ae:
+        print(f"⚠️ sales_analytics_cache.json 갱신 예외: {ae}")
+
     print(f"✅ 번들 데이터 갱신 완료!")
 
 def main():

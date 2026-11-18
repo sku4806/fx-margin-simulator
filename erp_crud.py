@@ -1,0 +1,1171 @@
+"""
+erp_crud.py
+웹 ERP 클라우드(Supabase) 통합 CRUD 엔진
+- 출하 원장 (legacy_shipments)
+- 견적 이력 (legacy_quotations)
+- 미수금 관리 (legacy_unpaid)
+- 거래처·담당자 마스터 (legacy_customers)
+- 영업 메모 클라우드 영구 저장 (inventory_audit_logs[action_type=SALES_MEMO])
+- 발주(PO/ETA) 직접 등록·수정·입고완료 전환 (approval_requests + inventory_items)
+"""
+
+import os
+import json
+import datetime
+import requests
+from typing import Optional, List, Dict, Any
+from fastapi import HTTPException
+from pydantic import BaseModel
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://qheijtepveajdrqerxef.supabase.co")
+SUPABASE_SERVICE_KEY = (
+    os.getenv("SUPABASE_SERVICE_KEY")
+    or os.getenv("SUPABASE_KEY")
+    or "sb_publishable_0TB2JQq4BVfvihySxCbbkw_v4ZRAF80"
+).strip()
+
+PAYMENT_SB_URL = "https://omtcanlmnpbiqoiakylp.supabase.co"
+PAYMENT_SB_KEY = "sb_publishable_80MMaw7IKefD7v2lx8PgeA_eWuX2Yeq"
+
+
+def _sb_headers(prefer: str = "return=representation") -> Dict[str, str]:
+    key = (
+        os.getenv("SUPABASE_SERVICE_KEY")
+        or os.getenv("SUPABASE_KEY")
+        or SUPABASE_SERVICE_KEY
+    ).strip()
+    h = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    if prefer:
+        h["Prefer"] = prefer
+    return h
+
+
+def _sb_url(table: str) -> str:
+    base = os.getenv("SUPABASE_URL", SUPABASE_URL).rstrip("/")
+    return f"{base}/rest/v1/{table}"
+
+
+def _now_iso() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+# ========================================================
+# 📦 1. 출하 원장 (legacy_shipments) CRUD
+# ========================================================
+class ShipmentCrudInput(BaseModel):
+    part_name: str
+    maker: Optional[str] = "OTHERS"
+    qty: int = 1
+    unit_price: Optional[float] = 0.0        # 원화 판매단가 (KRW)
+    unit_usd: Optional[float] = None         # 외화 판매단가 (USD, 입력 시 환산)
+    cost_price: Optional[float] = 0.0        # 원화 원가 (KRW)
+    fx_rate: Optional[float] = 1350.0
+    po_no: Optional[str] = ""
+    order_date: Optional[str] = None         # 출하일 YYYY-MM-DD
+    customer_name: Optional[str] = ""
+    real_cust: Optional[str] = ""
+    app: Optional[str] = ""
+    status: Optional[str] = "SHIPPED"
+    create_unpaid: Optional[bool] = False    # 미수금 자동 연동 옵션
+    sales_rep: Optional[str] = ""
+    due_date: Optional[str] = None
+
+
+def _encode_shipment_status(base_status: str, customer: str, real_cust: str, app: str) -> str:
+    """legacy_shipments 테이블 스키마를 보존하면서 거래처/실수요처/용도 메타 저장"""
+    clean_base = (base_status or "SHIPPED").split("||")[0].strip() or "SHIPPED"
+    c = (customer or "").replace("||", " ").strip()
+    rc = (real_cust or "").replace("||", " ").strip()
+    a = (app or "").replace("||", " ").strip()
+    if c or rc or a:
+        return f"{clean_base}||{c}||{rc}||{a}"
+    return clean_base
+
+
+def create_shipment_record(data: ShipmentCrudInput) -> Dict[str, Any]:
+    part = (data.part_name or "").strip()
+    if not part:
+        raise HTTPException(status_code=400, detail="품번(Part#)은 필수 입력 항목입니다.")
+
+    qty = max(1, int(data.qty or 1))
+    fx = float(data.fx_rate or 1350.0)
+    if data.unit_usd is not None and float(data.unit_usd) > 0 and (not data.unit_price or float(data.unit_price) <= 0):
+        unit_krw = round(float(data.unit_usd) * fx)
+    else:
+        unit_krw = float(data.unit_price or 0.0)
+
+    total_sales = round(unit_krw * qty)
+    ship_date = (data.order_date or "").strip() or datetime.date.today().isoformat()
+    encoded_status = _encode_shipment_status(data.status or "SHIPPED", data.customer_name or "", data.real_cust or "", data.app or "")
+
+    payload = {
+        "part_name": part,
+        "maker": (data.maker or "OTHERS").strip(),
+        "qty": qty,
+        "unit_price": unit_krw,
+        "cost_price": float(data.cost_price or 0.0),
+        "total_sales_amount": total_sales,
+        "po_no": (data.po_no or "WEB-SHIP").strip(),
+        "order_date": ship_date,
+        "status": encoded_status,
+        "last_synced_at": _now_iso(),
+    }
+
+    res = requests.post(_sb_url("legacy_shipments"), headers=_sb_headers(), json=[payload], timeout=8)
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"출하 등록 실패: {res.text[:200]}")
+
+    created = res.json()[0] if res.json() else payload
+
+    # 옵션: 미수금 자동 연동
+    if data.create_unpaid and total_sales > 0:
+        try:
+            due = data.due_date or (datetime.date.fromisoformat(ship_date) + datetime.timedelta(days=30)).isoformat()
+            create_unpaid_record(UnpaidCrudInput(
+                customer_name=data.customer_name or "웹 출하 거래처",
+                out_date=ship_date,
+                po_no=payload["po_no"],
+                part_name=part,
+                maker=payload["maker"],
+                qty=qty,
+                amount_vat=round(total_sales * 1.1),
+                due_date=due,
+                sales_rep=data.sales_rep or "WEB",
+                contact="[웹 출하 자동 연동]",
+                pay_status="미결제",
+            ))
+        except Exception as ue:
+            print(f"[WARN] 출하->미수금 자동 연동 실패: {ue}")
+
+    return {"status": "success", "item": created}
+
+
+def update_shipment_record(record_id: str, data: ShipmentCrudInput) -> Dict[str, Any]:
+    if not record_id:
+        raise HTTPException(status_code=400, detail="수정할 출하 ID가 필요합니다.")
+
+    qty = max(1, int(data.qty or 1))
+    fx = float(data.fx_rate or 1350.0)
+    if data.unit_usd is not None and float(data.unit_usd) > 0 and (not data.unit_price or float(data.unit_price) <= 0):
+        unit_krw = round(float(data.unit_usd) * fx)
+    else:
+        unit_krw = float(data.unit_price or 0.0)
+
+    total_sales = round(unit_krw * qty)
+    encoded_status = _encode_shipment_status(data.status or "SHIPPED", data.customer_name or "", data.real_cust or "", data.app or "")
+
+    payload = {
+        "part_name": (data.part_name or "").strip(),
+        "maker": (data.maker or "OTHERS").strip(),
+        "qty": qty,
+        "unit_price": unit_krw,
+        "cost_price": float(data.cost_price or 0.0),
+        "total_sales_amount": total_sales,
+        "po_no": (data.po_no or "").strip(),
+        "order_date": (data.order_date or "").strip() or datetime.date.today().isoformat(),
+        "status": encoded_status,
+        "last_synced_at": _now_iso(),
+    }
+
+    res = requests.patch(f"{_sb_url('legacy_shipments')}?id=eq.{record_id}", headers=_sb_headers(), json=payload, timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"출하 수정 실패: {res.text[:200]}")
+    rows = res.json() if res.text else []
+    return {"status": "success", "item": rows[0] if rows else payload}
+
+
+def delete_shipment_record(record_id: str) -> Dict[str, Any]:
+    if not record_id:
+        raise HTTPException(status_code=400, detail="삭제할 출하 ID가 필요합니다.")
+    res = requests.delete(f"{_sb_url('legacy_shipments')}?id=eq.{record_id}", headers=_sb_headers(), timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"출하 삭제 실패: {res.text[:200]}")
+    return {"status": "success", "deleted_id": record_id}
+
+
+# ========================================================
+# 📋 2. 견적 이력 (legacy_quotations) CRUD
+# ========================================================
+class QuotationCrudInput(BaseModel):
+    quote_no: Optional[str] = ""
+    quote_date: Optional[str] = None
+    line_no: Optional[int] = 1
+    customer_name: str
+    contact: Optional[str] = ""
+    maker: Optional[str] = "OTHERS"
+    part_name: str
+    qty_int: Optional[int] = 1
+    qty_str: Optional[str] = ""
+    currency_unit: Optional[str] = "$"
+    quote_price: float = 0.0
+    amount: Optional[float] = None
+    payment_terms: Optional[str] = "T/T in advance"
+    sales_rep: Optional[str] = ""
+    delivery: Optional[str] = "2-3WKS"
+    application: Optional[str] = ""
+    remark: Optional[str] = ""
+    customer_tel: Optional[str] = ""
+    customer_fax: Optional[str] = ""
+    customer_email: Optional[str] = ""
+    customer_address: Optional[str] = ""
+
+
+def create_quotation_record(data: QuotationCrudInput) -> Dict[str, Any]:
+    part = (data.part_name or "").strip()
+    cust = (data.customer_name or "").strip()
+    if not part or not cust:
+        raise HTTPException(status_code=400, detail="거래처명과 품번(Part#)은 필수 입력 항목입니다.")
+
+    q_date = (data.quote_date or "").strip() or datetime.date.today().isoformat()
+    q_no = (data.quote_no or "").strip()
+    if not q_no:
+        now_tag = datetime.datetime.now().strftime("%y%m%d-%H%M")
+        q_no = f"QBK-WEB-{now_tag}"
+
+    qty_int = max(0, int(data.qty_int or 0))
+    qty_str = (data.qty_str or "").strip() or (f"{qty_int:,}EA" if qty_int > 0 else "-")
+    qp = float(data.quote_price or 0.0)
+    amt = float(data.amount) if data.amount is not None else round(qty_int * qp, 4)
+
+    payload = {
+        "quote_no": q_no,
+        "quote_date": q_date,
+        "line_no": int(data.line_no or 1),
+        "customer_name": cust,
+        "contact": (data.contact or "").strip(),
+        "maker": (data.maker or "OTHERS").strip(),
+        "part_name": part,
+        "qty_str": qty_str,
+        "qty_int": qty_int,
+        "currency_unit": (data.currency_unit or "$").strip(),
+        "quote_price": qp,
+        "amount": amt,
+        "payment_terms": (data.payment_terms or "").strip(),
+        "sales_rep": (data.sales_rep or "").strip(),
+        "delivery": (data.delivery or "").strip(),
+        "application": (data.application or "").strip(),
+        "remark": (data.remark or "").strip(),
+        "quote_type": (data.currency_unit or "$").strip(),
+        "customer_tel": (data.customer_tel or "").strip(),
+        "customer_fax": (data.customer_fax or "").strip(),
+        "customer_email": (data.customer_email or "").strip(),
+        "customer_address": (data.customer_address or "").strip(),
+        "last_synced_at": _now_iso(),
+    }
+
+    res = requests.post(_sb_url("legacy_quotations"), headers=_sb_headers(), json=[payload], timeout=8)
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"견적 등록 실패: {res.text[:200]}")
+    created = res.json()[0] if res.json() else payload
+    return {"status": "success", "item": created}
+
+
+def update_quotation_record(record_id: str, data: QuotationCrudInput) -> Dict[str, Any]:
+    if not record_id:
+        raise HTTPException(status_code=400, detail="수정할 견적 ID가 필요합니다.")
+
+    qty_int = max(0, int(data.qty_int or 0))
+    qty_str = (data.qty_str or "").strip() or (f"{qty_int:,}EA" if qty_int > 0 else "-")
+    qp = float(data.quote_price or 0.0)
+    amt = float(data.amount) if data.amount is not None else round(qty_int * qp, 4)
+
+    payload = {
+        "quote_no": (data.quote_no or "").strip(),
+        "quote_date": (data.quote_date or "").strip() or datetime.date.today().isoformat(),
+        "customer_name": (data.customer_name or "").strip(),
+        "contact": (data.contact or "").strip(),
+        "maker": (data.maker or "OTHERS").strip(),
+        "part_name": (data.part_name or "").strip(),
+        "qty_str": qty_str,
+        "qty_int": qty_int,
+        "currency_unit": (data.currency_unit or "$").strip(),
+        "quote_price": qp,
+        "amount": amt,
+        "payment_terms": (data.payment_terms or "").strip(),
+        "sales_rep": (data.sales_rep or "").strip(),
+        "delivery": (data.delivery or "").strip(),
+        "application": (data.application or "").strip(),
+        "remark": (data.remark or "").strip(),
+        "quote_type": (data.currency_unit or "$").strip(),
+        "last_synced_at": _now_iso(),
+    }
+
+    # id(UUID) 또는 legacy_idx(정수) 모두 지원
+    filter_param = f"id=eq.{record_id}" if "-" in str(record_id) else f"legacy_idx=eq.{record_id}"
+    res = requests.patch(f"{_sb_url('legacy_quotations')}?{filter_param}", headers=_sb_headers(), json=payload, timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"견적 수정 실패: {res.text[:200]}")
+    rows = res.json() if res.text else []
+    return {"status": "success", "item": rows[0] if rows else payload}
+
+
+def delete_quotation_record(record_id: str) -> Dict[str, Any]:
+    if not record_id:
+        raise HTTPException(status_code=400, detail="삭제할 견적 ID가 필요합니다.")
+    filter_param = f"id=eq.{record_id}" if "-" in str(record_id) else f"legacy_idx=eq.{record_id}"
+    res = requests.delete(f"{_sb_url('legacy_quotations')}?{filter_param}", headers=_sb_headers(), timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"견적 삭제 실패: {res.text[:200]}")
+    return {"status": "success", "deleted_id": record_id}
+
+
+# ========================================================
+# 💰 3. 미수금 관리 (legacy_unpaid) CRUD
+# ========================================================
+class UnpaidCrudInput(BaseModel):
+    customer_name: str
+    out_date: Optional[str] = None
+    po_no: Optional[str] = ""
+    part_name: str
+    maker: Optional[str] = "OTHERS"
+    qty: int = 1
+    amount_vat: float = 0.0
+    due_date: Optional[str] = None
+    contact: Optional[str] = ""
+    sales_rep: Optional[str] = ""
+    pay_status: Optional[str] = "미결제"
+
+
+def _calc_overdue(due_date_str: Optional[str], amount_vat: float, pay_status: str):
+    overdue_days = 0
+    color_code = 0
+    if due_date_str:
+        try:
+            due_dt = datetime.datetime.strptime(due_date_str[:10], "%Y-%m-%d").date()
+            overdue_days = (datetime.date.today() - due_dt).days
+        except Exception:
+            overdue_days = 0
+    if pay_status == "수금완료" or amount_vat <= 0 or overdue_days <= 0:
+        color_code = 0
+    elif overdue_days < 30:
+        color_code = 1
+    elif overdue_days < 45:
+        color_code = 2
+    elif overdue_days < 60:
+        color_code = 3
+    else:
+        color_code = 4
+    return overdue_days, color_code
+
+
+def create_unpaid_record(data: UnpaidCrudInput) -> Dict[str, Any]:
+    cust = (data.customer_name or "").strip()
+    part = (data.part_name or "").strip()
+    if not cust or not part:
+        raise HTTPException(status_code=400, detail="거래처명과 품번은 필수입니다.")
+
+    out_dt = (data.out_date or "").strip() or datetime.date.today().isoformat()
+    due_dt = (data.due_date or "").strip() or (datetime.date.fromisoformat(out_dt) + datetime.timedelta(days=30)).isoformat()
+    amt = max(0.0, float(data.amount_vat or 0.0))
+    status = (data.pay_status or "미결제").strip()
+    overdue_days, color_code = _calc_overdue(due_dt, amt, status)
+
+    payload = {
+        "customer_name": cust,
+        "out_date": out_dt,
+        "po_no": (data.po_no or "").strip(),
+        "part_name": part,
+        "maker": (data.maker or "OTHERS").strip(),
+        "qty": max(1, int(data.qty or 1)),
+        "amount_vat": amt,
+        "due_date": due_dt,
+        "contact": (data.contact or "").strip(),
+        "sales_rep": (data.sales_rep or "").strip(),
+        "pay_status": status,
+        "overdue_days": overdue_days,
+        "color_code": color_code,
+        "last_synced_at": _now_iso(),
+    }
+
+    res = requests.post(_sb_url("legacy_unpaid"), headers=_sb_headers(), json=[payload], timeout=8)
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"미수금 등록 실패: {res.text[:200]}")
+    created = res.json()[0] if res.json() else payload
+    return {"status": "success", "item": created}
+
+
+def update_unpaid_record(record_id: str, data: UnpaidCrudInput) -> Dict[str, Any]:
+    if not record_id:
+        raise HTTPException(status_code=400, detail="수정할 미수금 ID가 필요합니다.")
+
+    out_dt = (data.out_date or "").strip() or datetime.date.today().isoformat()
+    due_dt = (data.due_date or "").strip() or out_dt
+    amt = max(0.0, float(data.amount_vat or 0.0))
+    status = (data.pay_status or "미결제").strip()
+    overdue_days, color_code = _calc_overdue(due_dt, amt, status)
+
+    payload = {
+        "customer_name": (data.customer_name or "").strip(),
+        "out_date": out_dt,
+        "po_no": (data.po_no or "").strip(),
+        "part_name": (data.part_name or "").strip(),
+        "maker": (data.maker or "OTHERS").strip(),
+        "qty": max(1, int(data.qty or 1)),
+        "amount_vat": amt,
+        "due_date": due_dt,
+        "contact": (data.contact or "").strip(),
+        "sales_rep": (data.sales_rep or "").strip(),
+        "pay_status": status,
+        "overdue_days": overdue_days,
+        "color_code": color_code,
+        "last_synced_at": _now_iso(),
+    }
+
+    filter_param = f"id=eq.{record_id}" if "-" in str(record_id) else f"legacy_idx=eq.{record_id}"
+    res = requests.patch(f"{_sb_url('legacy_unpaid')}?{filter_param}", headers=_sb_headers(), json=payload, timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"미수금 수정 실패: {res.text[:200]}")
+    rows = res.json() if res.text else []
+    return {"status": "success", "item": rows[0] if rows else payload}
+
+
+def delete_unpaid_record(record_id: str) -> Dict[str, Any]:
+    if not record_id:
+        raise HTTPException(status_code=400, detail="삭제할 미수금 ID가 필요합니다.")
+    filter_param = f"id=eq.{record_id}" if "-" in str(record_id) else f"legacy_idx=eq.{record_id}"
+    res = requests.delete(f"{_sb_url('legacy_unpaid')}?{filter_param}", headers=_sb_headers(), timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"미수금 삭제 실패: {res.text[:200]}")
+    return {"status": "success", "deleted_id": record_id}
+
+
+# ========================================================
+# 🏢 4. 거래처·담당자 마스터 (legacy_customers) CRUD
+# ========================================================
+class CustomerCrudInput(BaseModel):
+    kname: str
+    cname: Optional[str] = ""
+    tel: Optional[str] = ""
+    fax: Optional[str] = ""
+    address: Optional[str] = ""
+    email: Optional[str] = ""
+    sales_rep: Optional[str] = ""
+    contact_name: Optional[str] = ""
+    contact_title: Optional[str] = ""
+    contact_tel: Optional[str] = ""
+    contact_mobile: Optional[str] = ""
+    contact_email: Optional[str] = ""
+
+
+def list_customers_cloud(q: Optional[str] = None, page: int = 1, limit: int = 50) -> Dict[str, Any]:
+    headers = _sb_headers(prefer="count=exact")
+    offset = max(0, (page - 1) * limit)
+    params = [
+        ("select", "*"),
+        ("order", "last_synced_at.desc.nullslast,cid.desc"),
+        ("limit", str(limit)),
+        ("offset", str(offset)),
+    ]
+    if q and q.strip():
+        term = q.strip()
+        params.append(("or", f"(kname.ilike.%{term}%,cname.ilike.%{term}%,contact_name.ilike.%{term}%,sales_rep.ilike.%{term}%,tel.ilike.%{term}%)"))
+
+    res = requests.get(_sb_url("legacy_customers"), headers=headers, params=params, timeout=8)
+    if res.status_code not in (200, 206):
+        raise HTTPException(status_code=500, detail=f"거래처 조회 실패: {res.text[:200]}")
+
+    total = 0
+    cr = res.headers.get("content-range", "")
+    if "/" in cr:
+        try:
+            total = int(cr.split("/")[1])
+        except Exception:
+            total = len(res.json())
+    else:
+        total = len(res.json())
+
+    return {"status": "success", "total": total, "page": page, "limit": limit, "customers": res.json()}
+
+
+def create_customer_record(data: CustomerCrudInput) -> Dict[str, Any]:
+    kname = (data.kname or "").strip()
+    if not kname:
+        raise HTTPException(status_code=400, detail="거래처명(한글/공식명)은 필수입니다.")
+
+    # 웹 신규 거래처 CID 채번 (900000번대 이상으로 레거시 CID 충돌 방지)
+    next_cid = 900001
+    try:
+        max_res = requests.get(
+            _sb_url("legacy_customers"),
+            headers=_sb_headers(prefer=""),
+            params=[("select", "cid"), ("order", "cid.desc"), ("limit", "1")],
+            timeout=5,
+        )
+        if max_res.status_code == 200 and max_res.json():
+            curr_max = int(max_res.json()[0].get("cid") or 0)
+            next_cid = max(900001, curr_max + 1)
+    except Exception:
+        pass
+
+    payload = {
+        "cid": next_cid,
+        "kname": kname,
+        "cname": (data.cname or kname).strip(),
+        "tel": (data.tel or "").strip(),
+        "fax": (data.fax or "").strip(),
+        "address": (data.address or "").strip(),
+        "email": (data.email or "").strip(),
+        "sales_rep": (data.sales_rep or "").strip(),
+        "contact_name": (data.contact_name or "").strip(),
+        "contact_title": (data.contact_title or "").strip(),
+        "contact_tel": (data.contact_tel or "").strip(),
+        "contact_mobile": (data.contact_mobile or "").strip(),
+        "contact_email": (data.contact_email or "").strip(),
+        "last_synced_at": _now_iso(),
+    }
+
+    res = requests.post(_sb_url("legacy_customers"), headers=_sb_headers(), json=[payload], timeout=8)
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"거래처 등록 실패: {res.text[:200]}")
+    created = res.json()[0] if res.json() else payload
+    return {"status": "success", "customer": created}
+
+
+def update_customer_record(record_id: str, data: CustomerCrudInput) -> Dict[str, Any]:
+    if not record_id:
+        raise HTTPException(status_code=400, detail="수정할 거래처 ID가 필요합니다.")
+
+    payload = {
+        "kname": (data.kname or "").strip(),
+        "cname": (data.cname or data.kname or "").strip(),
+        "tel": (data.tel or "").strip(),
+        "fax": (data.fax or "").strip(),
+        "address": (data.address or "").strip(),
+        "email": (data.email or "").strip(),
+        "sales_rep": (data.sales_rep or "").strip(),
+        "contact_name": (data.contact_name or "").strip(),
+        "contact_title": (data.contact_title or "").strip(),
+        "contact_tel": (data.contact_tel or "").strip(),
+        "contact_mobile": (data.contact_mobile or "").strip(),
+        "contact_email": (data.contact_email or "").strip(),
+        "last_synced_at": _now_iso(),
+    }
+
+    filter_param = f"id=eq.{record_id}" if "-" in str(record_id) else f"cid=eq.{record_id}"
+    res = requests.patch(f"{_sb_url('legacy_customers')}?{filter_param}", headers=_sb_headers(), json=payload, timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"거래처 수정 실패: {res.text[:200]}")
+    rows = res.json() if res.text else []
+    return {"status": "success", "customer": rows[0] if rows else payload}
+
+
+def delete_customer_record(record_id: str) -> Dict[str, Any]:
+    if not record_id:
+        raise HTTPException(status_code=400, detail="삭제할 거래처 ID가 필요합니다.")
+    filter_param = f"id=eq.{record_id}" if "-" in str(record_id) else f"cid=eq.{record_id}"
+    res = requests.delete(f"{_sb_url('legacy_customers')}?{filter_param}", headers=_sb_headers(), timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"거래처 삭제 실패: {res.text[:200]}")
+    return {"status": "success", "deleted_id": record_id}
+
+
+# ========================================================
+# 🚢 5. 발주(PO/ETA) 직접 등록 · 수정 · 입고완료(IN) 전환
+# ========================================================
+class WebPoCrudInput(BaseModel):
+    po_no: Optional[str] = ""
+    part_no: str
+    maker: Optional[str] = "OTHERS"
+    qty: int = 1
+    unit_price: float = 0.0
+    currency: Optional[str] = "USD"
+    fx_rate: Optional[float] = 1350.0
+    eta_date: Optional[str] = None
+    supplier_name: Optional[str] = ""
+    real_cust: Optional[str] = ""
+    sales_rep: Optional[str] = ""
+    remark: Optional[str] = ""
+
+
+class PoReceiveInput(BaseModel):
+    po_no: str
+    part_no: str
+    maker: Optional[str] = "OTHERS"
+    qty: int = 1
+    unit_usd: Optional[float] = 0.0
+    unit_krw: Optional[float] = 0.0
+    currency: Optional[str] = "USD"
+    fx_rate: Optional[float] = 1350.0
+    entry_date: Optional[str] = None
+    supplier_name: Optional[str] = ""
+    real_cust: Optional[str] = ""
+    sales_rep: Optional[str] = "BSK"
+    date_code: Optional[str] = "-"
+    remark: Optional[str] = ""
+    is_web: Optional[bool] = True
+
+
+def create_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
+    part = (data.part_no or "").strip()
+    if not part:
+        raise HTTPException(status_code=400, detail="품번(Part#)은 필수입니다.")
+
+    today_str = datetime.date.today().isoformat()
+    po_no = (data.po_no or "").strip()
+    if not po_no:
+        po_no = f"PO-WEB-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+    qty = max(1, int(data.qty or 1))
+    curr = (data.currency or "USD").upper().strip()
+    fx = float(data.fx_rate or 1350.0)
+    up = float(data.unit_price or 0.0)
+    is_usd = curr in ("USD", "US$", "$")
+    up_krw = round(up * fx) if is_usd else round(up)
+    amt_krw = up_krw * qty
+    foreign_up = up if is_usd else (round(up / fx, 4) if fx > 0 else 0.0)
+    foreign_amt = round(foreign_up * qty, 4)
+    eta = (data.eta_date or "").strip() or today_str
+
+    meta = {
+        "part_name": part,
+        "maker": (data.maker or "OTHERS").strip(),
+        "qty": qty,
+        "unit_price": up,
+        "currency": "USD" if is_usd else "KRW",
+        "fx_rate": fx,
+        "vendor": (data.supplier_name or "").strip(),
+        "customer": (data.real_cust or "").strip(),
+        "memo": (data.remark or "").strip(),
+        "items": [{
+            "part_no": part,
+            "maker": (data.maker or "OTHERS").strip(),
+            "qty": qty,
+            "unit_price": up,
+            "currency": "USD" if is_usd else "KRW",
+            "vendor": (data.supplier_name or "").strip(),
+            "customer": (data.real_cust or "").strip(),
+            "memo": (data.remark or "").strip(),
+        }],
+    }
+
+    # 1. Payment Supabase approval_requests에 클라우드 영구 저장 (Vercel & 로컬 공통)
+    pay_headers = {
+        "apikey": PAYMENT_SB_KEY,
+        "Authorization": f"Bearer {PAYMENT_SB_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    doc_payload = {
+        "doc_no": po_no,
+        "doc_type": "구매품의서",
+        "drafter_name": (data.sales_rep or "ERP 담당자").strip(),
+        "title": f"[직접 발주] {part} ({qty:,} EA)",
+        "expected_amount": amt_krw,
+        "target_date": eta,
+        "status": "APPROVED",
+        "content": f"웹 ERP 직접 등록 발주 ({part} / {qty:,} EA)\n<!-- ERP_META: {json.dumps(meta, ensure_ascii=False)} -->",
+    }
+    try:
+        requests.post(f"{PAYMENT_SB_URL}/rest/v1/approval_requests", headers=pay_headers, json=[doc_payload], timeout=6)
+    except Exception as pe:
+        print(f"[WARN] Payment Supabase PO 저장 경고: {pe}")
+
+    # 2. 로컬 캐시 저장 (로컬 서버용)
+    po_item = {
+        "idx": f"WEB-{po_no}",
+        "po_dt": today_str,
+        "po_no": po_no,
+        "part_no": part,
+        "maker": (data.maker or "OTHERS").strip(),
+        "qty": qty,
+        "unit_price": up_krw,
+        "amount": amt_krw,
+        "currency": "USD" if is_usd else "KRW",
+        "foreign_up": foreign_up,
+        "foreign_amount": foreign_amt,
+        "eta_date": eta,
+        "status": "PO",
+        "status_label": "입고대기(웹발주)",
+        "sales_rep": (data.sales_rep or "ERP 담당자").strip(),
+        "supplier_name": (data.supplier_name or "공급사 미지정").strip(),
+        "real_cust": (data.real_cust or "").strip(),
+        "remark": f"[웹 직접 발주] {(data.remark or '').strip()}".strip(),
+        "source": "WEB_APPROVAL",
+    }
+    try:
+        import web_purchase_orders
+        web_purchase_orders.save_local_web_order(po_item)
+    except Exception:
+        pass
+
+    return {"status": "success", "item": po_item}
+
+
+def update_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
+    po_no = (data.po_no or "").strip()
+    if not po_no:
+        raise HTTPException(status_code=400, detail="수정할 발주번호(po_no)가 필요합니다.")
+
+    qty = max(1, int(data.qty or 1))
+    curr = (data.currency or "USD").upper().strip()
+    fx = float(data.fx_rate or 1350.0)
+    up = float(data.unit_price or 0.0)
+    is_usd = curr in ("USD", "US$", "$")
+    up_krw = round(up * fx) if is_usd else round(up)
+    amt_krw = up_krw * qty
+    foreign_up = up if is_usd else (round(up / fx, 4) if fx > 0 else 0.0)
+    foreign_amt = round(foreign_up * qty, 4)
+    eta = (data.eta_date or "").strip() or datetime.date.today().isoformat()
+
+    meta = {
+        "part_name": (data.part_no or "").strip(),
+        "maker": (data.maker or "OTHERS").strip(),
+        "qty": qty,
+        "unit_price": up,
+        "currency": "USD" if is_usd else "KRW",
+        "fx_rate": fx,
+        "vendor": (data.supplier_name or "").strip(),
+        "customer": (data.real_cust or "").strip(),
+        "memo": (data.remark or "").strip(),
+        "items": [{
+            "part_no": (data.part_no or "").strip(),
+            "maker": (data.maker or "OTHERS").strip(),
+            "qty": qty,
+            "unit_price": up,
+            "currency": "USD" if is_usd else "KRW",
+            "vendor": (data.supplier_name or "").strip(),
+            "customer": (data.real_cust or "").strip(),
+            "memo": (data.remark or "").strip(),
+        }],
+    }
+
+    # 1. Payment Supabase 업데이트
+    pay_headers = {
+        "apikey": PAYMENT_SB_KEY,
+        "Authorization": f"Bearer {PAYMENT_SB_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        patch_body = {
+            "target_date": eta,
+            "expected_amount": amt_krw,
+            "drafter_name": (data.sales_rep or "ERP 담당자").strip(),
+            "content": f"웹 ERP 수정 발주 ({data.part_no} / {qty:,} EA)\n<!-- ERP_META: {json.dumps(meta, ensure_ascii=False)} -->",
+        }
+        requests.patch(f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{po_no}", headers=pay_headers, json=patch_body, timeout=6)
+    except Exception as pe:
+        print(f"[WARN] Payment Supabase PO 수정 경고: {pe}")
+
+    # 2. 로컬 캐시 업데이트
+    try:
+        import web_purchase_orders
+        orders = web_purchase_orders.load_local_web_orders()
+        updated = False
+        for o in orders:
+            if (o.get("po_no") or "").strip() == po_no:
+                o.update({
+                    "part_no": (data.part_no or "").strip(),
+                    "maker": (data.maker or "OTHERS").strip(),
+                    "qty": qty,
+                    "unit_price": up_krw,
+                    "amount": amt_krw,
+                    "currency": "USD" if is_usd else "KRW",
+                    "foreign_up": foreign_up,
+                    "foreign_amount": foreign_amt,
+                    "eta_date": eta,
+                    "sales_rep": (data.sales_rep or o.get("sales_rep") or "").strip(),
+                    "supplier_name": (data.supplier_name or "").strip(),
+                    "real_cust": (data.real_cust or "").strip(),
+                    "remark": (data.remark or "").strip(),
+                })
+                updated = True
+        if updated:
+            web_purchase_orders.write_local_web_orders(orders)
+    except Exception:
+        pass
+
+    return {"status": "success", "po_no": po_no}
+
+
+def receive_purchase_order_to_inventory(data: PoReceiveInput) -> Dict[str, Any]:
+    """발주(PO) 건을 [입고완료(IN)]로 전환하고 Supabase inventory_items에 실재고 자동 등록/갱신"""
+    po_no = (data.po_no or "").strip()
+    part_no = (data.part_no or "").strip()
+    if not po_no or not part_no:
+        raise HTTPException(status_code=400, detail="발주번호와 품번이 필요합니다.")
+
+    entry_date = (data.entry_date or "").strip() or datetime.date.today().isoformat()
+    qty = max(1, int(data.qty or 1))
+    fx = float(data.fx_rate or 1350.0)
+    unit_usd = float(data.unit_usd or 0.0)
+    if unit_usd <= 0 and float(data.unit_krw or 0.0) > 0 and fx > 0:
+        unit_usd = round(float(data.unit_krw) / fx, 4)
+
+    # 1. 기존 inventory_items에 동일 po_no + part_name이 있으면 '보유'로 업데이트, 없으면 신규 입고 등록
+    check_res = requests.get(
+        _sb_url("inventory_items"),
+        headers=_sb_headers(prefer=""),
+        params=[("po_no", f"eq.{po_no}"), ("part_name", f"eq.{part_no}"), ("select", "id,stock")],
+        timeout=6,
+    )
+    existing = check_res.json() if check_res.status_code == 200 else []
+
+    if existing:
+        item_id = existing[0]["id"]
+        upd_payload = {
+            "stock": qty,
+            "order_status": "보유",
+            "entry_date": entry_date,
+            "date_code": (data.date_code or "-").strip(),
+            "unit_usd": unit_usd,
+            "ship_fx": fx,
+            "memo": f"[입고완료 전환 {entry_date}] {(data.remark or '').strip()}".strip(),
+        }
+        requests.patch(f"{_sb_url('inventory_items')}?id=eq.{item_id}", headers=_sb_headers(), json=upd_payload, timeout=8)
+        action = "updated"
+    else:
+        ins_payload = {
+            "part_name": part_no,
+            "maker": (data.maker or "OTHERS").strip(),
+            "stock": qty,
+            "arranged_qty": 0,
+            "unit_usd": unit_usd,
+            "ship_fx": fx,
+            "sold_price_usd": 0,
+            "entry_date": entry_date,
+            "date_code": (data.date_code or "-").strip(),
+            "owner": (data.sales_rep or "BSK").strip(),
+            "customer": (data.real_cust or "BIGSHINE KOREA").strip(),
+            "real_customer": (data.real_cust or "BIGSHINE KOREA").strip(),
+            "po_no": po_no,
+            "biz_type": "IMPORT" if (data.currency or "").upper() in ("USD", "US$", "$") else "DOMESTIC",
+            "order_status": "보유",
+            "payment_terms": "Net 30",
+            "payment_status": "미수",
+            "currency": "USD",
+            "margin": 20,
+            "memo": f"[PO 입고완료 {entry_date}] 공급사: {data.supplier_name or '-'} / {(data.remark or '').strip()}".strip(),
+        }
+        ins_res = requests.post(_sb_url("inventory_items"), headers=_sb_headers(), json=[ins_payload], timeout=8)
+        if ins_res.status_code not in (200, 201):
+            raise HTTPException(status_code=500, detail=f"재고 입고 등록 실패: {ins_res.text[:200]}")
+        action = "inserted"
+
+    # 2. 웹 PO인 경우 상태를 'IN' (입고완료)로 변경
+    if data.is_web:
+        try:
+            import web_purchase_orders
+            web_purchase_orders.mark_web_order_received(po_no=po_no, part_no=part_no)
+        except Exception as we:
+            print(f"[WARN] 웹 PO 입고 상태 갱신 경고: {we}")
+
+    return {"status": "success", "action": action, "po_no": po_no, "part_no": part_no, "qty": qty}
+
+
+# ========================================================
+# 📝 6. 영업 메모 클라우드 CRUD (Supabase inventory_audit_logs[action_type=SALES_MEMO])
+# ========================================================
+class SalesMemoUpdateInput(BaseModel):
+    sales_rep: Optional[str] = None
+    memo: str
+    input_date: Optional[str] = None
+
+
+def list_cloud_sales_memos(sales_rep: Optional[str] = None, limit: int = 40) -> List[Dict[str, Any]]:
+    params = [
+        ("select", "id,item_id,part_name,user_email,details,created_at"),
+        ("action_type", "eq.SALES_MEMO"),
+        ("order", "created_at.desc"),
+        ("limit", str(limit)),
+    ]
+    if sales_rep and sales_rep != "ALL":
+        params.append(("part_name", f"ilike.{sales_rep.strip()}"))
+
+    try:
+        res = requests.get(_sb_url("inventory_audit_logs"), headers=_sb_headers(prefer=""), params=params, timeout=6)
+        if res.status_code != 200:
+            return []
+        rows = res.json() or []
+        out = []
+        for r in rows:
+            dt_str = (r.get("user_email") or (r.get("created_at") or "")[:10])[:10]
+            out.append({
+                "id": f"CLOUD-{r['id']}",
+                "cloud_id": r["id"],
+                "sales_rep": r.get("part_name") or "BSK",
+                "input_date": dt_str,
+                "update_date": (r.get("created_at") or dt_str)[:10],
+                "memo": r.get("details") or "",
+                "source": "CLOUD",
+            })
+        return out
+    except Exception as e:
+        print(f"[WARN] 클라우드 영업 메모 조회 실패: {e}")
+        return []
+
+
+def create_cloud_sales_memo(sales_rep: str, memo: str, input_date: Optional[str] = None) -> Dict[str, Any]:
+    dt = (input_date or "").strip() or datetime.date.today().isoformat()
+    payload = {
+        "item_id": "SALES_MEMO",
+        "part_name": (sales_rep or "BSK").strip().upper(),
+        "action_type": "SALES_MEMO",
+        "user_email": dt,
+        "details": (memo or "").strip(),
+    }
+    res = requests.post(_sb_url("inventory_audit_logs"), headers=_sb_headers(), json=[payload], timeout=6)
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"영업 메모 저장 실패: {res.text[:200]}")
+    created = res.json()[0] if res.json() else payload
+    return {
+        "status": "success",
+        "memo": {
+            "id": f"CLOUD-{created.get('id', '')}",
+            "cloud_id": created.get("id"),
+            "sales_rep": payload["part_name"],
+            "input_date": dt,
+            "update_date": dt,
+            "memo": payload["details"],
+            "source": "CLOUD",
+        },
+    }
+
+
+def update_cloud_sales_memo(memo_id: str, data: SalesMemoUpdateInput) -> Dict[str, Any]:
+    clean_id = str(memo_id).replace("CLOUD-", "").strip()
+    if not clean_id.isdigit():
+        raise HTTPException(status_code=400, detail="수정 가능한 클라우드 메모 ID가 아닙니다.")
+    patch_body: Dict[str, Any] = {"details": (data.memo or "").strip()}
+    if data.sales_rep:
+        patch_body["part_name"] = data.sales_rep.strip().upper()
+    if data.input_date:
+        patch_body["user_email"] = data.input_date.strip()[:10]
+
+    res = requests.patch(
+        f"{_sb_url('inventory_audit_logs')}?id=eq.{clean_id}&action_type=eq.SALES_MEMO",
+        headers=_sb_headers(),
+        json=patch_body,
+        timeout=6,
+    )
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"영업 메모 수정 실패: {res.text[:200]}")
+    return {"status": "success", "id": memo_id}
+
+
+def delete_cloud_sales_memo(memo_id: str) -> Dict[str, Any]:
+    clean_id = str(memo_id).replace("CLOUD-", "").strip()
+    if not clean_id.isdigit():
+        raise HTTPException(status_code=400, detail="삭제 가능한 클라우드 메모 ID가 아닙니다.")
+    res = requests.delete(
+        f"{_sb_url('inventory_audit_logs')}?id=eq.{clean_id}&action_type=eq.SALES_MEMO",
+        headers=_sb_headers(),
+        timeout=6,
+    )
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"영업 메모 삭제 실패: {res.text[:200]}")
+    return {"status": "success", "deleted_id": memo_id}
+
+
+# ========================================================
+# 📈 7. 품목 단가 이력(Price History)에 웹 클라우드 신규 데이터 병합
+# ========================================================
+def fetch_cloud_part_history(part_no: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Supabase 클라우드에 새로 등록된 웹 견적/출하/재고를 조회하여 레거시 단가 이력에 병합"""
+    p = (part_no or "").strip()
+    if not p:
+        return {"purchases": [], "sales": [], "quotations": [], "purchase_orders": []}
+
+    headers = _sb_headers(prefer="")
+    res_out = {"purchases": [], "sales": [], "quotations": [], "purchase_orders": []}
+
+    # 1. 웹 신규 견적 (legacy_idx is null)
+    try:
+        r = requests.get(
+            _sb_url("legacy_quotations"),
+            headers=headers,
+            params=[("part_name", f"ilike.%{p}%"), ("legacy_idx", "is.null"), ("order", "quote_date.desc"), ("limit", "30")],
+            timeout=4,
+        )
+        if r.status_code == 200:
+            for row in r.json() or []:
+                res_out["quotations"].append({
+                    "idx": row.get("id"),
+                    "quote_date": row.get("quote_date") or "-",
+                    "quote_no": row.get("quote_no") or "-",
+                    "maker": row.get("maker") or "-",
+                    "customer_name": row.get("customer_name") or "-",
+                    "sales_rep": row.get("sales_rep") or "-",
+                    "part_no": row.get("part_name") or p,
+                    "qty": int(row.get("qty_int") or 0),
+                    "qunit": row.get("currency_unit") or "₩",
+                    "qp": float(row.get("quote_price") or 0.0),
+                    "amount": float(row.get("amount") or 0.0),
+                    "remark": f"[웹견적] {row.get('remark') or ''}".strip(),
+                })
+    except Exception:
+        pass
+
+    # 2. 웹 신규 출하/판매 (legacy_out_id is null)
+    try:
+        r = requests.get(
+            _sb_url("legacy_shipments"),
+            headers=headers,
+            params=[("part_name", f"ilike.%{p}%"), ("legacy_out_id", "is.null"), ("order", "order_date.desc"), ("limit", "30")],
+            timeout=4,
+        )
+        if r.status_code == 200:
+            for row in r.json() or []:
+                qty = int(row.get("qty") or 0)
+                out_up = float(row.get("unit_price") or 0.0)
+                in_up = float(row.get("cost_price") or 0.0)
+                out_amt = float(row.get("total_sales_amount") or (out_up * qty))
+                mgn = out_amt - (in_up * qty)
+                mgn_rate = round((mgn / out_amt * 100), 2) if out_amt > 0 else 0.0
+                st_parts = str(row.get("status") or "").split("||")
+                cust_name = st_parts[1] if len(st_parts) > 1 and st_parts[1] else "웹 출하 거래처"
+                res_out["sales"].append({
+                    "idx": row.get("id"),
+                    "out_date": row.get("order_date") or "-",
+                    "part_no": row.get("part_name") or p,
+                    "maker": row.get("maker") or "-",
+                    "qty": qty,
+                    "in_up": in_up,
+                    "out_up": out_up,
+                    "out_amt": out_amt,
+                    "mgn": mgn,
+                    "mgn_rate": mgn_rate,
+                    "sales_rep": "WEB",
+                    "customer_name": cust_name,
+                    "remark": f"[웹출하] PO: {row.get('po_no') or '-'}",
+                })
+    except Exception:
+        pass
+
+    # 3. 웹 발주 (PO)
+    try:
+        import web_purchase_orders
+        all_web_pos = web_purchase_orders.get_all_web_purchase_orders()
+        for o in all_web_pos:
+            if p.lower() in (o.get("part_no") or "").lower():
+                res_out["purchase_orders"].append({
+                    "idx": o.get("idx"),
+                    "po_date": o.get("po_dt") or "-",
+                    "po_no": o.get("po_no") or "-",
+                    "part_no": o.get("part_no") or p,
+                    "maker": o.get("maker") or "-",
+                    "qty": int(o.get("qty") or 0),
+                    "unit_price": float(o.get("foreign_up") or o.get("unit_price") or 0.0),
+                    "amount": float(o.get("foreign_amount") or o.get("amount") or 0.0),
+                    "currency": o.get("currency") or "USD",
+                    "eta_date": o.get("eta_date") or "-",
+                    "status": o.get("status") or "PO",
+                    "status_label": o.get("status_label") or "입고대기(웹)",
+                    "sales_rep": o.get("sales_rep") or "-",
+                    "real_cust": o.get("real_cust") or "-",
+                    "supplier_name": o.get("supplier_name") or "-",
+                    "remark": o.get("remark") or "",
+                })
+    except Exception:
+        pass
+
+    return res_out
+
+
+def merge_cloud_price_history(base_data: Dict[str, Any], part_no: str) -> Dict[str, Any]:
+    """레거시/번들 단가 이력에 웹 클라우드 신규(견적/출하/발주) 데이터 병합"""
+    if not base_data:
+        base_data = {"part_no": part_no, "summary": {}, "purchases": [], "sales": [], "quotations": [], "purchase_orders": []}
+    cloud = fetch_cloud_part_history(part_no)
+    if cloud["sales"]:
+        base_data["sales"] = cloud["sales"] + (base_data.get("sales") or [])
+    if cloud["quotations"]:
+        base_data["quotations"] = cloud["quotations"] + (base_data.get("quotations") or [])
+    if cloud["purchase_orders"]:
+        existing_pos = {(o.get("po_no"), o.get("part_no")) for o in (base_data.get("purchase_orders") or [])}
+        new_pos = [o for o in cloud["purchase_orders"] if (o.get("po_no"), o.get("part_no")) not in existing_pos]
+        if new_pos:
+            base_data["purchase_orders"] = new_pos + (base_data.get("purchase_orders") or [])
+    summary = base_data.get("summary") or {}
+    summary["sale_count"] = len(base_data.get("sales") or [])
+    summary["quote_count"] = len(base_data.get("quotations") or [])
+    summary["po_count"] = len(base_data.get("purchase_orders") or [])
+    base_data["summary"] = summary
+    return base_data
+
+
+# ========================================================
+# 🔌 FastAPI 라우트 통합 등록 (main.py & api/index.py 공통 호출)
+# ========================================================
+def register_crud_routes(app):
+    # 1. 출하 원장 CRUD
+    @app.post("/api/shipments")
+    def api_create_shipment(data: ShipmentCrudInput):
+        return create_shipment_record(data)
+
+    @app.put("/api/shipments/{record_id}")
+    def api_update_shipment(record_id: str, data: ShipmentCrudInput):
+        return update_shipment_record(record_id, data)
+
+    @app.delete("/api/shipments/{record_id}")
+    def api_delete_shipment(record_id: str):
+        return delete_shipment_record(record_id)
+
+    # 2. 견적 이력 CRUD
+    @app.post("/api/quotations")
+    def api_create_quotation(data: QuotationCrudInput):
+        return create_quotation_record(data)
+
+    @app.put("/api/quotations/{record_id}")
+    def api_update_quotation(record_id: str, data: QuotationCrudInput):
+        return update_quotation_record(record_id, data)
+
+    @app.delete("/api/quotations/{record_id}")
+    def api_delete_quotation(record_id: str):
+        return delete_quotation_record(record_id)
+
+    # 3. 미수금 관리 CRUD
+    @app.post("/api/unpaid")
+    def api_create_unpaid(data: UnpaidCrudInput):
+        return create_unpaid_record(data)
+
+    @app.put("/api/unpaid/{record_id}")
+    def api_update_unpaid(record_id: str, data: UnpaidCrudInput):
+        return update_unpaid_record(record_id, data)
+
+    @app.delete("/api/unpaid/{record_id}")
+    def api_delete_unpaid(record_id: str):
+        return delete_unpaid_record(record_id)
+
+    # 4. 거래처·담당자 마스터 CRUD
+    @app.get("/api/customers")
+    def api_list_customers(q: Optional[str] = None, page: int = 1, limit: int = 50):
+        return list_customers_cloud(q=q, page=page, limit=limit)
+
+    @app.post("/api/customers")
+    def api_create_customer(data: CustomerCrudInput):
+        return create_customer_record(data)
+
+    @app.put("/api/customers/{record_id}")
+    def api_update_customer(record_id: str, data: CustomerCrudInput):
+        return update_customer_record(record_id, data)
+
+    @app.delete("/api/customers/{record_id}")
+    def api_delete_customer(record_id: str):
+        return delete_customer_record(record_id)
+
+    # 5. 발주(PO/ETA) 직접 등록 · 수정 · 입고완료 전환
+    @app.post("/api/purchase-orders/web")
+    def api_create_web_po(data: WebPoCrudInput):
+        return create_direct_web_po(data)
+
+    @app.put("/api/purchase-orders/web")
+    def api_update_web_po(data: WebPoCrudInput):
+        return update_direct_web_po(data)
+
+    @app.post("/api/purchase-orders/receive")
+    def api_receive_po(data: PoReceiveInput):
+        return receive_purchase_order_to_inventory(data)
+
+    # 6. 영업 메모 수정/삭제 (클라우드 영구 저장소)
+    @app.put("/api/sales/memos/{memo_id}")
+    def api_update_sales_memo(memo_id: str, data: SalesMemoUpdateInput):
+        return update_cloud_sales_memo(memo_id, data)
+
+    @app.delete("/api/sales/memos/{memo_id}")
+    def api_delete_sales_memo(memo_id: str):
+        return delete_cloud_sales_memo(memo_id)
+

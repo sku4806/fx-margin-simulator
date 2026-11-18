@@ -110,8 +110,8 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
   // 가독성 좋은 Y축 눈금(억 단위) 스케일 계산
   let step = 500000000; // 기본 5억 단위
   if (maxBill > 2500000000) step = 1000000000; // 10억
-  else if (maxBill < 800000000) step = 200000000; // 2억
   else if (maxBill < 400000000) step = 100000000; // 1억
+  else if (maxBill < 800000000) step = 200000000; // 2억
   const yCeiling = Math.max(step * 2, Math.ceil((maxBill * 1.15) / step) * step); // 상단 수치 라벨 여유 확보(1.15배)
 
   // SVG 차트 좌표 설정
@@ -768,14 +768,23 @@ function renderMemoList(memos) {
     return;
   }
 
-  container.innerHTML = memos.map(m => {
+  container.innerHTML = memos.map((m, idx) => {
+    const isCloud = m.source === 'CLOUD' || String(m.id || '').startsWith('CLOUD-');
+    const safeId = String(m.id || '').replace(/'/g, "\\'");
     return `
       <div class="bg-slate-50/80 hover:bg-indigo-50/40 p-2.5 rounded-lg border border-slate-200 transition-colors space-y-1">
         <div class="flex items-center justify-between text-[11px]">
           <span class="font-bold text-slate-800 flex items-center gap-1.5">
             <span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-100 text-indigo-700">${m.sales_rep}</span>
+            ${isCloud ? '<span class="px-1 py-0.2 rounded text-[8px] font-black bg-emerald-100 text-emerald-700">WEB</span>' : ''}
             <span class="font-mono text-slate-400 text-[10px]">${m.input_date}</span>
           </span>
+          ${isCloud ? `
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="window.editCloudSalesMemo && window.editCloudSalesMemo('${safeId}', ${idx})" class="px-1.5 py-0.5 text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded cursor-pointer" title="메모 수정">✏️</button>
+              <button type="button" onclick="window.deleteCloudSalesMemo && window.deleteCloudSalesMemo('${safeId}')" class="px-1.5 py-0.5 text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded cursor-pointer" title="메모 삭제">🗑️</button>
+            </div>
+          ` : ''}
         </div>
         <div class="text-slate-700 whitespace-pre-wrap leading-relaxed text-[11px] font-normal pl-0.5">
           ${m.memo}
@@ -784,6 +793,40 @@ function renderMemoList(memos) {
     `;
   }).join('');
 }
+
+window.editCloudSalesMemo = async function(memoId) {
+  const target = allMemos.find(m => String(m.id) === String(memoId));
+  if (!target) return;
+  const updatedText = prompt(`[${target.sales_rep} / ${target.input_date}] 영업 활동 메모 수정:`, target.memo || '');
+  if (updatedText === null || !updatedText.trim()) return;
+
+  try {
+    const res = await fetch(`/api/sales/memos/${encodeURIComponent(memoId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sales_rep: target.sales_rep, memo: updatedText.trim(), input_date: target.input_date })
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || '수정 실패');
+    const currentRep = document.getElementById('memoSalesFilter')?.value || 'ALL';
+    await loadSalesMemos(currentRep);
+  } catch (err) {
+    alert('메모 수정 오류: ' + err.message);
+  }
+};
+
+window.deleteCloudSalesMemo = async function(memoId) {
+  if (!confirm('이 영업 활동 메모를 삭제하시겠습니까?')) return;
+  try {
+    const res = await fetch(`/api/sales/memos/${encodeURIComponent(memoId)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || '삭제 실패');
+    const currentRep = document.getElementById('memoSalesFilter')?.value || 'ALL';
+    await loadSalesMemos(currentRep);
+  } catch (err) {
+    alert('메모 삭제 오류: ' + err.message);
+  }
+};
 
 window.filterSalesMemos = function(rep) {
   if (rep === 'ALL') {
@@ -825,7 +868,7 @@ window.saveNewSalesMemo = async function() {
     if (data.status === 'success') {
       document.getElementById('newMemoText').value = '';
       window.toggleMemoInputForm();
-      const newEntry = { sales_rep: rep, memo: text, input_date: date, update_date: date };
+      const newEntry = data.memo || { sales_rep: rep, memo: text, input_date: date, update_date: date, source: 'CLOUD' };
       allMemos.unshift(newEntry);
       const currentRep = document.getElementById('memoSalesFilter')?.value || 'ALL';
       window.filterSalesMemos(currentRep);

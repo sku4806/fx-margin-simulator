@@ -354,6 +354,37 @@ def settle_unpaid(req: UnpaidSettlementRequest):
 # ========================================================
 @app.get("/api/customers/search")
 def search_customers(q: Optional[str] = None, limit: int = 30):
+    """클라우드(Supabase legacy_customers) 우선 검색 + 사내 MS-SQL 병합"""
+    try:
+        import erp_crud
+        cloud_res = erp_crud.list_customers_cloud(q=q, page=1, limit=limit)
+        cloud_rows = cloud_res.get("customers") or []
+        if cloud_rows:
+            formatted = []
+            for r in cloud_rows:
+                kname = (r.get("kname") or "").strip()
+                cname = (r.get("cname") or "").strip()
+                c_name = (r.get("contact_name") or "").strip()
+                c_title = (r.get("contact_title") or "").strip()
+                formatted.append({
+                    "id": r.get("id"),
+                    "cid": r.get("cid"),
+                    "display_name": kname or cname,
+                    "kname": kname,
+                    "cname": cname,
+                    "tel": r.get("tel") or r.get("contact_tel") or "",
+                    "fax": r.get("fax") or "",
+                    "address": r.get("address") or "",
+                    "email": r.get("email") or r.get("contact_email") or "",
+                    "sales_rep": r.get("sales_rep") or "",
+                    "contact_name": c_name,
+                    "contact_title": c_title,
+                    "contact_display": f"{c_name} {c_title}".strip(),
+                    "mobile": r.get("contact_mobile") or "",
+                })
+            return {"status": "success", "total": len(formatted), "customers": formatted}
+    except Exception:
+        pass
     try:
         results = legacy_mssql.query_customers(search_query=q, limit=limit)
         return {"status": "success", "total": len(results), "customers": results}
@@ -399,17 +430,25 @@ class MemoInput(BaseModel):
 
 @app.get("/api/sales/memos")
 def list_sales_memos(sales_rep: Optional[str] = None, limit: int = 40):
+    cloud_memos = []
     try:
-        rows = legacy_mssql.query_sales_memos(sales_rep=sales_rep, limit=limit)
-        return {"status": "success", "total": len(rows), "memos": rows}
-    except Exception as e:
-        return {"status": "error", "message": str(e), "memos": []}
+        import erp_crud
+        cloud_memos = erp_crud.list_cloud_sales_memos(sales_rep=sales_rep, limit=limit)
+    except Exception:
+        pass
+    legacy_memos = []
+    try:
+        legacy_memos = legacy_mssql.query_sales_memos(sales_rep=sales_rep, limit=limit) or []
+    except Exception:
+        pass
+    combined = (cloud_memos + legacy_memos)[:limit]
+    return {"status": "success", "total": len(combined), "memos": combined}
 
 @app.post("/api/sales/memos")
 def create_sales_memo(item: MemoInput):
     try:
-        ok = legacy_mssql.insert_sales_memo(item.sales_rep, item.memo, item.input_date)
-        return {"status": "success" if ok else "error"}
+        import erp_crud
+        return erp_crud.create_cloud_sales_memo(item.sales_rep, item.memo, item.input_date)
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -698,6 +737,12 @@ def price_history(part_no: str):
                 "quotes": []
             }
 
+        try:
+            import erp_crud
+            data = erp_crud.merge_cloud_price_history(data, p_clean)
+        except Exception:
+            pass
+
         return {"status": "success", "data": data}
     except Exception as e:
         return {"status": "error", "message": str(e), "data": {}}
@@ -899,6 +944,10 @@ def bridge_purchase_order(data: PurchaseBridgeInput):
         "items_count": len(items_to_insert),
         "items": inserted
     }
+
+# 통합 웹 ERP 클라우드(Supabase) CRUD 라우트 등록
+import erp_crud
+erp_crud.register_crud_routes(app)
 
 # 정적 파일 서빙 (UI 및 SPA 리소스 서빙)
 app.mount("/", StaticFiles(directory="public", html=True), name="public")

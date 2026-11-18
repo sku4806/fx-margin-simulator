@@ -386,6 +386,7 @@
           <span id="formToggleIcon" class="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center text-xs font-black border border-indigo-200 transition-transform">➕</span>
           <div>
             <h2 id="formTitle" class="font-bold text-xs sm:text-base text-slate-900">수주 및 재고 배정 등록 (Sales Order Entry)</h2>
+            <p id="selectedPartTitle" class="text-[10px] sm:text-[11px] font-bold text-indigo-700"></p>
             <p id="formSubtitle" class="text-[10px] sm:text-[11px] text-slate-400">신규 수주·재고 등록 시 클릭하여 폼을 펼치세요. (기존 데이터는 아래 표에서 클릭)</p>
           </div>
         </div>
@@ -690,6 +691,9 @@
           <button type="button" id="openPoModalBtn" onclick="window.openPurchaseOrdersModal && window.openPurchaseOrdersModal('PO')" class="text-[11px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer" title="국내외 매입처 발주 및 입고예정일(CRD/ETA) 조회">
             <span>🚢</span> 발주·입고예정 (PO/ETA)
             <span id="poPendingBadge" class="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full hidden">0</span>
+          </button>
+          <button type="button" id="openCustomerMasterBtn" onclick="window.openCustomerMasterModal && window.openCustomerMasterModal()" class="text-[11px] bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors cursor-pointer" title="거래처 및 담당자 마스터 조회·등록·수정·삭제">
+            <span>🏢</span> 거래처 관리
           </button>
           <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-colors cursor-pointer">
             <span>📄</span> 공식 견적서 발행 (PDF)

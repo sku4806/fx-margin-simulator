@@ -57,6 +57,8 @@ function getDefaultDateRange() {
  */
 function mapSupabaseToQuotation(q) {
   return {
+    id: q.id,
+    legacy_idx: q.legacy_idx,
     idx: q.legacy_idx || q.id,
     quote_dt: q.quote_date,
     quote_no: q.quote_no,
@@ -304,13 +306,26 @@ export async function saveCurrentQuotationToSupabase() {
     const refNo = document.getElementById("qpRefNo")?.value.trim() || "";
     const sales = document.getElementById("qpSales")?.value.trim() || "";
 
+    const paymentTerms = document.getElementById("qpPayment")?.value?.trim() || "T/T in advance";
+    const remark = document.getElementById("qpRemark")?.value?.trim() || "";
+    const currToggle = document.getElementById("qpCurrency")?.value?.trim() || "";
+    const isUsdQuote = currToggle === "USD" || currToggle === "$";
+
     const items = window.quoteItemsData || [];
     if (!refNo || items.length === 0) return;
+
+    const liveFx = (typeof window.getLiveFxRate === 'function' && window.getLiveFxRate() > 0) ? window.getLiveFxRate() : 1350;
+
+    // 동일 견적번호(refNo)의 기존 웹 발행 레코드 제거 후 재저장 (재인쇄 시 중복 적재 방지)
+    try {
+      await sbClient.from('legacy_quotations').delete().eq('quote_no', refNo).is('legacy_idx', null);
+    } catch (de) {}
 
     const records = items.map((it, idx) => {
       const qty = Number(it.qty) || 1;
       const unitKrw = Number(it.unitKrw) || 0;
-      const amount = qty * unitKrw;
+      const unitPrice = isUsdQuote ? Number((unitKrw / liveFx).toFixed(4)) : unitKrw;
+      const amount = isUsdQuote ? Number((qty * unitPrice).toFixed(2)) : (qty * unitKrw);
       return {
         quote_no: refNo,
         quote_date: dateStr,
@@ -321,11 +336,14 @@ export async function saveCurrentQuotationToSupabase() {
         part_name: it.partName || "-",
         qty_str: `${qty.toLocaleString()}EA`,
         qty_int: qty,
-        currency_unit: "₩",
-        quote_price: unitKrw,
+        currency_unit: isUsdQuote ? "$" : "₩",
+        quote_price: unitPrice,
         amount: amount,
+        payment_terms: paymentTerms,
         sales_rep: sales,
         delivery: it.delivery || "2-3WKS",
+        remark: remark,
+        quote_type: isUsdQuote ? "$" : "Won",
         customer_tel: tel,
         customer_fax: fax,
         last_synced_at: new Date().toISOString()
@@ -432,7 +450,12 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
             </div>
 
             <!-- 우측 액션 버튼군 -->
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+                <button type="button" onclick="window.openQuotationCrudModal && window.openQuotationCrudModal(null)" class="h-8 px-3 bg-lime-300 hover:bg-lime-200 text-slate-900 font-black text-xs rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer" title="신규 견적 내역 직접 등록">
+                  <span>➕</span> 신규 견적 등록
+                </button>
+              ` : ''}
               <button id="btnSearchQuotes" class="h-8 px-3 bg-white text-[#3f4f26] font-black text-xs rounded-lg hover:bg-lime-50 shadow-xs transition-colors flex items-center gap-1 cursor-pointer">
                 <span>🔍</span> 검색
               </button>
@@ -750,6 +773,10 @@ function generateTableRows(items, offset = 0) {
                       data-idx="${realIdx}" title="해당 견적건을 수주 및 출하 등록으로 전환 (CS 및 관리자 전용)">
                 <span>📦</span> 수주
               </button>
+              <button type="button" onclick="event.stopPropagation(); window.editQuotationByIndex && window.editQuotationByIndex(${realIdx})"
+                      class="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold cursor-pointer" title="견적 수정">✏️</button>
+              <button type="button" onclick="event.stopPropagation(); window.deleteQuotationByIndex && window.deleteQuotationByIndex(${realIdx})"
+                      class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded text-[10px] font-bold cursor-pointer" title="견적 삭제">🗑️</button>
             ` : ''}
             <button type="button" class="btn-single-quote-print px-1.5 py-0.5 bg-slate-100 hover:bg-lime-600 hover:text-white text-slate-700 rounded text-[10px] font-bold transition-colors cursor-pointer"
                     data-idx="${realIdx}" title="BSK 표준 견적서 출력">
@@ -1250,3 +1277,197 @@ export function handleConvertQuoteToOrder(idx) {
   }, 120);
 }
 window.handleConvertQuoteToOrder = handleConvertQuoteToOrder;
+
+// ========================================================
+// ✏️ 견적 이력 직접 등록 · 수정 · 삭제 (CRUD Modal)
+// ========================================================
+let editingQuoteRecordId = null;
+
+export function openQuotationCrudModal(item = null) {
+  if (typeof window.isCsOrAdminUser === 'function' && !window.isCsOrAdminUser()) {
+    alert('견적 직접 등록·수정은 CS 및 관리자 권한만 가능합니다.');
+    return;
+  }
+  editingQuoteRecordId = item ? (item.id || item.legacy_idx || item.idx || null) : null;
+
+  const modalId = 'quotationCrudModal';
+  let modal = document.getElementById(modalId);
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = modalId;
+    modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[99995] flex items-center justify-center p-3 overflow-y-auto';
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+    document.body.appendChild(modal);
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const esc = (v) => String(v ?? '').replace(/"/g, '&quot;');
+  const isWon = item && ((item.qunit && (item.qunit.includes('₩') || item.qunit.includes('\\'))) || (item.quot_type && item.quot_type.includes('Won')));
+  const defaultCurr = isWon ? '₩' : '$';
+
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto" onclick="event.stopPropagation()">
+      <div class="bg-gradient-to-r from-[#5b6f3c] to-[#44542c] text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="text-sm font-black">${editingQuoteRecordId ? '✏️ 견적 내역 수정' : '➕ 신규 견적 직접 등록'}</h3>
+        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="text-white/80 hover:text-white font-bold cursor-pointer">✕</button>
+      </div>
+      <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">견적번호 (QUOTE NO)</label>
+          <input type="text" id="qCrudNo" value="${esc(item?.quote_no)}" placeholder="미입력 시 자동 채번 (QBK-WEB-...)" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-lime-600">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">견적일자 *</label>
+          <input type="date" id="qCrudDate" value="${esc(item?.quote_dt ? String(item.quote_dt).slice(0, 10) : todayStr)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-lime-600">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">고객사명 (CNAME) *</label>
+          <input type="text" id="qCrudCustomer" value="${esc(item?.cname)}" placeholder="예: LG이노텍" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold outline-none focus:border-lime-600">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">고객 담당자 (ATTN)</label>
+          <input type="text" id="qCrudContact" value="${esc(item?.contact)}" placeholder="담당자명" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-lime-600">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">품번 (PART NO) *</label>
+          <input type="text" id="qCrudPart" value="${esc(item?.part_no)}" placeholder="예: IS25LP128F-JBLE-TR" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold outline-none focus:border-lime-600">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">제조사 (MFG)</label>
+          <input type="text" id="qCrudMaker" value="${esc(item?.mfg || 'ISSI')}" placeholder="ISSI, ESMT, SMI..." class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-lime-600">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">견적 수량 (EA) *</label>
+          <input type="number" id="qCrudQty" value="${Number(item?.qty_int || 1000)}" min="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold outline-none focus:border-lime-600">
+        </div>
+        <div class="grid grid-cols-3 gap-1.5">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 mb-1">통화</label>
+            <select id="qCrudCurrency" class="w-full px-2 py-2 border border-slate-300 rounded-lg font-bold bg-white outline-none">
+              <option value="$" ${defaultCurr === '$' ? 'selected' : ''}>$ (USD)</option>
+              <option value="₩" ${defaultCurr === '₩' ? 'selected' : ''}>₩ (KRW)</option>
+            </select>
+          </div>
+          <div class="col-span-2">
+            <label class="block text-[11px] font-bold text-slate-600 mb-1">견적 단가 (QP) *</label>
+            <input type="number" step="0.0001" id="qCrudPrice" value="${Number(item?.qp || 0)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-emerald-700 outline-none focus:border-lime-600">
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">영업담당 (SALES)</label>
+          <input type="text" id="qCrudSales" value="${esc(item?.sales)}" placeholder="예: 고기봉 / WILLIAM" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-lime-600">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">납기 (DELIVERY)</label>
+          <input type="text" id="qCrudDelivery" value="${esc(item?.delivery || '2-3WKS')}" placeholder="예: 2-3WKS / Stock" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-lime-600">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">결제조건 (PAYMENT)</label>
+          <input type="text" id="qCrudPayment" value="${esc(item?.payment || 'T/T in advance')}" placeholder="예: Net 30 / 현금" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-lime-600">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">용도 (APP)</label>
+          <input type="text" id="qCrudApp" value="${esc(item?.application)}" placeholder="예: Rear Camera" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-lime-600">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">비고 (REMARK)</label>
+          <input type="text" id="qCrudRemark" value="${esc(item?.remark)}" placeholder="특이사항 / MOQ / 유효기간 등" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-lime-600">
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg cursor-pointer">취소</button>
+        <button type="button" id="btnSaveQuotationCrud" class="px-5 py-1.5 bg-[#5b6f3c] hover:bg-[#44542c] text-white font-black text-xs rounded-lg shadow-xs cursor-pointer">💾 견적 저장</button>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+  document.getElementById('btnSaveQuotationCrud')?.addEventListener('click', saveQuotationCrudForm);
+}
+
+async function saveQuotationCrudForm() {
+  const customer_name = document.getElementById('qCrudCustomer')?.value.trim() || '';
+  const part_name = document.getElementById('qCrudPart')?.value.trim() || '';
+  if (!customer_name || !part_name) return alert('고객사명과 품번은 필수 입력 항목입니다.');
+
+  const qty_int = parseInt(document.getElementById('qCrudQty')?.value || '1', 10) || 1;
+  const quote_price = parseFloat(document.getElementById('qCrudPrice')?.value || '0') || 0;
+  const currency_unit = document.getElementById('qCrudCurrency')?.value || '$';
+
+  const payload = {
+    quote_no: document.getElementById('qCrudNo')?.value.trim() || '',
+    quote_date: document.getElementById('qCrudDate')?.value || new Date().toISOString().slice(0, 10),
+    customer_name,
+    contact: document.getElementById('qCrudContact')?.value.trim() || '',
+    maker: document.getElementById('qCrudMaker')?.value.trim() || 'OTHERS',
+    part_name,
+    qty_int,
+    qty_str: `${qty_int.toLocaleString()}EA`,
+    currency_unit,
+    quote_price,
+    amount: Number((qty_int * quote_price).toFixed(4)),
+    sales_rep: document.getElementById('qCrudSales')?.value.trim() || '',
+    delivery: document.getElementById('qCrudDelivery')?.value.trim() || '',
+    payment_terms: document.getElementById('qCrudPayment')?.value.trim() || '',
+    application: document.getElementById('qCrudApp')?.value.trim() || '',
+    remark: document.getElementById('qCrudRemark')?.value.trim() || ''
+  };
+
+  const btn = document.getElementById('btnSaveQuotationCrud');
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ 저장 중...'; }
+
+  try {
+    const url = editingQuoteRecordId ? `/api/quotations/${encodeURIComponent(editingQuoteRecordId)}` : '/api/quotations';
+    const method = editingQuoteRecordId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || data.message || '저장 실패');
+
+    document.getElementById('quotationCrudModal')?.classList.add('hidden');
+    alert(editingQuoteRecordId ? '✅ 견적 내역이 수정되었습니다.' : '✅ 신규 견적이 등록되었습니다.');
+    await fetchQuotations();
+    renderQuotationsView('quotationsSection');
+  } catch (err) {
+    alert('견적 저장 오류: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '💾 견적 저장'; }
+  }
+}
+
+export function editQuotationByIndex(realIdx) {
+  const item = lastFilteredQuotes[realIdx] || cachedQuotations[realIdx];
+  if (!item) return alert('수정할 견적 항목을 찾을 수 없습니다.');
+  openQuotationCrudModal(item);
+}
+
+export async function deleteQuotationByIndex(realIdx) {
+  if (typeof window.isCsOrAdminUser === 'function' && !window.isCsOrAdminUser()) {
+    alert('견적 삭제는 CS 및 관리자 권한만 가능합니다.');
+    return;
+  }
+  const item = lastFilteredQuotes[realIdx] || cachedQuotations[realIdx];
+  if (!item) return;
+  const recId = item.id || item.legacy_idx || item.idx;
+  if (!recId) return alert('삭제 가능한 식별자가 없습니다.');
+
+  if (!confirm(`[${item.cname}] ${item.part_no} (견적번호: ${item.quote_no || '-'})\n\n이 견적 내역을 웹 ERP 클라우드에서 삭제하시겠습니까?\n(사내 MS-SQL 원본 DB는 안전하게 보존됩니다.)`)) return;
+
+  try {
+    const res = await fetch(`/api/quotations/${encodeURIComponent(recId)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || '삭제 실패');
+    alert('🗑️ 견적 내역이 삭제되었습니다.');
+    await fetchQuotations();
+    renderQuotationsView('quotationsSection');
+  } catch (err) {
+    alert('견적 삭제 오류: ' + err.message);
+  }
+}
+
+window.openQuotationCrudModal = openQuotationCrudModal;
+window.editQuotationByIndex = editQuotationByIndex;
+window.deleteQuotationByIndex = deleteQuotationByIndex;

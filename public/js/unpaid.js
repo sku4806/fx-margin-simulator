@@ -242,6 +242,11 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
           </div>
 
           <div class="flex items-center gap-2 text-xs w-full sm:w-auto justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-indigo-900/60">
+            ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+              <button type="button" onclick="window.openUnpaidCrudModal && window.openUnpaidCrudModal(null)" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer">
+                <span>➕</span> 신규 미수금 등록
+              </button>
+            ` : ''}
             <!-- 엑셀 내보내기 -->
             <button id="btnUnpaidExcelExport" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer">
               <span>📥</span> Excel 다운로드
@@ -629,6 +634,12 @@ function generateUnpaidTableRows(items, offset = 0) {
                     class="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] rounded border border-rose-200 cursor-pointer shadow-2xs transition-colors" title="${u.cname} 미수금 잔액확인서/청구서 A4 발행">
               📄 청구서
             </button>
+            ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+              <button type="button" onclick="event.stopPropagation(); window.editUnpaidByIndex && window.editUnpaidByIndex(${realIdx})"
+                      class="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold cursor-pointer" title="미수금 기본정보 수정">✏️</button>
+              <button type="button" onclick="event.stopPropagation(); window.deleteUnpaidByIndex && window.deleteUnpaidByIndex(${realIdx})"
+                      class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded text-[10px] font-bold cursor-pointer" title="미수금 삭제">🗑️</button>
+            ` : ''}
           </div>
         </td>
       </tr>
@@ -1378,6 +1389,10 @@ export async function submitPaymentSettlement(idx) {
       }
     }
 
+    if (!success) {
+      throw new Error("서버 및 클라우드 DB 저장에 모두 실패했습니다. 네트워크 연결 또는 권한을 확인해 주세요.");
+    }
+
     // 3. 인메모리 캐시 및 화면 즉각 동기화
     u.amount_vat = newAmountVat;
     u.pay_status = payStatus;
@@ -1462,3 +1477,177 @@ function refreshUnpaidKpis() {
   if (btn60) btn60.innerHTML = `★ 60일 이상 (${cnt60Plus})`;
 }
 window.refreshUnpaidKpis = refreshUnpaidKpis;
+
+// ========================================================
+// ✏️ 미수금 신규 등록 · 기본정보 수정 · 삭제 (CRUD Modal)
+// ========================================================
+let editingUnpaidRecordId = null;
+
+export function openUnpaidCrudModal(item = null) {
+  if (typeof window.isCsOrAdminUser === 'function' && !window.isCsOrAdminUser()) {
+    alert('미수금 등록·수정은 CS 및 관리자 권한만 가능합니다.');
+    return;
+  }
+  editingUnpaidRecordId = item ? (item.id || item.legacy_idx || item.idx || null) : null;
+
+  const modalId = 'unpaidCrudModal';
+  let modal = document.getElementById(modalId);
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = modalId;
+    modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[99995] flex items-center justify-center p-3 overflow-y-auto';
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+    document.body.appendChild(modal);
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const due30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const esc = (v) => String(v ?? '').replace(/"/g, '&quot;');
+
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto" onclick="event.stopPropagation()">
+      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="text-sm font-black">${editingUnpaidRecordId ? '✏️ 미수금 기본정보 수정' : '➕ 신규 미수금 채권 등록'}</h3>
+        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="text-white/80 hover:text-white font-bold cursor-pointer">✕</button>
+      </div>
+      <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">거래처명 (CUSTOMER) *</label>
+          <input type="text" id="unpaidCrudCust" value="${esc(item?.cname || item?.customer_name)}" placeholder="예: 유라(주)" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">담당 영업사원 (SALES)</label>
+          <input type="text" id="unpaidCrudSales" value="${esc(item?.sales_rep || item?.sales)}" placeholder="예: ERIC, KELLY" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">품번 (PART NO) *</label>
+          <input type="text" id="unpaidCrudPart" value="${esc(item?.part_no || item?.part_name)}" placeholder="예: IS25LP128F-JBLE-TR" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">제조사 (MFG)</label>
+          <input type="text" id="unpaidCrudMaker" value="${esc(item?.maker || item?.mfg || 'ISSI')}" placeholder="ISSI, ESMT..." class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">발주번호 (PO NO)</label>
+          <input type="text" id="unpaidCrudPo" value="${esc(item?.po_no)}" placeholder="PO 번호" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">수량 (EA) *</label>
+          <input type="number" id="unpaidCrudQty" value="${Number(item?.qty || 1000)}" min="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">출고일자 (OUT_DATE) *</label>
+          <input type="date" id="unpaidCrudOutDate" value="${esc(item?.out_date ? String(item.out_date).slice(0,10) : todayStr)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">결제예정일 (DUE_DATE) *</label>
+          <input type="date" id="unpaidCrudDueDate" value="${esc(item?.due_date ? String(item.due_date).slice(0,10) : due30)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">미수금 총액 (VAT포함, 원) *</label>
+          <input type="number" id="unpaidCrudAmt" value="${Math.round(Number(item?.amount_vat || 0))}" min="0" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-black text-rose-700 outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">결제 상태</label>
+          <select id="unpaidCrudStatus" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold bg-white outline-none">
+            <option value="미결제" ${(item?.pay_status || '미결제') === '미결제' ? 'selected' : ''}>미결제</option>
+            <option value="부분입금" ${item?.pay_status === '부분입금' ? 'selected' : ''}>부분입금</option>
+            <option value="결제약속" ${item?.pay_status === '결제약속' ? 'selected' : ''}>결제약속</option>
+            <option value="수금완료" ${item?.pay_status === '수금완료' ? 'selected' : ''}>수금완료</option>
+          </select>
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">담당자 / 메모 (CONTACT)</label>
+          <input type="text" id="unpaidCrudContact" value="${esc(item?.contact)}" placeholder="담당자 연락처 또는 특이사항" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg cursor-pointer">취소</button>
+        <button type="button" id="btnSaveUnpaidCrud" class="px-5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-black text-xs rounded-lg shadow-xs cursor-pointer">💾 저장</button>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+  document.getElementById('btnSaveUnpaidCrud')?.addEventListener('click', saveUnpaidCrudForm);
+}
+
+async function saveUnpaidCrudForm() {
+  const customer_name = document.getElementById('unpaidCrudCust')?.value.trim() || '';
+  const part_name = document.getElementById('unpaidCrudPart')?.value.trim() || '';
+  if (!customer_name || !part_name) return alert('거래처명과 품번은 필수입니다.');
+
+  const payload = {
+    customer_name,
+    sales_rep: document.getElementById('unpaidCrudSales')?.value.trim() || '',
+    part_name,
+    maker: document.getElementById('unpaidCrudMaker')?.value.trim() || 'OTHERS',
+    po_no: document.getElementById('unpaidCrudPo')?.value.trim() || '',
+    qty: parseInt(document.getElementById('unpaidCrudQty')?.value || '1', 10) || 1,
+    out_date: document.getElementById('unpaidCrudOutDate')?.value || new Date().toISOString().slice(0, 10),
+    due_date: document.getElementById('unpaidCrudDueDate')?.value || new Date().toISOString().slice(0, 10),
+    amount_vat: parseFloat(document.getElementById('unpaidCrudAmt')?.value || '0') || 0,
+    pay_status: document.getElementById('unpaidCrudStatus')?.value || '미결제',
+    contact: document.getElementById('unpaidCrudContact')?.value.trim() || ''
+  };
+
+  const btn = document.getElementById('btnSaveUnpaidCrud');
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ 저장 중...'; }
+
+  try {
+    const url = editingUnpaidRecordId ? `/api/unpaid/${encodeURIComponent(editingUnpaidRecordId)}` : '/api/unpaid';
+    const method = editingUnpaidRecordId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || data.message || '저장 실패');
+
+    document.getElementById('unpaidCrudModal')?.classList.add('hidden');
+    alert(editingUnpaidRecordId ? '✅ 미수금 정보가 수정되었습니다.' : '✅ 신규 미수금이 등록되었습니다.');
+    await fetchUnpaidList({});
+    await fetchUnpaidSummary();
+    renderUnpaidView('unpaidSection');
+  } catch (err) {
+    alert('미수금 저장 오류: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '💾 저장'; }
+  }
+}
+
+export function editUnpaidByIndex(realIdx) {
+  const item = lastFilteredUnpaid[realIdx] || cachedUnpaid[realIdx];
+  if (!item) return alert('수정할 미수금 항목을 찾을 수 없습니다.');
+  openUnpaidCrudModal(item);
+}
+
+export async function deleteUnpaidByIndex(realIdx) {
+  if (typeof window.isCsOrAdminUser === 'function' && !window.isCsOrAdminUser()) {
+    alert('미수금 삭제는 CS 및 관리자 권한만 가능합니다.');
+    return;
+  }
+  const item = lastFilteredUnpaid[realIdx] || cachedUnpaid[realIdx];
+  if (!item) return;
+  const recId = item.id || item.legacy_idx || item.idx;
+  if (!recId) return alert('삭제할 수 있는 식별자가 없습니다.');
+
+  if (!confirm(`[${item.cname}] ${item.part_no} (₩${Math.round(item.amount_vat || 0).toLocaleString()})\n\n이 미수금 내역을 웹 ERP 클라우드에서 삭제하시겠습니까?\n(사내 MS-SQL 원본 DB는 안전하게 보존됩니다.)`)) return;
+
+  try {
+    const res = await fetch(`/api/unpaid/${encodeURIComponent(recId)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || '삭제 실패');
+    alert('🗑️ 미수금 내역이 삭제되었습니다.');
+    await fetchUnpaidList({});
+    await fetchUnpaidSummary();
+    renderUnpaidView('unpaidSection');
+  } catch (err) {
+    alert('미수금 삭제 오류: ' + err.message);
+  }
+}
+
+window.openUnpaidCrudModal = openUnpaidCrudModal;
+window.editUnpaidByIndex = editUnpaidByIndex;
+window.deleteUnpaidByIndex = deleteUnpaidByIndex;
