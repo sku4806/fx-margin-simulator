@@ -4,12 +4,15 @@ import re
 import time
 import datetime
 from typing import Optional, List, Dict, Any
-import requests
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import legacy_mssql
+from http_pool import get_http_session
+
+requests = get_http_session()
 
 # .env 로드
 def load_env():
@@ -31,6 +34,7 @@ SUPABASE_SERVICE_KEY = (
 ).strip()
 
 app = FastAPI(title="FX Margin Simulator")
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # 서울외국환중개(SMBS) 실시간 고시환율 캐싱
 CACHED_FX = {

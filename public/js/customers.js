@@ -253,6 +253,7 @@ async function saveCustomerForm() {
     if (!res.ok || data.status !== 'success') {
       throw new Error(data.detail || data.message || '저장 실패');
     }
+    if (typeof window.clearCustomerAutocompleteCache === 'function') window.clearCustomerAutocompleteCache();
     alert(editingCustId ? `✅ [${kname}] 거래처 정보가 수정되었습니다.` : `✅ [${kname}] 신규 거래처가 등록되었습니다.\n이제 견적서·수주·드로어 자동완성에서 즉시 검색됩니다.`);
     editingCustId = null;
     document.getElementById('customerEditorPanel')?.classList.add('hidden');

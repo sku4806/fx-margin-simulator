@@ -31,9 +31,45 @@ def clean_val(v: Any) -> Any:
         return v.strip()
     return v
 
+class _SafeConnection:
+    """예외 발생 시에도 MS-SQL 소켓 누수를 원천 차단하는 자동 해제 커넥션 래퍼"""
+    __slots__ = ("_conn", "_closed")
+
+    def __init__(self, conn):
+        self._conn = conn
+        self._closed = False
+
+    def cursor(self, *args, **kwargs):
+        return self._conn.cursor(*args, **kwargs)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        if not self._closed:
+            self._closed = True
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
+    def __del__(self):
+        self.close()
+
+
 def get_db_connection():
     import pymssql
-    return pymssql.connect(**LEGACY_DB_CONFIG)
+    return _SafeConnection(pymssql.connect(**LEGACY_DB_CONFIG))
 
 _CACHED_MFGS = {"data": [], "updated_at": 0}
 
@@ -937,8 +973,15 @@ def query_purchase_orders(
         print(f"[ERROR] query_purchase_orders 에러: {e}")
         return []
 
+_CACHED_PO_SUMMARY = {"data": None, "updated_at": 0.0}
+
 def get_purchase_orders_summary() -> Dict[str, Any]:
-    """발주/입고예정 종합 요약 지표"""
+    """발주/입고예정 종합 요약 지표 (30초 TTL 캐싱 적용)"""
+    now = time.time()
+    if _CACHED_PO_SUMMARY["data"] is not None and (now - _CACHED_PO_SUMMARY["updated_at"] < 30.0):
+        cached = dict(_CACHED_PO_SUMMARY["data"])
+        cached["recent_pending_orders"] = list(cached.get("recent_pending_orders", []))
+        return cached
     sql = """
         SELECT 
             COUNT(*) as total_count,
@@ -992,7 +1035,7 @@ def get_purchase_orders_summary() -> Dict[str, Any]:
                 "supplier_name": clean_val(r.get("supplier_name"))
             })
 
-        return {
+        result = {
             "total_count": int(row.get("total_count") or 0),
             "pending_count": int(row.get("pending_count") or 0),
             "pending_qty": int(row.get("pending_qty") or 0),
@@ -1000,6 +1043,11 @@ def get_purchase_orders_summary() -> Dict[str, Any]:
             "cnl_count": int(row.get("cnl_count") or 0),
             "recent_pending_orders": recent
         }
+        _CACHED_PO_SUMMARY["data"] = result
+        _CACHED_PO_SUMMARY["updated_at"] = now
+        out = dict(result)
+        out["recent_pending_orders"] = list(recent)
+        return out
     except Exception as e:
         print(f"[ERROR] get_purchase_orders_summary 에러: {e}")
         return {

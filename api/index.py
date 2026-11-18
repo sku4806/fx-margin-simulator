@@ -5,16 +5,20 @@ import json
 import time
 import datetime
 from typing import Optional, List, Dict, Any
-import requests
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 
 app = FastAPI(title="FX Margin Simulator API")
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+from http_pool import get_http_session
+requests = get_http_session()
 
 # .env 로드
 def load_env():

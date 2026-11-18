@@ -205,24 +205,26 @@ export async function fetchWebShipments() {
  * 메인 fetchShipments (기본 원장 및 필터 초기화)
  */
 export async function fetchShipments() {
-  // 실시간 환율 조회 캐싱
-  try {
-    const fxRes = await fetch('/api/fx-rate');
-    const fxData = await fxRes.json();
-    if (fxData && fxData.current_rate > 0) {
-      currentFxRate = fxData.current_rate;
+  // 1. 전역 실시간 환율 재사용 (중복 /api/fx-rate 호출 제거)
+  const globalFx = (typeof window.getLiveFxRate === 'function') ? window.getLiveFxRate() : (window.rawFxRate || 0);
+  if (globalFx > 0) {
+    currentFxRate = globalFx;
+  } else {
+    try {
+      const fxRes = await fetch('/api/fx-rate');
+      const fxData = await fxRes.json();
+      if (fxData && fxData.current_rate > 0) currentFxRate = fxData.current_rate;
+    } catch (e) {
+      currentFxRate = 1350;
     }
-  } catch (e) {
-    currentFxRate = 1350;
   }
 
-  await fetchShippedFilters();
-
+  // 2. 필터 목록과 출하 원장 데이터를 병렬(Promise.all)로 동시 로드
   if (activeShipmentMode === 'ledger') {
-    await fetchLedgerShipments();
+    await Promise.all([fetchShippedFilters(), fetchLedgerShipments()]);
     lastFilteredShipments = cachedLedgerShipments;
   } else {
-    await fetchWebShipments();
+    await Promise.all([fetchShippedFilters(), fetchWebShipments()]);
     lastFilteredShipments = cachedWebShipments;
   }
   return lastFilteredShipments;
@@ -370,9 +372,9 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
         </div>
       </div>
 
-      <!-- 모바일 전용 카드 뷰 (md:hidden) -->
+      <!-- 모바일 전용 카드 뷰 (md:hidden — 모바일 뷰포트에서만 DOM 생성하여 메모리 50% 절감) -->
       <div id="shipmentCardContainer" class="block md:hidden space-y-2.5 max-h-[65vh] overflow-y-auto pr-0.5">
-        ${generateShipmentMobileCards(getPagedShipments())}
+        ${window.innerWidth < 768 ? generateShipmentMobileCards(getPagedShipments()) : ''}
       </div>
 
       <!-- 데스크톱 전용 테이블 (hidden md:block) - 세일즈 마스터 10개 컬럼 완벽 일치 -->
@@ -394,7 +396,7 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
             </tr>
           </thead>
           <tbody id="shipmentTableBody" class="divide-y divide-slate-100 font-medium bg-white text-slate-700">
-            ${generateTableRows(getPagedShipments())}
+            ${window.innerWidth >= 768 ? generateTableRows(getPagedShipments()) : ''}
           </tbody>
         </table>
       </div>
@@ -536,20 +538,28 @@ function getPagedShipments() {
 
 function updateShipmentCurrentPage() {
   const paged = getPagedShipments();
+  const isMobile = window.innerWidth < 768;
   const tbody = document.getElementById("shipmentTableBody");
-  if (tbody) tbody.innerHTML = generateTableRows(paged);
-
   const cardContainer = document.getElementById("shipmentCardContainer");
-  if (cardContainer) cardContainer.innerHTML = generateShipmentMobileCards(paged);
 
-  // 합계 업데이트
+  if (isMobile) {
+    if (cardContainer) cardContainer.innerHTML = generateShipmentMobileCards(paged);
+    if (tbody) tbody.innerHTML = '';
+  } else {
+    if (tbody) tbody.innerHTML = generateTableRows(paged);
+    if (cardContainer) cardContainer.innerHTML = '';
+  }
+
+  // 단일 순회(O(N))로 합계 지표 계산
   const totalCount = lastFilteredShipments.length;
-  const totalQty = lastFilteredShipments.reduce((sum, item) => sum + (Number(item.ship_qty) || 0), 0);
-  const totalUsd = lastFilteredShipments.reduce((sum, item) => sum + (Number(item.ship_amt) || 0), 0);
-  const totalKrw = lastFilteredShipments.reduce((sum, item) => {
-    if (item.total_krw) return sum + item.total_krw;
-    return sum + Math.round((Number(item.ship_amt) || 0) * currentFxRate);
-  }, 0);
+  let totalQty = 0, totalUsd = 0, totalKrw = 0;
+  for (let i = 0; i < totalCount; i++) {
+    const item = lastFilteredShipments[i];
+    const amt = Number(item.ship_amt) || 0;
+    totalQty += Number(item.ship_qty) || 0;
+    totalUsd += amt;
+    totalKrw += item.total_krw ? item.total_krw : Math.round(amt * currentFxRate);
+  }
 
   const elCount = document.getElementById("shipmentSummaryCount");
   const elQty = document.getElementById("shipmentSumQty");

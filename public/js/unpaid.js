@@ -436,14 +436,15 @@ function updateUnpaidCurrentPage() {
     ? lastFilteredUnpaid
     : lastFilteredUnpaid.slice(offset, offset + unpaidPageSize);
 
+  const isMobile = window.innerWidth < 768;
   const tbody = document.getElementById("unpaidTableBody");
-  if (tbody) {
-    tbody.innerHTML = generateUnpaidTableRows(pagedItems, offset);
-  }
-
   const cardContainer = document.getElementById("unpaidCardContainer");
-  if (cardContainer) {
-    cardContainer.innerHTML = generateUnpaidMobileCards(pagedItems, offset);
+  if (isMobile) {
+    if (cardContainer) cardContainer.innerHTML = generateUnpaidMobileCards(pagedItems, offset);
+    if (tbody) tbody.innerHTML = '';
+  } else {
+    if (tbody) tbody.innerHTML = generateUnpaidTableRows(pagedItems, offset);
+    if (cardContainer) cardContainer.innerHTML = '';
   }
 
   renderUnpaidPagination(total, totalPages);

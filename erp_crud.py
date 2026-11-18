@@ -12,10 +12,13 @@ erp_crud.py
 import os
 import json
 import datetime
-import requests
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, List, Dict, Any
 from fastapi import HTTPException
 from pydantic import BaseModel
+from http_pool import get_http_session
+
+requests = get_http_session()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://qheijtepveajdrqerxef.supabase.co")
 SUPABASE_SERVICE_KEY = (
@@ -972,95 +975,109 @@ def fetch_cloud_part_history(part_no: str) -> Dict[str, List[Dict[str, Any]]]:
     headers = _sb_headers(prefer="")
     res_out = {"purchases": [], "sales": [], "quotations": [], "purchase_orders": []}
 
-    # 1. 웹 신규 견적 (legacy_idx is null)
-    try:
-        r = requests.get(
-            _sb_url("legacy_quotations"),
-            headers=headers,
-            params=[("part_name", f"ilike.%{p}%"), ("legacy_idx", "is.null"), ("order", "quote_date.desc"), ("limit", "30")],
-            timeout=4,
-        )
-        if r.status_code == 200:
-            for row in r.json() or []:
-                res_out["quotations"].append({
-                    "idx": row.get("id"),
-                    "quote_date": row.get("quote_date") or "-",
-                    "quote_no": row.get("quote_no") or "-",
-                    "maker": row.get("maker") or "-",
-                    "customer_name": row.get("customer_name") or "-",
-                    "sales_rep": row.get("sales_rep") or "-",
-                    "part_no": row.get("part_name") or p,
-                    "qty": int(row.get("qty_int") or 0),
-                    "qunit": row.get("currency_unit") or "₩",
-                    "qp": float(row.get("quote_price") or 0.0),
-                    "amount": float(row.get("amount") or 0.0),
-                    "remark": f"[웹견적] {row.get('remark') or ''}".strip(),
-                })
-    except Exception:
-        pass
+    def _fetch_quotes():
+        out = []
+        try:
+            r = requests.get(
+                _sb_url("legacy_quotations"),
+                headers=headers,
+                params=[("part_name", f"ilike.%{p}%"), ("legacy_idx", "is.null"), ("order", "quote_date.desc"), ("limit", "30")],
+                timeout=3.5,
+            )
+            if r.status_code == 200:
+                for row in r.json() or []:
+                    out.append({
+                        "idx": row.get("id"),
+                        "quote_date": row.get("quote_date") or "-",
+                        "quote_no": row.get("quote_no") or "-",
+                        "maker": row.get("maker") or "-",
+                        "customer_name": row.get("customer_name") or "-",
+                        "sales_rep": row.get("sales_rep") or "-",
+                        "part_no": row.get("part_name") or p,
+                        "qty": int(row.get("qty_int") or 0),
+                        "qunit": row.get("currency_unit") or "₩",
+                        "qp": float(row.get("quote_price") or 0.0),
+                        "amount": float(row.get("amount") or 0.0),
+                        "remark": f"[웹견적] {row.get('remark') or ''}".strip(),
+                    })
+        except Exception:
+            pass
+        return out
 
-    # 2. 웹 신규 출하/판매 (legacy_out_id is null)
-    try:
-        r = requests.get(
-            _sb_url("legacy_shipments"),
-            headers=headers,
-            params=[("part_name", f"ilike.%{p}%"), ("legacy_out_id", "is.null"), ("order", "order_date.desc"), ("limit", "30")],
-            timeout=4,
-        )
-        if r.status_code == 200:
-            for row in r.json() or []:
-                qty = int(row.get("qty") or 0)
-                out_up = float(row.get("unit_price") or 0.0)
-                in_up = float(row.get("cost_price") or 0.0)
-                out_amt = float(row.get("total_sales_amount") or (out_up * qty))
-                mgn = out_amt - (in_up * qty)
-                mgn_rate = round((mgn / out_amt * 100), 2) if out_amt > 0 else 0.0
-                st_parts = str(row.get("status") or "").split("||")
-                cust_name = st_parts[1] if len(st_parts) > 1 and st_parts[1] else "웹 출하 거래처"
-                res_out["sales"].append({
-                    "idx": row.get("id"),
-                    "out_date": row.get("order_date") or "-",
-                    "part_no": row.get("part_name") or p,
-                    "maker": row.get("maker") or "-",
-                    "qty": qty,
-                    "in_up": in_up,
-                    "out_up": out_up,
-                    "out_amt": out_amt,
-                    "mgn": mgn,
-                    "mgn_rate": mgn_rate,
-                    "sales_rep": "WEB",
-                    "customer_name": cust_name,
-                    "remark": f"[웹출하] PO: {row.get('po_no') or '-'}",
-                })
-    except Exception:
-        pass
+    def _fetch_shipments():
+        out = []
+        try:
+            r = requests.get(
+                _sb_url("legacy_shipments"),
+                headers=headers,
+                params=[("part_name", f"ilike.%{p}%"), ("legacy_out_id", "is.null"), ("order", "order_date.desc"), ("limit", "30")],
+                timeout=3.5,
+            )
+            if r.status_code == 200:
+                for row in r.json() or []:
+                    qty = int(row.get("qty") or 0)
+                    out_up = float(row.get("unit_price") or 0.0)
+                    in_up = float(row.get("cost_price") or 0.0)
+                    out_amt = float(row.get("total_sales_amount") or (out_up * qty))
+                    mgn = out_amt - (in_up * qty)
+                    mgn_rate = round((mgn / out_amt * 100), 2) if out_amt > 0 else 0.0
+                    st_parts = str(row.get("status") or "").split("||")
+                    cust_name = st_parts[1] if len(st_parts) > 1 and st_parts[1] else "웹 출하 거래처"
+                    out.append({
+                        "idx": row.get("id"),
+                        "out_date": row.get("order_date") or "-",
+                        "part_no": row.get("part_name") or p,
+                        "maker": row.get("maker") or "-",
+                        "qty": qty,
+                        "in_up": in_up,
+                        "out_up": out_up,
+                        "out_amt": out_amt,
+                        "mgn": mgn,
+                        "mgn_rate": mgn_rate,
+                        "sales_rep": "WEB",
+                        "customer_name": cust_name,
+                        "remark": f"[웹출하] PO: {row.get('po_no') or '-'}",
+                    })
+        except Exception:
+            pass
+        return out
 
-    # 3. 웹 발주 (PO)
-    try:
-        import web_purchase_orders
-        all_web_pos = web_purchase_orders.get_all_web_purchase_orders()
-        for o in all_web_pos:
-            if p.lower() in (o.get("part_no") or "").lower():
-                res_out["purchase_orders"].append({
-                    "idx": o.get("idx"),
-                    "po_date": o.get("po_dt") or "-",
-                    "po_no": o.get("po_no") or "-",
-                    "part_no": o.get("part_no") or p,
-                    "maker": o.get("maker") or "-",
-                    "qty": int(o.get("qty") or 0),
-                    "unit_price": float(o.get("foreign_up") or o.get("unit_price") or 0.0),
-                    "amount": float(o.get("foreign_amount") or o.get("amount") or 0.0),
-                    "currency": o.get("currency") or "USD",
-                    "eta_date": o.get("eta_date") or "-",
-                    "status": o.get("status") or "PO",
-                    "status_label": o.get("status_label") or "입고대기(웹)",
-                    "sales_rep": o.get("sales_rep") or "-",
-                    "real_cust": o.get("real_cust") or "-",
-                    "supplier_name": o.get("supplier_name") or "-",
-                    "remark": o.get("remark") or "",
-                })
-    except Exception:
-        pass
+    def _fetch_web_pos():
+        out = []
+        try:
+            import web_purchase_orders
+            for o in web_purchase_orders.get_all_web_purchase_orders():
+                if p.lower() in (o.get("part_no") or "").lower():
+                    out.append({
+                        "idx": o.get("idx"),
+                        "po_date": o.get("po_dt") or "-",
+                        "po_no": o.get("po_no") or "-",
+                        "part_no": o.get("part_no") or p,
+                        "maker": o.get("maker") or "-",
+                        "qty": int(o.get("qty") or 0),
+                        "unit_price": float(o.get("foreign_up") or o.get("unit_price") or 0.0),
+                        "amount": float(o.get("foreign_amount") or o.get("amount") or 0.0),
+                        "currency": o.get("currency") or "USD",
+                        "eta_date": o.get("eta_date") or "-",
+                        "status": o.get("status") or "PO",
+                        "status_label": o.get("status_label") or "입고대기(웹)",
+                        "sales_rep": o.get("sales_rep") or "-",
+                        "real_cust": o.get("real_cust") or "-",
+                        "supplier_name": o.get("supplier_name") or "-",
+                        "remark": o.get("remark") or "",
+                    })
+        except Exception:
+            pass
+        return out
+
+    # 3개 클라우드 조회를 병렬 실행 (기존 순차 대기 대비 ~3배 속도 향상)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_q = pool.submit(_fetch_quotes)
+        f_s = pool.submit(_fetch_shipments)
+        f_p = pool.submit(_fetch_web_pos)
+        res_out["quotations"] = f_q.result()
+        res_out["sales"] = f_s.result()
+        res_out["purchase_orders"] = f_p.result()
 
     return res_out
 

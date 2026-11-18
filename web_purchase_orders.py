@@ -6,11 +6,21 @@ web_purchase_orders.py
 import os
 import json
 import re
+import time
 import requests
 from typing import List, Dict, Any, Optional
+from http_pool import get_http_session
 
 PAYMENT_SB_URL = "https://omtcanlmnpbiqoiakylp.supabase.co"
 PAYMENT_SB_KEY = "sb_publishable_80MMaw7IKefD7v2lx8PgeA_eWuX2Yeq"
+
+_WEB_PO_CACHE = {"orders": None, "updated_at": 0.0}
+_WEB_PO_CACHE_TTL = 30.0  # 30초 인메모리 캐시 (쓰기/삭제 시 즉시 무효화)
+
+
+def invalidate_web_po_cache() -> None:
+    _WEB_PO_CACHE["orders"] = None
+    _WEB_PO_CACHE["updated_at"] = 0.0
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATHS = [
@@ -36,6 +46,7 @@ def load_local_web_orders() -> List[Dict[str, Any]]:
     return []
 
 def write_local_web_orders(orders: List[Dict[str, Any]]) -> None:
+    invalidate_web_po_cache()
     for p in DATA_PATHS:
         try:
             _ensure_dir(p)
@@ -56,148 +67,105 @@ def save_local_web_order(order_dict: Dict[str, Any]) -> bool:
         orders.insert(0, order_dict)
         write_local_web_orders(orders)
         return True
+    invalidate_web_po_cache()
     return False
 
 
-def _fetch_supabase_po_status_sets() -> tuple:
-    """Vercel 읽기 전용 환경에서도 취소/입고완료된 PO가 되살아나지 않도록 Supabase 상태 조회"""
+def _fetch_supabase_po_bundle() -> tuple:
+    """단일 HTTP Keep-Alive 호출로 승인/입고/취소 구매품의서 전체 조회 (기존 2회 왕복 ➔ 1회 단축)"""
     cancelled = set()
     received = set()
+    approved_rows = []
     try:
         headers = {
             "apikey": PAYMENT_SB_KEY,
             "Authorization": f"Bearer {PAYMENT_SB_KEY}"
         }
-        url = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?status=in.(CANCELLED,REJECTED,RECEIVED)&select=doc_no,status"
-        res = requests.get(url, headers=headers, timeout=4)
-        if res.status_code == 200:
-            for r in res.json() or []:
-                dn = (r.get("doc_no") or "").strip()
-                st = (r.get("status") or "").upper().strip()
-                if not dn:
-                    continue
-                if st in ("CANCELLED", "REJECTED"):
-                    cancelled.add(dn)
-                elif st == "RECEIVED":
-                    received.add(dn)
-    except Exception:
-        pass
-    return cancelled, received
-
-def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
-    """전자결재(approval_requests)에서 승인된 구매품의서 조회 및 표준 변환"""
-    try:
-        headers = {
-            "apikey": PAYMENT_SB_KEY,
-            "Authorization": f"Bearer {PAYMENT_SB_KEY}"
-        }
-        url = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?status=in.(APPROVED,RECEIVED)&select=*&order=created_at.desc"
-        res = requests.get(url, headers=headers, timeout=4)
+        url = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?status=in.(APPROVED,RECEIVED,CANCELLED,REJECTED)&select=*&order=created_at.desc"
+        res = get_http_session().get(url, headers=headers, timeout=4)
         if res.status_code != 200:
-            return []
+            return [], cancelled, received
 
-        rows = res.json()
-        converted = []
-        for r in rows:
-            doc_type = (r.get("doc_type") or "").lower()
-            title = r.get("title") or ""
-            # 구매 품의서 여부 확인 (한글/영문 doc_type 및 제목 검사)
-            is_purchase_doc = (
-                "purchase" in doc_type or
-                "구매" in doc_type or
-                "발주" in doc_type or
-                "구매" in title or
-                "발주" in title
-            )
-            if not is_purchase_doc:
+        for r in res.json() or []:
+            dn = (r.get("doc_no") or "").strip()
+            st = (r.get("status") or "").upper().strip()
+            if st in ("CANCELLED", "REJECTED"):
+                if dn:
+                    cancelled.add(dn)
                 continue
+            if st == "RECEIVED" and dn:
+                received.add(dn)
+            approved_rows.append(r)
+    except Exception as e:
+        print(f"[WARN] _fetch_supabase_po_bundle error: {e}")
+    return approved_rows, cancelled, received
 
-            doc_no = r.get("doc_no") or "PO-WEB"
-            po_dt = (r.get("created_at") or "")[:10]
-            eta_date = r.get("target_date") or "-"
-            drafter = r.get("drafter_name") or "기안자"
-            content = r.get("content") or ""
-            items = r.get("items") or []
-            meta = r.get("meta") or {}
 
-            # 본문 내 HTML 주석 메타데이터 역직렬화 (ERP_META 및 DRAFT_DATA)
-            if not meta and content:
-                meta_match = re.search(r"<!-- ERP_META:\s*([\s\S]*?)\s*-->", content)
-                if meta_match:
-                    try:
-                        meta = json.loads(meta_match.group(1))
-                    except Exception:
-                        pass
-            if not items and content:
-                draft_match = re.search(r"<!-- DRAFT_DATA:\s*([\s\S]*?)\s*-->", content)
-                if draft_match:
-                    try:
-                        draft_data = json.loads(draft_match.group(1))
-                        items = draft_data.get("items") or []
-                        if not meta.get("vendor"):
-                            meta["vendor"] = draft_data.get("vendor")
-                        if not meta.get("customer"):
-                            meta["customer"] = draft_data.get("customer")
-                    except Exception:
-                        pass
-                if not items and meta and meta.get("items"):
-                    items = meta.get("items")
+def _convert_approval_rows_to_pos(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """전자결재(approval_requests) 행 리스트를 표준 PO 배열로 변환"""
+    converted = []
+    for r in rows:
+        doc_type = (r.get("doc_type") or "").lower()
+        title = r.get("title") or ""
+        is_purchase_doc = (
+            "purchase" in doc_type or
+            "구매" in doc_type or
+            "발주" in doc_type or
+            "구매" in title or
+            "발주" in title
+        )
+        if not is_purchase_doc:
+            continue
 
-            doc_fx = float(meta.get("fx_rate") or 1350.0)
-            if doc_fx <= 0:
-                doc_fx = 1350.0
-            raw_status = (r.get("status") or "APPROVED").upper().strip()
-            po_status = "IN" if raw_status == "RECEIVED" else "PO"
-            po_status_label = "입고완료(웹)" if raw_status == "RECEIVED" else "입고대기(전자결재)"
+        doc_no = r.get("doc_no") or "PO-WEB"
+        po_dt = (r.get("created_at") or "")[:10]
+        eta_date = r.get("target_date") or "-"
+        drafter = r.get("drafter_name") or "기안자"
+        content = r.get("content") or ""
+        items = r.get("items") or []
+        meta = r.get("meta") or {}
 
-            if items and isinstance(items, list) and len(items) > 0:
-                for idx, itm in enumerate(items, 1):
-                    sub_po = f"{doc_no}-{idx}" if len(items) > 1 else doc_no
-                    part_no = (itm.get("part_no") or itm.get("part_name") or "미지정 부품").strip()
-                    maker = (itm.get("maker") or "기타").strip()
-                    qty = int(itm.get("qty") or 1)
-                    curr = (itm.get("currency") or "USD").upper().strip()
-                    uprice = float(itm.get("unit_price") or 0.0)
-                    vendor = itm.get("vendor") or meta.get("vendor") or "공급사 미지정"
-                    cust = itm.get("customer") or meta.get("customer") or "실수요처 미지정"
-                    memo = itm.get("memo") or r.get("memo") or ""
+        # 본문 내 HTML 주석 메타데이터 역직렬화 (ERP_META 및 DRAFT_DATA)
+        if not meta and content:
+            meta_match = re.search(r"<!-- ERP_META:\s*([\s\S]*?)\s*-->", content)
+            if meta_match:
+                try:
+                    meta = json.loads(meta_match.group(1))
+                except Exception:
+                    pass
+        if not items and content:
+            draft_match = re.search(r"<!-- DRAFT_DATA:\s*([\s\S]*?)\s*-->", content)
+            if draft_match:
+                try:
+                    draft_data = json.loads(draft_match.group(1))
+                    items = draft_data.get("items") or []
+                    if not meta.get("vendor"):
+                        meta["vendor"] = draft_data.get("vendor")
+                    if not meta.get("customer"):
+                        meta["customer"] = draft_data.get("customer")
+                except Exception:
+                    pass
+            if not items and meta and meta.get("items"):
+                items = meta.get("items")
 
-                    is_usd = curr == "USD"
-                    up_krw = round(uprice * doc_fx) if is_usd else uprice
-                    amt_krw = up_krw * qty
-                    foreign_up = uprice if is_usd else round(uprice / doc_fx, 4)
-                    foreign_amt = foreign_up * qty
+        doc_fx = float(meta.get("fx_rate") or 1350.0)
+        if doc_fx <= 0:
+            doc_fx = 1350.0
+        raw_status = (r.get("status") or "APPROVED").upper().strip()
+        po_status = "IN" if raw_status == "RECEIVED" else "PO"
+        po_status_label = "입고완료(웹)" if raw_status == "RECEIVED" else "입고대기(전자결재)"
 
-                    converted.append({
-                        "idx": f"WEB-{doc_no}-{idx}",
-                        "po_dt": po_dt,
-                        "po_no": sub_po,
-                        "part_no": part_no,
-                        "maker": maker,
-                        "qty": qty,
-                        "unit_price": up_krw,
-                        "amount": amt_krw,
-                        "currency": curr,
-                        "foreign_up": foreign_up,
-                        "foreign_amount": foreign_amt,
-                        "eta_date": eta_date,
-                        "status": po_status,
-                        "status_label": po_status_label,
-                        "sales_rep": drafter,
-                        "supplier_name": vendor,
-                        "real_cust": cust,
-                        "remark": f"[전자결재 승인 발주] {memo}".strip(),
-                        "source": "WEB_APPROVAL"
-                    })
-            else:
-                part_no = meta.get("part_name") or title
-                maker = meta.get("maker") or "기타"
-                qty = int(meta.get("qty") or 1)
-                curr = (meta.get("currency") or "USD").upper().strip()
-                uprice = float(meta.get("unit_price") or 0.0)
-                vendor = meta.get("vendor") or "공급사 미지정"
-                cust = meta.get("customer") or "실수요처 미지정"
-                memo = meta.get("memo") or r.get("memo") or ""
+        if items and isinstance(items, list) and len(items) > 0:
+            for idx, itm in enumerate(items, 1):
+                sub_po = f"{doc_no}-{idx}" if len(items) > 1 else doc_no
+                part_no = (itm.get("part_no") or itm.get("part_name") or "미지정 부품").strip()
+                maker = (itm.get("maker") or "기타").strip()
+                qty = int(itm.get("qty") or 1)
+                curr = (itm.get("currency") or "USD").upper().strip()
+                uprice = float(itm.get("unit_price") or 0.0)
+                vendor = itm.get("vendor") or meta.get("vendor") or "공급사 미지정"
+                cust = itm.get("customer") or meta.get("customer") or "실수요처 미지정"
+                memo = itm.get("memo") or r.get("memo") or ""
 
                 is_usd = curr == "USD"
                 up_krw = round(uprice * doc_fx) if is_usd else uprice
@@ -206,9 +174,9 @@ def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
                 foreign_amt = foreign_up * qty
 
                 converted.append({
-                    "idx": f"WEB-{doc_no}",
+                    "idx": f"WEB-{doc_no}-{idx}",
                     "po_dt": po_dt,
-                    "po_no": doc_no,
+                    "po_no": sub_po,
                     "part_no": part_no,
                     "maker": maker,
                     "qty": qty,
@@ -226,18 +194,61 @@ def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
                     "remark": f"[전자결재 승인 발주] {memo}".strip(),
                     "source": "WEB_APPROVAL"
                 })
-        return converted
-    except Exception as e:
-        print(f"[WARN] fetch_supabase_approved_purchases error: {e}")
-        return []
+        else:
+            part_no = meta.get("part_name") or title
+            maker = meta.get("maker") or "기타"
+            qty = int(meta.get("qty") or 1)
+            curr = (meta.get("currency") or "USD").upper().strip()
+            uprice = float(meta.get("unit_price") or 0.0)
+            vendor = meta.get("vendor") or "공급사 미지정"
+            cust = meta.get("customer") or "실수요처 미지정"
+            memo = meta.get("memo") or r.get("memo") or ""
 
-def get_all_web_purchase_orders() -> List[Dict[str, Any]]:
-    """로컬 캐시와 Supabase 승인 건을 통합하여 최신 웹 발주 리스트 반환 (취소/입고 상태 반영)"""
+            is_usd = curr == "USD"
+            up_krw = round(uprice * doc_fx) if is_usd else uprice
+            amt_krw = up_krw * qty
+            foreign_up = uprice if is_usd else round(uprice / doc_fx, 4)
+            foreign_amt = foreign_up * qty
+
+            converted.append({
+                "idx": f"WEB-{doc_no}",
+                "po_dt": po_dt,
+                "po_no": doc_no,
+                "part_no": part_no,
+                "maker": maker,
+                "qty": qty,
+                "unit_price": up_krw,
+                "amount": amt_krw,
+                "currency": curr,
+                "foreign_up": foreign_up,
+                "foreign_amount": foreign_amt,
+                "eta_date": eta_date,
+                "status": po_status,
+                "status_label": po_status_label,
+                "sales_rep": drafter,
+                "supplier_name": vendor,
+                "real_cust": cust,
+                "remark": f"[전자결재 승인 발주] {memo}".strip(),
+                "source": "WEB_APPROVAL"
+            })
+    return converted
+
+
+def fetch_supabase_approved_purchases() -> List[Dict[str, Any]]:
+    rows, _, _ = _fetch_supabase_po_bundle()
+    return _convert_approval_rows_to_pos(rows)
+
+
+def get_all_web_purchase_orders(force_refresh: bool = False) -> List[Dict[str, Any]]:
+    """로컬 캐시와 Supabase 승인 건을 단일 호출+30초 TTL 캐시로 고속 반환"""
+    now = time.time()
+    if not force_refresh and _WEB_PO_CACHE["orders"] is not None and (now - _WEB_PO_CACHE["updated_at"] < _WEB_PO_CACHE_TTL):
+        return _WEB_PO_CACHE["orders"]
+
     local_orders = load_local_web_orders()
-    sb_orders = fetch_supabase_approved_purchases()
-    cancelled_set, received_set = _fetch_supabase_po_status_sets()
+    approved_rows, cancelled_set, received_set = _fetch_supabase_po_bundle()
+    sb_orders = _convert_approval_rows_to_pos(approved_rows)
 
-    # 중복 제거 (po_no + part_no 기준)
     seen = set()
     combined = []
 
@@ -256,8 +267,9 @@ def get_all_web_purchase_orders() -> List[Dict[str, Any]]:
             seen.add(key)
             combined.append(o)
 
-    # 발주일자 최신순 정렬
     combined.sort(key=lambda x: str(x.get("po_dt") or ""), reverse=True)
+    _WEB_PO_CACHE["orders"] = combined
+    _WEB_PO_CACHE["updated_at"] = now
     return combined
 
 def filter_web_orders(
@@ -319,11 +331,13 @@ def delete_web_purchase_order(po_no: str, part_no: Optional[str] = None) -> bool
         else:
             new_orders.append(o)
 
+    invalidate_web_po_cache()
     if len(new_orders) < initial_len:
         write_local_web_orders(new_orders)
 
     # Supabase approval_requests 상태 CANCELLED 업데이트 (다품목 접미사 -1, -2 정확 제거)
     try:
+        sess = get_http_session()
         headers = {
             "apikey": PAYMENT_SB_KEY,
             "Authorization": f"Bearer {PAYMENT_SB_KEY}",
@@ -331,10 +345,10 @@ def delete_web_purchase_order(po_no: str, part_no: Optional[str] = None) -> bool
         }
         base_po = re.sub(r"-\d+$", "", clean_po) if clean_po else clean_po
         url = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{clean_po}"
-        requests.patch(url, headers=headers, json={"status": "CANCELLED"}, timeout=4)
+        sess.patch(url, headers=headers, json={"status": "CANCELLED"}, timeout=4)
         if base_po and base_po != clean_po:
             url_base = f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{base_po}"
-            requests.patch(url_base, headers=headers, json={"status": "CANCELLED"}, timeout=4)
+            sess.patch(url_base, headers=headers, json={"status": "CANCELLED"}, timeout=4)
     except Exception as se:
         print(f"[WARN] Supabase approval cancel error: {se}")
 
@@ -348,7 +362,7 @@ def delete_web_purchase_order(po_no: str, part_no: Optional[str] = None) -> bool
                 "Authorization": f"Bearer {sb_key}"
             }
             del_url = f"{sb_url}/rest/v1/inventory_items?po_no=like.{clean_po}*"
-            requests.delete(del_url, headers=h1, timeout=4)
+            get_http_session().delete(del_url, headers=h1, timeout=4)
     except Exception as ie:
         print(f"[WARN] Failed to delete bridged inventory item: {ie}")
 
@@ -357,6 +371,7 @@ def delete_web_purchase_order(po_no: str, part_no: Optional[str] = None) -> bool
 
 def mark_web_order_received(po_no: str, part_no: Optional[str] = None) -> bool:
     """웹 발주 건을 입고완료(IN / RECEIVED) 상태로 전환"""
+    invalidate_web_po_cache()
     clean_po = (po_no or "").strip()
     clean_part = (part_no or "").strip()
     orders = load_local_web_orders()
@@ -372,20 +387,21 @@ def mark_web_order_received(po_no: str, part_no: Optional[str] = None) -> bool:
         write_local_web_orders(orders)
 
     try:
+        sess = get_http_session()
         headers = {
             "apikey": PAYMENT_SB_KEY,
             "Authorization": f"Bearer {PAYMENT_SB_KEY}",
             "Content-Type": "application/json"
         }
         base_po = re.sub(r"-\d+$", "", clean_po) if clean_po else clean_po
-        requests.patch(
+        sess.patch(
             f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{clean_po}",
             headers=headers,
             json={"status": "RECEIVED"},
             timeout=4,
         )
         if base_po and base_po != clean_po:
-            requests.patch(
+            sess.patch(
                 f"{PAYMENT_SB_URL}/rest/v1/approval_requests?doc_no=eq.{base_po}",
                 headers=headers,
                 json={"status": "RECEIVED"},

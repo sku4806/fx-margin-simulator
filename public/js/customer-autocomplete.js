@@ -3,8 +3,19 @@
  * 세일즈 마스터 MS-SQL CustomerFile & ContactFile 실시간 자동완성 모듈
  */
 
+const _acSearchCache = new Map();
+const _AC_CACHE_TTL = 30000;
+
+export function clearCustomerAutocompleteCache() {
+  _acSearchCache.clear();
+}
+if (typeof window !== 'undefined') {
+  window.clearCustomerAutocompleteCache = clearCustomerAutocompleteCache;
+}
+
 export function attachCustomerAutocomplete(inputEl, onSelect) {
-  if (!inputEl) return;
+  if (!inputEl || inputEl.dataset.acAttached === '1') return;
+  inputEl.dataset.acAttached = '1';
 
   // 자동완성 드롭다운 컨테이너 생성
   let dropdown = document.createElement('div');
@@ -36,9 +47,21 @@ export function attachCustomerAutocomplete(inputEl, onSelect) {
       return;
     }
 
+    const cacheKey = term.trim().toLowerCase();
+    const cached = _acSearchCache.get(cacheKey);
+    let data = null;
+
     try {
-      const res = await fetch(`/api/customers/search?q=${encodeURIComponent(term.trim())}&limit=20`);
-      const data = await res.json();
+      if (cached && (Date.now() - cached.ts < _AC_CACHE_TTL)) {
+        data = cached.data;
+      } else {
+        const res = await fetch(`/api/customers/search?q=${encodeURIComponent(term.trim())}&limit=20`);
+        data = await res.json();
+        if (data && data.status === 'success') {
+          if (_acSearchCache.size > 100) _acSearchCache.clear();
+          _acSearchCache.set(cacheKey, { data, ts: Date.now() });
+        }
+      }
       if (data.status === 'success' && data.customers && data.customers.length > 0) {
         currentResults = data.customers;
         renderResults(data.customers, term);

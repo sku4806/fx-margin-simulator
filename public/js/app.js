@@ -758,20 +758,33 @@ function bindTabSwitch() {
     applyFilters();
   });
 
+  // 🚀 탭별 스마트 TTL 캐시 (60초 이내 재방문 시 0ms 즉시 전환, 불필요한 API 재호출 차단)
+  const TAB_CACHE_TTL = 60000;
+  const tabLoadedAt = { shipments: 0, quotations: 0, unpaid: 0, analytics: 0 };
+  window.invalidateTabCache = (tabKey) => {
+    if (tabKey && tabKey in tabLoadedAt) tabLoadedAt[tabKey] = 0;
+    else Object.keys(tabLoadedAt).forEach(k => { tabLoadedAt[k] = 0; });
+  };
+
+  const showOnlySection = (activeSection) => {
+    [invMain, shipmentsSection, quotationsSection, unpaidSection, analyticsSection, paymentSection].forEach(sec => {
+      if (sec) sec.classList.toggle('hidden', sec !== activeSection);
+    });
+  };
+
   // 3. [출하/수주 이력] 탭 클릭 (재고 화면 완전 숨김 & 단독 이력 그리드 표시)
   tabShipments?.addEventListener('click', async () => {
     activeTab = 'shipments';
     setTabs('shipments');
+    showOnlySection(shipmentsSection);
 
-    if (invMain) invMain.classList.add('hidden'); // 기존 재고/견적 화면 완벽 숨김
-    if (quotationsSection) quotationsSection.classList.add('hidden');
-    if (unpaidSection) unpaidSection.classList.add('hidden');
-    if (analyticsSection) analyticsSection.classList.add('hidden');
-    if (paymentSection) paymentSection.classList.add('hidden');
     if (shipmentsSection) {
-      shipmentsSection.classList.remove('hidden'); // 이력 섹션 단독 표시
-      await fetchShipments();
-      renderShipmentsView('shipmentsSection');
+      const isFresh = tabLoadedAt.shipments > 0 && (Date.now() - tabLoadedAt.shipments < TAB_CACHE_TTL) && shipmentsSection.children.length > 0;
+      if (!isFresh) {
+        await fetchShipments();
+        renderShipmentsView('shipmentsSection');
+        tabLoadedAt.shipments = Date.now();
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -782,23 +795,21 @@ function bindTabSwitch() {
   tabQuotations?.addEventListener('click', async () => {
     activeTab = 'quotations';
     setTabs('quotations');
+    showOnlySection(quotationsSection);
 
-    if (invMain) invMain.classList.add('hidden');
-    if (shipmentsSection) shipmentsSection.classList.add('hidden');
-    if (unpaidSection) unpaidSection.classList.add('hidden');
-    if (analyticsSection) analyticsSection.classList.add('hidden');
-    if (paymentSection) paymentSection.classList.add('hidden');
     if (quotationsSection) {
-      quotationsSection.classList.remove('hidden');
-      quotationsSection.innerHTML = `
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
-          <div class="inline-block animate-spin text-3xl">⏳</div>
-          <div class="font-bold text-sm text-slate-700">세일즈 마스터 MS-SQL 견적 이력을 불러오는 중입니다...</div>
-        </div>
-      `;
-      await fetchQuotationMfgs();
-      await fetchQuotations();
-      renderQuotationsView('quotationsSection');
+      const isFresh = tabLoadedAt.quotations > 0 && (Date.now() - tabLoadedAt.quotations < TAB_CACHE_TTL) && quotationsSection.children.length > 0;
+      if (!isFresh) {
+        quotationsSection.innerHTML = `
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+            <div class="inline-block animate-spin text-3xl">⏳</div>
+            <div class="font-bold text-sm text-slate-700">세일즈 마스터 MS-SQL 견적 이력을 불러오는 중입니다...</div>
+          </div>
+        `;
+        await Promise.all([fetchQuotationMfgs(), fetchQuotations()]);
+        renderQuotationsView('quotationsSection');
+        tabLoadedAt.quotations = Date.now();
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -809,26 +820,25 @@ function bindTabSwitch() {
   tabUnpaid?.addEventListener('click', async () => {
     activeTab = 'unpaid';
     setTabs('unpaid');
+    showOnlySection(unpaidSection);
 
-    if (invMain) invMain.classList.add('hidden');
-    if (shipmentsSection) shipmentsSection.classList.add('hidden');
-    if (quotationsSection) quotationsSection.classList.add('hidden');
-    if (analyticsSection) analyticsSection.classList.add('hidden');
-    if (paymentSection) paymentSection.classList.add('hidden');
     if (unpaidSection) {
-      unpaidSection.classList.remove('hidden');
-      unpaidSection.innerHTML = `
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
-          <div class="inline-block animate-spin text-3xl">⏳</div>
-          <div class="font-bold text-sm text-slate-700">미수금 및 결제예정일 데이터를 불러오는 중입니다...</div>
-        </div>
-      `;
-      await fetchUnpaidList({ min_date: '2010-01-01' });
-      await Promise.all([
-        fetchUnpaidSummary('2010-01-01'),
-        fetchUnpaidSalesReps()
-      ]);
-      renderUnpaidView('unpaidSection');
+      const isFresh = tabLoadedAt.unpaid > 0 && (Date.now() - tabLoadedAt.unpaid < TAB_CACHE_TTL) && unpaidSection.children.length > 0;
+      if (!isFresh) {
+        unpaidSection.innerHTML = `
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+            <div class="inline-block animate-spin text-3xl">⏳</div>
+            <div class="font-bold text-sm text-slate-700">미수금 및 결제예정일 데이터를 불러오는 중입니다...</div>
+          </div>
+        `;
+        await fetchUnpaidList({ min_date: '2010-01-01' });
+        await Promise.all([
+          fetchUnpaidSummary('2010-01-01'),
+          fetchUnpaidSalesReps()
+        ]);
+        renderUnpaidView('unpaidSection');
+        tabLoadedAt.unpaid = Date.now();
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -839,16 +849,15 @@ function bindTabSwitch() {
   tabAnalytics?.addEventListener('click', async () => {
     activeTab = 'analytics';
     setTabs('analytics');
+    showOnlySection(analyticsSection);
 
-    if (invMain) invMain.classList.add('hidden');
-    if (shipmentsSection) shipmentsSection.classList.add('hidden');
-    if (quotationsSection) quotationsSection.classList.add('hidden');
-    if (unpaidSection) unpaidSection.classList.add('hidden');
-    if (paymentSection) paymentSection.classList.add('hidden');
     if (analyticsSection) {
-      analyticsSection.classList.remove('hidden');
-      await fetchSalesAnalytics();
-      renderAnalyticsView('analyticsSection');
+      const isFresh = tabLoadedAt.analytics > 0 && (Date.now() - tabLoadedAt.analytics < TAB_CACHE_TTL) && analyticsSection.children.length > 0;
+      if (!isFresh) {
+        await fetchSalesAnalytics();
+        renderAnalyticsView('analyticsSection');
+        tabLoadedAt.analytics = Date.now();
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 

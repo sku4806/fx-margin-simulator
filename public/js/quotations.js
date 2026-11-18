@@ -593,14 +593,15 @@ function updateQuoteCurrentPage() {
     ? lastFilteredQuotes
     : lastFilteredQuotes.slice(offset, offset + quotePageSize);
 
+  const isMobile = window.innerWidth < 768;
   const tbody = document.getElementById("quotationTableBody");
-  if (tbody) {
-    tbody.innerHTML = generateTableRows(pagedItems, offset);
-  }
-
   const cardContainer = document.getElementById("quoteCardContainer");
-  if (cardContainer) {
-    cardContainer.innerHTML = generateQuoteMobileCards(pagedItems, offset);
+  if (isMobile) {
+    if (cardContainer) cardContainer.innerHTML = generateQuoteMobileCards(pagedItems, offset);
+    if (tbody) tbody.innerHTML = '';
+  } else {
+    if (tbody) tbody.innerHTML = generateTableRows(pagedItems, offset);
+    if (cardContainer) cardContainer.innerHTML = '';
   }
 
   renderQuotePagination(total, totalPages);
