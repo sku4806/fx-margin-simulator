@@ -588,7 +588,11 @@ function renderReqInSubTab() {
             <span class="font-mono font-black text-indigo-700">입고 ${(inc.in_qty || 0).toLocaleString()} / 잔여 ${(inc.remain_qty || 0).toLocaleString()}</span>
           </div>
           <div class="font-mono font-black text-slate-900">${escSm(inc.part_no)} (${escSm(inc.mfg)})</div>
-          <div class="text-[10px] font-mono text-slate-500">D/C: ${escSm(inc.date_code || '-')} · AWB: ${escSm(inc.awb_no || '-')} · 수요처: ${escSm(inc.real_cust || '-')}</div>
+          <div class="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-1.5">
+            <span>D/C: ${escSm(inc.date_code || '-')}</span>
+            ${inc.awb_no ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escSm(inc.awb_no)}')" class="text-blue-700 font-bold hover:underline cursor-pointer">🚚 AWB: ${escSm(inc.awb_no)}</button>` : ''}
+            <span>· 수요처: ${escSm(inc.real_cust || '-')}</span>
+          </div>
         </div>
       `).join('')}
     </div>
@@ -620,7 +624,9 @@ function renderReqInSubTab() {
               <td class="py-2 px-2.5 text-right font-mono font-black text-slate-900">${(inc.in_qty || 0).toLocaleString()}</td>
               <td class="py-2 px-2.5 text-right font-mono font-bold text-emerald-700">${(inc.remain_qty || 0).toLocaleString()}</td>
               <td class="py-2 px-2.5 font-mono text-[10px] text-slate-600 truncate max-w-[130px]">${escSm(inc.date_code || inc.lot_no || '-')}</td>
-              <td class="py-2 px-2.5 font-mono text-[10px] text-blue-700">${escSm(inc.awb_no || '-')}</td>
+              <td class="py-2 px-2.5 font-mono text-[10px] whitespace-nowrap">
+                ${inc.awb_no ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escSm(inc.awb_no)}')" class="text-blue-700 hover:underline font-bold cursor-pointer inline-flex items-center gap-1" title="클릭하여 실시간 배송 조회"><span>🚚</span>${escSm(inc.awb_no)}</button>` : '<span class="text-slate-400">-</span>'}
+              </td>
               <td class="py-2 px-2.5 font-bold text-slate-800 truncate max-w-[130px]">${escSm(inc.real_cust || '-')}</td>
               <td class="py-2 px-2 text-center font-bold text-indigo-900">${escSm(inc.sales || '-')}</td>
             </tr>

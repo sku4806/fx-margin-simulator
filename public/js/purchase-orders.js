@@ -371,7 +371,7 @@ async function loadImportChargesData() {
               <button type="button" onclick="window.applyImportChargeToCalculator(${idx})" class="px-2 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-black text-[10px] cursor-pointer shrink-0">🧮 계산기 반영</button>
             </div>
             <div class="flex items-center justify-between text-[11px] font-mono">
-              <span class="font-bold text-slate-900">B/L: ${escPo(c.bl_no || '-')}</span>
+              ${c.bl_no ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escPo(c.bl_no)}', '${escPo(c.forwarder || 'DHL')}')" class="font-bold text-blue-700 hover:underline cursor-pointer flex items-center gap-1"><span>🚚</span> B/L: ${escPo(c.bl_no)}</button>` : `<span class="font-bold text-slate-900">B/L: -</span>`}
               <span class="text-slate-500">${c.weight ? `${c.weight}kg` : ''} · 환율 ₩${(c.rate || 0).toLocaleString()}</span>
             </div>
             <div class="grid grid-cols-3 gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px]">
@@ -412,7 +412,9 @@ async function loadImportChargesData() {
               <td class="py-2 px-2.5 text-center font-mono text-slate-700 whitespace-nowrap">${escPo(c.in_date || '-')}</td>
               <td class="py-2 px-2.5 font-black text-indigo-950 whitespace-nowrap">${escPo(c.supp)}</td>
               <td class="py-2 px-2 text-center"><span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 font-bold text-[10px]">${escPo(c.forwarder || '-')}</span></td>
-              <td class="py-2 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">${escPo(c.bl_no || '-')}</td>
+              <td class="py-2 px-3 font-mono font-bold whitespace-nowrap">
+                ${c.bl_no ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escPo(c.bl_no)}', '${escPo(c.forwarder || 'DHL')}')" class="text-blue-700 hover:text-indigo-900 hover:underline cursor-pointer inline-flex items-center gap-1" title="클릭하여 실시간 배송 조회"><span>🚚</span>${escPo(c.bl_no)}</button>` : '<span class="text-slate-400">-</span>'}
+              </td>
               <td class="py-2 px-2.5 font-mono text-slate-500 text-[10px] whitespace-nowrap">${escPo(c.notice_no || c.invoice_no || '-')}</td>
               <td class="py-2 px-2 text-center text-slate-600 whitespace-nowrap">${escPo(c.origin || '-')}</td>
               <td class="py-2 px-2 text-right font-mono text-slate-600 whitespace-nowrap">${c.weight ? `${c.weight}kg` : '-'}</td>

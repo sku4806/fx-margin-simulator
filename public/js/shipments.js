@@ -495,7 +495,10 @@ function renderSubLedgerSection() {
               <span class="font-bold text-slate-800 truncate">${escSub(b.customer_name)}</span>
               <span class="shrink-0 font-semibold">${escSub(b.maker)} · ${escSub(b.sales || '-')}</span>
             </div>
-            ${(b.rtn_date || b.remark) ? `<div class="text-[10px] text-slate-500 flex items-center justify-between gap-2 pt-1 border-t border-slate-100"><span class="truncate">${escSub(b.remark || '')}</span>${b.rtn_date ? `<span class="font-mono text-teal-700 font-bold shrink-0">반납: ${escSub(b.rtn_date)}</span>` : ''}</div>` : ''}
+            ${(b.rtn_date || b.remark) ? (() => {
+              const trk = (typeof window.extractTrackingNumber === 'function') ? window.extractTrackingNumber(b.remark) : '';
+              return `<div class="text-[10px] text-slate-500 flex items-center justify-between gap-2 pt-1 border-t border-slate-100"><span class="truncate">${escSub(b.remark || '')}</span><div class="flex items-center gap-1.5 shrink-0">${trk ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escSub(trk)}', '${escSub(b.remark || '')}')" class="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 font-bold cursor-pointer">🚚 추적</button>` : ''}${b.rtn_date ? `<span class="font-mono text-teal-700 font-bold">반납: ${escSub(b.rtn_date)}</span>` : ''}</div></div>`;
+            })() : ''}
           </div>
         `).join('')}
       </div>
@@ -527,7 +530,14 @@ function renderSubLedgerSection() {
                 <td class="py-1.5 px-2 text-center whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">${escSub([b.gubun, b.result].filter(Boolean).join('/')) || '-'}</span></td>
                 <td class="py-1.5 px-2.5 text-center font-mono text-teal-700 whitespace-nowrap">${escSub(b.rtn_date || b.rdt || '-')}</td>
                 <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escSub(b.sales || '-')}</td>
-                <td class="py-1.5 px-2.5 text-slate-500 truncate max-w-[180px]" title="${escSub(b.remark)}">${escSub(b.remark || '-')}</td>
+                <td class="py-1.5 px-2.5 text-slate-500 max-w-[200px]" title="${escSub(b.remark)}">
+                  ${(() => {
+                    const trk = (typeof window.extractTrackingNumber === 'function') ? window.extractTrackingNumber(b.remark) : '';
+                    return trk
+                      ? `<div class="flex items-center gap-1.5"><span class="truncate">${escSub(b.remark)}</span><button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escSub(trk)}', '${escSub(b.remark || '')}')" class="shrink-0 px-1.5 py-0.5 rounded bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-[10px] cursor-pointer" title="실시간 배송 추적">🚚 추적</button></div>`
+                      : `<span class="truncate block">${escSub(b.remark || '-')}</span>`;
+                  })()}
+                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -932,6 +942,12 @@ function generateTableRows(items) {
         <!-- 문서 / 관리 -->
         <td class="py-2 px-3 text-center whitespace-nowrap no-print" onclick="event.stopPropagation()">
           <div class="inline-flex items-center gap-1">
+            ${(item.awb_no || item.tracking_no) ? `
+              <button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escSub(item.awb_no || item.tracking_no)}')" 
+                      class="px-1.5 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded border border-sky-200 text-[10px] font-bold transition-colors cursor-pointer" title="송장/AWB 실시간 배송 추적 (${escSub(item.awb_no || item.tracking_no)})">
+                🚚 추적
+              </button>
+            ` : ''}
             <button type="button" onclick="window.openTradeInvoice && window.openTradeInvoice(window.getShipmentByIndex(${idx}))" 
                     class="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded border border-indigo-200 text-[10px] font-bold transition-colors cursor-pointer" title="공식 거래명세서 출력">
               📄 명세서

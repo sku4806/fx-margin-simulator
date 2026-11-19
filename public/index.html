@@ -714,6 +714,9 @@
           <button type="button" id="openCustomerMasterBtn" onclick="window.openCustomerMasterModal && window.openCustomerMasterModal()" class="text-[11px] bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap" title="거래처 및 담당자 마스터 조회·등록·수정·삭제">
             <span>🏢</span> 거래처 관리
           </button>
+          <button type="button" id="openQuickTrackingBtn" onclick="window.openTrackingModal && window.openTrackingModal('')" class="text-[11px] bg-sky-600 hover:bg-sky-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap" title="로젠택배 · CJ대한통운 · DHL/FedEx/SF 실시간 배송 조회">
+            <span>🚚</span> 배송조회
+          </button>
           <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap">
             <span>📄</span> 공식 견적서
           </button>
@@ -1616,24 +1619,26 @@
   </div>
 
   <!-- 🚚 모달 6: 실시간 배송조회 모달 (와이드 대형 뷰) -->
-  <div id="courierTrackingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 hidden">
-    <div class="bg-white w-full max-w-5xl h-full sm:h-[92vh] rounded-2xl p-3 sm:p-6 shadow-2xl border border-slate-200 flex flex-col space-y-2 sm:space-y-3">
-      <div class="flex justify-between items-center border-b pb-2.5">
-        <div class="flex items-center gap-2">
-          <span class="text-xl">🚚</span>
-          <div>
-            <div class="flex items-center gap-2">
+  <div id="courierTrackingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99996] flex items-center justify-center p-2.5 sm:p-6 hidden" onclick="if(event.target===this) this.classList.add('hidden')">
+    <div class="bg-white w-full max-w-5xl h-full sm:h-[92vh] rounded-2xl p-3 sm:p-5 shadow-2xl border border-slate-200 flex flex-col space-y-2 sm:space-y-3" onclick="event.stopPropagation()">
+      <div class="flex flex-wrap justify-between items-center gap-2 border-b pb-2.5">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-xl shrink-0">🚚</span>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
               <h3 id="trackingModalTitle" class="text-sm sm:text-base font-bold text-slate-900">실시간 배송 현황</h3>
               <select id="trackingCarrierSelect" class="text-xs font-bold bg-slate-100 border border-slate-300 rounded px-1.5 py-0.5 text-indigo-900 outline-none cursor-pointer"></select>
             </div>
-            <p id="trackingInfoText" class="text-[11px] text-indigo-700 font-bold mt-0.5"></p>
+            <p id="trackingInfoText" class="text-[11px] text-indigo-700 font-bold mt-0.5 truncate"></p>
           </div>
         </div>
-        <div class="flex items-center gap-2">
-          <a id="trackingDirectLinkBtn" href="#" target="_blank" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1.5 rounded-lg border border-indigo-200 flex items-center gap-1">
-            <span>🔗</span> 택배사 공식창 열기
+        <div class="flex items-center gap-1.5 w-full sm:w-auto justify-end">
+          <input type="text" id="trackingQuickInput" placeholder="송장 / B/L / AWB 번호 입력..." class="flex-1 sm:w-52 px-2.5 py-1.5 text-xs font-mono font-bold border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none">
+          <button type="button" id="trackingQuickSearchBtn" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-2xs cursor-pointer whitespace-nowrap">🔍 조회</button>
+          <a id="trackingDirectLinkBtn" href="#" target="_blank" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1.5 rounded-lg border border-indigo-200 flex items-center gap-1 whitespace-nowrap">
+            <span>🔗</span> <span class="hidden sm:inline">공식창 열기</span>
           </a>
-          <button onclick="document.getElementById('courierTrackingModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-1.5">✕</button>
+          <button type="button" onclick="document.getElementById('courierTrackingModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-1.5 cursor-pointer">✕</button>
         </div>
       </div>
       <div class="flex-1 w-full bg-slate-50 border rounded-xl overflow-hidden relative">
