@@ -132,13 +132,22 @@ export function loadCarrierTracking(carrierId, cleanNo) {
   const titleEl = document.getElementById('trackingModalTitle');
   const iframeEl = document.getElementById('trackingIframe');
   const directLinkBtn = document.getElementById('trackingDirectLinkBtn');
+  const cacheBust = Date.now();
 
   let embedUrl = carrier.iframeUrl + cleanNo;
   let officialUrl = carrier.officialUrl + cleanNo;
 
-  if (carrier.id === 'kr.logen') {
-    embedUrl = `https://www.ilogen.com/m/personal/trace/${cleanNo}`;
-    officialUrl = embedUrl;
+  if (carrier.id === 'global.17track') {
+    // 17TRACK은 #hash(#nums=...) 변경 시 기존 iframe이 리로드되지 않는 문제가 있어
+    // 쿼리 캐시버스터(?_t=...) + iframe DOM 교체로 항상 새 송장번호를 강제 로드
+    embedUrl = `https://t.17track.net/ko?_t=${cacheBust}#nums=${encodeURIComponent(cleanNo)}`;
+    officialUrl = `https://t.17track.net/ko#nums=${encodeURIComponent(cleanNo)}`;
+  } else if (carrier.id === 'kr.logen') {
+    embedUrl = `https://www.ilogen.com/m/personal/trace/${encodeURIComponent(cleanNo)}?_t=${cacheBust}`;
+    officialUrl = `https://www.ilogen.com/m/personal/trace/${encodeURIComponent(cleanNo)}`;
+  } else if (carrier.id === 'kr.cjlogistics') {
+    embedUrl = `https://trace.cjlogistics.com/next/tracking.html?wblNo=${encodeURIComponent(cleanNo)}&_t=${cacheBust}`;
+    officialUrl = `https://trace.cjlogistics.com/next/tracking.html?wblNo=${encodeURIComponent(cleanNo)}`;
   }
 
   if (titleEl) titleEl.innerText = `[${carrier.name}] 실시간 배송 현황`;
@@ -147,7 +156,15 @@ export function loadCarrierTracking(carrierId, cleanNo) {
     directLinkBtn.target = "_blank";
   }
 
-  if (iframeEl) {
+  if (iframeEl && iframeEl.parentElement) {
+    // 기존 iframe을 완전히 교체하여 SPA 캐시 및 이전 송장 상태를 초기화
+    const newIframe = document.createElement('iframe');
+    newIframe.id = 'trackingIframe';
+    newIframe.className = iframeEl.className || 'w-full h-full border-0';
+    newIframe.referrerPolicy = 'no-referrer-when-downgrade';
+    newIframe.src = embedUrl;
+    iframeEl.replaceWith(newIframe);
+  } else if (iframeEl) {
     iframeEl.src = embedUrl;
   }
 }
