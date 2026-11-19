@@ -10,7 +10,7 @@ export function initManualViewer() {
     manualModal?.classList.remove('hidden');
     if (!manualRawText) {
       try {
-        const res = await fetch('/BSK_ERP_User_Manual.md');
+        const res = await fetch('/BSK_ERP_User_Manual.md?v=5.0');
         manualRawText = await res.text();
         renderManualContent(manualRawText);
       } catch (err) {
