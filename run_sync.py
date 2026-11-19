@@ -74,8 +74,14 @@ def sync_inventory(conn, sb):
                 NULLIF(LTRIM(RTRIM(s1.AWBNO)), ''),
                 NULLIF(LTRIM(RTRIM(s2.AWBNO)), ''),
                 NULLIF(LTRIM(RTRIM(s3.AWBNO)), '')
-            ) as awb_no
+            ) as awb_no,
+            ISNULL(sch.sched_qty, 0) as sched_qty
         FROM DincomeFile d
+        LEFT JOIN (
+            SELECT IDX_IN, SUM(ISNULL(QTY, 0)) as sched_qty
+            FROM DincomeScheduleFile
+            GROUP BY IDX_IN
+        ) sch ON d.IDX = sch.IDX_IN
         LEFT JOIN DPOFile p1 ON d.DPOIDX = p1.idx
         LEFT JOIN ShippingFile s1 ON d.idxship = s1.IDX
         LEFT JOIN (
@@ -120,11 +126,12 @@ def sync_inventory(conn, sb):
         unit_usd = sl_up if sl_up > 0 else (krw_cost / raw_in_rate if krw_cost > 0 else 0.0)
         ship_fx = raw_in_rate
 
+        sched_qty = int(r.get('sched_qty') or 0)
         record = {
             "part_name": part,
             "maker": clean_val(r['MFG']) or "OTHERS",
             "stock": remain_qty,
-            "arranged_qty": 0,
+            "arranged_qty": min(remain_qty, max(0, sched_qty)),
             "unit_usd": unit_usd,
             "ship_fx": ship_fx,
             "owner": owner_val,
@@ -580,6 +587,7 @@ def sync_bundled_files(conn):
                    s.SCHEDULE_DT as schedule_dt
             FROM DincomeScheduleFile s
             INNER JOIN DincomeFile d ON s.IDX_IN = d.IDX
+            WHERE ISNULL(d.NOTOUTQTY, 0) > 0
             ORDER BY s.SCHEDULE_DT DESC, s.IDX DESC
         """)
         for r in cur.fetchall():

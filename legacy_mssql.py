@@ -2065,16 +2065,30 @@ def query_inventory_detail(part_no: str, invoice_no: Optional[str] = None) -> Di
             "remark": clean_val(r["remark"]),
         } for r in cur.fetchall()]
 
-        # 2. DincomeScheduleFile (배정 및 월별 출하 스케줄)
-        cur.execute("""
-            SELECT TOP 15 s.IDX as idx, s.IDX_IN as idx_in, s.QTY as qty,
-                   s.SALES as sales, s.ACTUALCUSTOMER as actual_customer,
-                   s.SCHEDULE_DT as schedule_dt, d.INVOICENO as invoice_no
-            FROM DincomeScheduleFile s
-            INNER JOIN DincomeFile d ON s.IDX_IN = d.IDX
-            WHERE LTRIM(RTRIM(d.PARTNO)) = %s
-            ORDER BY s.SCHEDULE_DT DESC, s.IDX DESC
-        """, (p_clean,))
+        # 2. DincomeScheduleFile (현재 잔여 재고 NOTOUTQTY > 0 로트의 유효 배정/출하 스케줄만 조회)
+        if inv_clean:
+            cur.execute("""
+                SELECT TOP 15 s.IDX as idx, s.IDX_IN as idx_in, s.QTY as qty,
+                       s.SALES as sales, s.ACTUALCUSTOMER as actual_customer,
+                       s.SCHEDULE_DT as schedule_dt, d.INVOICENO as invoice_no
+                FROM DincomeScheduleFile s
+                INNER JOIN DincomeFile d ON s.IDX_IN = d.IDX
+                WHERE LTRIM(RTRIM(d.PARTNO)) = %s
+                  AND LTRIM(RTRIM(d.INVOICENO)) = %s
+                  AND ISNULL(d.NOTOUTQTY, 0) > 0
+                ORDER BY s.SCHEDULE_DT DESC, s.IDX DESC
+            """, (p_clean, inv_clean))
+        else:
+            cur.execute("""
+                SELECT TOP 15 s.IDX as idx, s.IDX_IN as idx_in, s.QTY as qty,
+                       s.SALES as sales, s.ACTUALCUSTOMER as actual_customer,
+                       s.SCHEDULE_DT as schedule_dt, d.INVOICENO as invoice_no
+                FROM DincomeScheduleFile s
+                INNER JOIN DincomeFile d ON s.IDX_IN = d.IDX
+                WHERE LTRIM(RTRIM(d.PARTNO)) = %s
+                  AND ISNULL(d.NOTOUTQTY, 0) > 0
+                ORDER BY s.SCHEDULE_DT DESC, s.IDX DESC
+            """, (p_clean,))
         schedules = [{
             "idx": r["idx"],
             "qty": int(r["qty"] or 0),
