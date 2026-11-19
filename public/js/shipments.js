@@ -171,9 +171,11 @@ export async function fetchWebShipments() {
   if (!sbClient) return [];
 
   try {
+    // legacy_out_id가 없는 순수 웹 등록/웹 수주 출하완료 건만 로드 (MS-SQL 미러 행 중복 및 '웹 수주 거래처' 오표기 방지)
     const { data, error } = await sbClient
       .from('legacy_shipments')
       .select('*')
+      .is('legacy_out_id', null)
       .order('order_date', { ascending: false })
       .order('last_synced_at', { ascending: false, nullsFirst: false });
 
@@ -182,7 +184,7 @@ export async function fetchWebShipments() {
         const rawStatus = String(item.status || 'SHIPPED');
         const stParts = rawStatus.split('||');
         const baseStatus = stParts[0] || 'SHIPPED';
-        const parsedCust = stParts[1] || item.customer_name || '웹 수주 거래처';
+        const parsedCust = stParts[1] || item.customer_name || '(거래처 미지정)';
         const parsedRealCust = stParts[2] || item.real_cust || '-';
         const parsedApp = stParts[3] || item.application || '-';
         return {
