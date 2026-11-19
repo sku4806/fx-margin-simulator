@@ -11,6 +11,12 @@ import { toEnglishSalesName } from './modules/utils.js';
 let cachedAnalytics = null;
 let currentYear = "2026";
 let currentMonth = "all"; // "all" (연간 누적) 또는 "1".."12"
+let analyticsChartMode = "profit"; // "profit" (마진+커미션 통합 스택) | "billing" (매출액 추이)
+
+window.switchAnalyticsChartMode = function(mode) {
+  analyticsChartMode = mode === 'billing' ? 'billing' : 'profit';
+  renderAnalyticsView('analyticsSection');
+};
 
 export async function fetchSalesAnalytics(year = "2026", month = "all") {
   currentYear = String(year);
@@ -105,6 +111,9 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     if (cm && cm.month) commMonthlyMap[cm.month] = cm;
   });
   const periodCommUsd = Number(comm.total_comm_amt) || 0;
+  const periodCommPaidUsd = Number(comm.paid_comm_amt) || 0;
+  const periodCommUnpaidUsd = Number(comm.unpaid_comm_amt) || 0;
+  const periodCommPaidPct = periodCommUsd > 0 ? Math.round((periodCommPaidUsd / periodCommUsd) * 100) : 0;
   const periodCommKrw = Math.round(periodCommUsd * fxRate);
   const periodCommCount = Number(comm.comm_count) || 0;
   const ytdCommUsd = commMonthlyList.reduce((s, cm) => s + (Number(cm.comm_amt) || 0), 0);
@@ -148,11 +157,39 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     .map(s => ({ ...s, total_profit: s.margin + s.comm_krw }))
     .sort((x, y) => y.total_profit - x.total_profit);
 
-  // 제조사별 Commission 빠른 조회 맵
+  // 제조사별 Domestic + Commission 통합 목록 (커미션 전용 제조사 SMI/Giantec 등도 포함)
   const commByMakerMap = {};
   (Array.isArray(comm.by_maker) ? comm.by_maker : []).forEach(cm => {
     const k = String(cm.maker || '').trim().toUpperCase();
     if (k) commByMakerMap[k] = cm;
+  });
+  const mergedMakers = [];
+  const seenMakers = new Set();
+  (Array.isArray(a.top_makers) ? a.top_makers : []).forEach(m => {
+    const k = String(m.maker || '').trim().toUpperCase();
+    seenMakers.add(k);
+    const cm = commByMakerMap[k];
+    mergedMakers.push({
+      maker: m.maker,
+      billing: Number(m.billing) || 0,
+      item_count: Number(m.item_count) || 0,
+      comm_usd: cm ? (Number(cm.comm_amt) || 0) : 0,
+      comm_unpaid_usd: cm ? (Number(cm.unpaid_amt) || 0) : 0,
+      comm_count: cm ? (Number(cm.count) || 0) : 0
+    });
+  });
+  (Array.isArray(comm.by_maker) ? comm.by_maker : []).forEach(cm => {
+    const k = String(cm.maker || '').trim().toUpperCase();
+    if (!k || seenMakers.has(k) || k === 'OTHERS') return;
+    seenMakers.add(k);
+    mergedMakers.push({
+      maker: cm.maker,
+      billing: 0,
+      item_count: 0,
+      comm_usd: Number(cm.comm_amt) || 0,
+      comm_unpaid_usd: Number(cm.unpaid_amt) || 0,
+      comm_count: Number(cm.count) || 0
+    });
   });
 
   // 월 선택 드롭다운 옵션 목록 (최신 월부터 1월까지 역순 생성)
@@ -165,15 +202,22 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
   // 기준 매출액 (비율 계산용: 안전 분모 설정)
   const baseBilling = (isMonthly ? (periodBilling && periodBilling > 0 ? periodBilling : billingYtd) : billingYtd) || 1;
 
-  // 1. 월별 매출 차트 스케일 계산 (매출액 전용 + Y축 눈금선)
-  const maxBill = Math.max(...monthly.map(m => m.billing || 0), 100000000);
-  
-  // 가독성 좋은 Y축 눈금(억 단위) 스케일 계산
-  let step = 500000000; // 기본 5억 단위
-  if (maxBill > 2500000000) step = 1000000000; // 10억
-  else if (maxBill < 400000000) step = 100000000; // 1억
-  else if (maxBill < 800000000) step = 200000000; // 2억
-  const yCeiling = Math.max(step * 2, Math.ceil((maxBill * 1.15) / step) * step); // 상단 수치 라벨 여유 확보(1.15배)
+  // 1. 월별 차트 스케일 계산 (통합 총수익 모드: 마진+커미션 vs 매출액 모드)
+  const isProfitChart = analyticsChartMode === 'profit';
+  const maxChartVal = isProfitChart
+    ? Math.max(...monthly.map(m => {
+        const cm = commMonthlyMap[m.month];
+        return (m.margin || 0) + Math.round((cm ? (Number(cm.comm_amt) || 0) : 0) * fxRate);
+      }), 50000000)
+    : Math.max(...monthly.map(m => m.billing || 0), 100000000);
+
+  let step = 500000000;
+  if (maxChartVal > 2500000000) step = 1000000000;
+  else if (maxChartVal > 800000000) step = 500000000;
+  else if (maxChartVal > 400000000) step = 200000000;
+  else if (maxChartVal > 150000000) step = 100000000;
+  else step = 50000000;
+  const yCeiling = Math.max(step * 2, Math.ceil((maxChartVal * 1.18) / step) * step);
 
   // SVG 차트 좌표 설정
   const chartHeight = 230;
@@ -189,7 +233,7 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
   const yTicks = [];
   for (let val = 0; val <= yCeiling; val += step) {
     const yPos = plotBottom - Math.round((val / yCeiling) * plotHeight);
-    const label = val === 0 ? '0' : `${(val / 100000000).toFixed(0)}억`;
+    const label = val === 0 ? '0' : (val >= 100000000 ? `${(val / 100000000).toFixed(val % 100000000 === 0 ? 0 : 1)}억` : `${Math.round(val / 10000)}만`);
     yTicks.push({ val, yPos, label });
   }
 
@@ -200,67 +244,107 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     </g>
   `).join('');
 
-  // X축 및 매출 단일 막대 생성 (상단 금액 & 마진율 수치 직접 표기 + 클릭 시 해당 월 전환)
+  // X축 및 막대 생성 (통합 총수익 스택바 OR 매출 단일바)
   const slotCount = monthly.length;
   const slotWidth = slotCount > 0 ? plotWidth / slotCount : 60;
   const barWidth = Math.min(38, Math.max(16, Math.floor(slotWidth * 0.58)));
+
+  const fmtCompactKrw = (v) => {
+    if (v >= 100000000) return `${(v / 100000000).toFixed(1)}억`;
+    if (v > 0) return `${Math.round(v / 10000).toLocaleString()}만`;
+    return '';
+  };
 
   const chartSvgBars = monthly.map((m, idx) => {
     const bill = m.billing || 0;
     const mgn = m.margin || 0;
     const mgnRate = m.margin_rate || 0;
     const billCount = m.bill_count || 0;
+    const cm = commMonthlyMap[m.month];
+    const cUsd = cm ? (Number(cm.comm_amt) || 0) : 0;
+    const cKrw = Math.round(cUsd * fxRate);
+    const totalProfit = mgn + cKrw;
 
     const mNum = parseInt(m.month.slice(5), 10);
     const isSelected = isMonthly && (selectedMonthNum === mNum);
 
     const slotCenter = plotLeft + idx * slotWidth + slotWidth / 2;
     const barX = Math.round(slotCenter - barWidth / 2);
-    const barHeight = bill > 0 ? Math.max(4, Math.round((bill / yCeiling) * plotHeight)) : 2;
-    const barY = plotBottom - barHeight;
 
-    // 월 라벨 (연도가 다른 경우 25.11 형태, 당해 연도는 01월)
     const isOtherYear = !m.month.startsWith(currentYear);
     const monthLabel = isOtherYear ? `${m.month.slice(2, 4)}.${m.month.slice(5)}` : `${m.month.slice(5)}월`;
 
-    // 억/천만 단위 가독성 텍스트
-    let eokText = '-';
-    if (bill >= 100000000) {
-      eokText = `${(bill / 100000000).toFixed(1)}억`;
-    } else if (bill >= 10000000) {
-      eokText = `${Math.round(bill / 10000).toLocaleString()}만`;
-    } else if (bill > 0) {
-      eokText = `${Math.round(bill / 10000).toLocaleString()}만`;
+    if (isProfitChart) {
+      const mgnH = mgn > 0 ? Math.max(3, Math.round((mgn / yCeiling) * plotHeight)) : 0;
+      const commH = cKrw > 0 ? Math.max(3, Math.round((cKrw / yCeiling) * plotHeight)) : 0;
+      const totalH = Math.max(mgnH + commH, totalProfit > 0 ? 4 : 2);
+      const topY = plotBottom - totalH;
+      const mgnY = plotBottom - mgnH;
+      const commY = mgnY - commH;
+      const commShare = totalProfit > 0 && cKrw > 0 ? Math.round((cKrw / totalProfit) * 100) : 0;
+
+      return `
+        <g class="chart-group cursor-pointer group" data-idx="${idx}" onclick="window.switchAnalyticsMonth('${mNum}')">
+          <rect x="${Math.round(slotCenter - slotWidth / 2 + 2)}" y="${plotTop - 15}" width="${Math.round(slotWidth - 4)}" height="${plotHeight + 25}" fill="${isSelected ? '#f5f3ff' : '#f8fafc'}" rx="8" class="${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity" pointer-events="none"></rect>
+
+          <!-- 상단 1: 통합 총수익 (국내마진 + 커미션) -->
+          <text x="${slotCenter}" y="${topY - 14}" text-anchor="middle" font-size="${isSelected ? '11.5' : '10.5'}" font-weight="900" fill="${isSelected ? '#5b21b6' : '#0f172a'}" class="font-mono tracking-tight select-none">
+            ${fmtCompactKrw(totalProfit)}
+          </text>
+          <!-- 상단 2: 커미션 비중 또는 마진율 -->
+          <text x="${slotCenter}" y="${topY - 3}" text-anchor="middle" font-size="9" font-weight="bold" fill="${commShare > 0 ? '#7c3aed' : '#059669'}" class="font-mono select-none">
+            ${commShare > 0 ? `💎${commShare}%` : (bill > 0 ? `${mgnRate}%` : '')}
+          </text>
+
+          <!-- 하단 막대: Domestic 마진 (에메랄드) -->
+          ${mgnH > 0 ? `<rect x="${barX}" y="${mgnY}" width="${barWidth}" height="${mgnH}" rx="${commH > 0 ? '2' : '4'}" fill="url(#marginBarGradient)" class="transition-all duration-150 group-hover:brightness-110"></rect>` : ''}
+          <!-- 상단 스택 막대: 💎 커미션 원화환산 (바이올렛) -->
+          ${commH > 0 ? `<rect x="${barX}" y="${commY}" width="${barWidth}" height="${commH}" rx="4" fill="url(#commBarGradient)" class="transition-all duration-150 group-hover:brightness-110"></rect>` : ''}
+          <!-- 선택 테두리 + 툴팁 히트박스 -->
+          <rect x="${barX}" y="${topY}" width="${barWidth}" height="${totalH}" rx="4" fill="transparent"
+                stroke="${isSelected ? '#f59e0b' : 'none'}" stroke-width="${isSelected ? '2.5' : '0'}">
+            <title>${m.month} 통합 총수익 (클릭 시 ${mNum}월 상세 조회)
+• 🏆 통합 총수익: ₩${Math.round(totalProfit).toLocaleString()}
+• 국내 마진: ₩${Math.round(mgn).toLocaleString()} (마진율 ${mgnRate}%)
+• 💎 커미션: $${cUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (≈₩${cKrw.toLocaleString()})
+• 국내 매출: ₩${Math.round(bill).toLocaleString()} (${billCount}건)</title>
+          </rect>
+
+          <text x="${slotCenter}" y="${plotBottom + 18}" text-anchor="middle" font-size="${isSelected ? '12' : '11'}" 
+                font-weight="${isSelected ? '900' : (idx >= slotCount - 2 ? '800' : 'bold')}" 
+                fill="${isSelected ? '#5b21b6' : (idx >= slotCount - 2 ? '#4338ca' : '#64748b')}" class="select-none">
+            ${monthLabel}${isSelected ? '★' : ''}
+          </text>
+        </g>
+      `;
     }
+
+    const barHeight = bill > 0 ? Math.max(4, Math.round((bill / yCeiling) * plotHeight)) : 2;
+    const barY = plotBottom - barHeight;
+    const eokText = fmtCompactKrw(bill) || '-';
 
     return `
       <g class="chart-group cursor-pointer group" data-idx="${idx}" onclick="window.switchAnalyticsMonth('${mNum}')">
-        <!-- 호버 및 선택 시 배경 슬롯 하이라이트 -->
         <rect x="${Math.round(slotCenter - slotWidth / 2 + 2)}" y="${plotTop - 15}" width="${Math.round(slotWidth - 4)}" height="${plotHeight + 25}" fill="${isSelected ? '#eef2ff' : '#f8fafc'}" rx="8" class="${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity" pointer-events="none"></rect>
 
-        <!-- 막대 상단 1: 매출액 수치 직접 표기 (선택 시 앰버/인디고 강조) -->
         <text x="${slotCenter}" y="${barY - 14}" text-anchor="middle" font-size="${isSelected ? '11.5' : '10.5'}" font-weight="900" fill="${isSelected ? '#4338ca' : '#1e1b4b'}" class="font-mono tracking-tight select-none">
           ${bill > 0 ? eokText : ''}
         </text>
-
-        <!-- 막대 상단 2: 실현 마진율 수치 직접 표기 (에메랄드) -->
         <text x="${slotCenter}" y="${barY - 3}" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#059669" class="font-mono select-none">
           ${bill > 0 ? `${mgnRate}%` : ''}
         </text>
 
-        <!-- 매출 단일 바 (선택 시 골드 테두리 강조) -->
         <rect x="${barX}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="4" 
               fill="${isSelected ? 'url(#selectedBarGradient)' : 'url(#billingBarGradient)'}" 
               stroke="${isSelected ? '#f59e0b' : 'none'}" stroke-width="${isSelected ? '2.5' : '0'}"
               class="filter drop-shadow-xs transition-all duration-150 group-hover:brightness-110">
           <title>${m.month} 실적 (클릭 시 ${mNum}월 상세 조회)
 • 매출액: ₩${Math.round(bill).toLocaleString()}
-• 매출이익: ₩${Math.round(mgn).toLocaleString()}
-• 실현마진율: ${mgnRate}%
+• 국내 마진: ₩${Math.round(mgn).toLocaleString()} (${mgnRate}%)
+• 💎 커미션: $${cUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (≈₩${cKrw.toLocaleString()})
 • 출하건수: ${billCount}건</title>
         </rect>
 
-        <!-- X축 월 라벨 (선택된 월은 진한 보라색 강조) -->
         <text x="${slotCenter}" y="${plotBottom + 18}" text-anchor="middle" font-size="${isSelected ? '12' : '11'}" 
               font-weight="${isSelected ? '900' : (idx >= slotCount - 2 ? '800' : 'bold')}" 
               fill="${isSelected ? '#4338ca' : (idx >= slotCount - 2 ? '#4338ca' : '#64748b')}" class="select-none">
@@ -416,7 +500,7 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
         <div class="text-[9px] sm:text-[10px] text-slate-600 mt-0.5 flex flex-wrap items-center gap-x-1.5 leading-tight">
           <span>마진 <strong class="text-emerald-700">₩${Math.round(periodMargin).toLocaleString()}</strong></span>
           <span class="text-slate-300">+</span>
-          <span class="text-violet-700 font-bold">💎 $${periodCommUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span class="font-normal opacity-80">(₩${Math.round(periodCommKrw / 10000).toLocaleString()}만)</span></span>
+          <span class="text-violet-700 font-bold">💎 $${periodCommUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span class="font-normal opacity-80">(정산 ${periodCommPaidPct}%)</span></span>
         </div>
       </div>
 
@@ -477,7 +561,7 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
         <div class="text-[9px] sm:text-[10px] text-slate-600 mt-0.5 flex flex-wrap items-center gap-x-1.5 leading-tight">
           <span>마진 <strong class="text-emerald-700">₩${(marginYtd / 100000000).toFixed(2)}억</strong></span>
           <span class="text-slate-300">+</span>
-          <span class="text-violet-700 font-bold">💎 $${Math.round(periodCommUsd).toLocaleString()} <span class="font-normal opacity-80">(₩${(periodCommKrw / 100000000).toFixed(2)}억)</span></span>
+          <span class="text-violet-700 font-bold">💎 $${Math.round(periodCommUsd).toLocaleString()} <span class="font-normal opacity-80">(₩${(periodCommKrw / 100000000).toFixed(2)}억 · 미입금 $${Math.round(periodCommUnpaidUsd).toLocaleString()})</span></span>
         </div>
       </div>
 
@@ -576,35 +660,51 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
       <!-- 2. 핵심 KPI 4단 카드 -->
       ${kpiCardsHtml}
 
-      <!-- 3. 월별 매출 실적 (Billing) 및 마진율 추이 차트 -->
+      <!-- 3. 월별 통합 총수익(마진+커미션) / 매출 추이 차트 -->
       <div class="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <h3 class="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
-              <span>📈</span>
-              <span>월별 매출 실적 (Billing) 및 마진율 추이</span>
+              <span>${isProfitChart ? '🏆' : '📈'}</span>
+              <span>${isProfitChart ? '월별 통합 총수익 추이 (국내마진 + 💎 커미션)' : '월별 매출 실적 (Billing) 및 마진율 추이'}</span>
             </h3>
+            <!-- 차트 모드 스위처 (총수익 스택 vs 매출액) -->
+            <div class="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px] font-bold">
+              <button type="button" onclick="window.switchAnalyticsChartMode('profit')" class="px-2 py-0.5 rounded-md transition cursor-pointer ${isProfitChart ? 'bg-violet-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'}">🏆 마진+커미션</button>
+              <button type="button" onclick="window.switchAnalyticsChartMode('billing')" class="px-2 py-0.5 rounded-md transition cursor-pointer ${!isProfitChart ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'}">📊 매출(Billing)</button>
+            </div>
             ${isMonthly ? `
               <span class="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full font-bold cursor-pointer hover:bg-indigo-100" 
                     onclick="window.switchAnalyticsMonth('all')" title="클릭하여 전체 연간 누적 보기로 복귀">
-                📍 현재 ${selectedMonthNum}월 선택됨 (전체 누적 보기로 돌아가기 ↩)
+                📍 ${selectedMonthNum}월 선택됨 (전체 복귀 ↩)
               </span>
             ` : `
               <span class="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full font-medium">
-                💡 차트의 막대를 클릭하면 해당 월 상세 실적으로 즉시 전환됩니다
+                💡 막대 클릭 시 해당 월 상세 전환
               </span>
             `}
           </div>
           <!-- 범례 -->
           <div class="flex items-center gap-3 sm:gap-4 text-[11px] sm:text-xs font-bold">
-            <span class="flex items-center gap-1 text-indigo-900">
-              <span class="w-3 h-3 rounded bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-xs inline-block"></span>
-              매출액
-            </span>
-            <span class="flex items-center gap-1 text-emerald-700">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
-              마진율 (%)
-            </span>
+            ${isProfitChart ? `
+              <span class="flex items-center gap-1 text-emerald-800">
+                <span class="w-3 h-3 rounded bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-xs inline-block"></span>
+                국내마진
+              </span>
+              <span class="flex items-center gap-1 text-violet-800">
+                <span class="w-3 h-3 rounded bg-gradient-to-b from-violet-400 to-violet-600 shadow-xs inline-block"></span>
+                💎 커미션(원화환산)
+              </span>
+            ` : `
+              <span class="flex items-center gap-1 text-indigo-900">
+                <span class="w-3 h-3 rounded bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-xs inline-block"></span>
+                매출액
+              </span>
+              <span class="flex items-center gap-1 text-emerald-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                마진율 (%)
+              </span>
+            `}
           </div>
         </div>
 
@@ -623,6 +723,14 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
               <linearGradient id="selectedBarGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#4f46e5" />
                 <stop offset="100%" stop-color="#312e81" />
+              </linearGradient>
+              <linearGradient id="marginBarGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#34d399" />
+                <stop offset="100%" stop-color="#059669" />
+              </linearGradient>
+              <linearGradient id="commBarGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#a78bfa" />
+                <stop offset="100%" stop-color="#6d28d9" />
               </linearGradient>
             </defs>
             <!-- Y축 그리드 라인 & 눈금 라벨 -->
@@ -687,26 +795,26 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
           </div>
 
           <div class="space-y-2 overflow-y-auto max-h-80 pr-1 text-xs">
-            ${(a.top_makers && a.top_makers.length > 0) ? a.top_makers.map((m, idx) => {
-              const pct = baseBilling > 0 ? ((m.billing / baseBilling) * 100).toFixed(1) : 0;
-              const cm = commByMakerMap[String(m.maker || '').trim().toUpperCase()];
-              const cUsd = cm ? (Number(cm.comm_amt) || 0) : 0;
+            ${mergedMakers.length > 0 ? mergedMakers.map((m) => {
+              const pct = baseBilling > 0 ? ((m.billing / baseBilling) * 100).toFixed(1) : '0.0';
+              const cUsd = m.comm_usd || 0;
               const cKrw = Math.round(cUsd * fxRate);
+              const isCommOnly = m.billing <= 0 && cUsd > 0;
               return `
                 <div class="space-y-0.5">
                   <div class="flex items-center justify-between text-[11px] gap-1">
                     <span class="font-bold text-slate-800 flex items-center gap-1 min-w-0">
-                      <span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-50 text-indigo-800 border border-indigo-200 shrink-0">${m.maker}</span>
-                      <span class="text-slate-400 text-[10px] font-normal shrink-0">(${m.item_count}건)</span>
-                      ${cUsd > 0 ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-violet-100 text-violet-800 border border-violet-200 truncate" title="Commission: $${cUsd.toLocaleString()} (≈₩${cKrw.toLocaleString()})">💎 +$${Math.round(cUsd).toLocaleString()}</span>` : ''}
+                      <span class="px-1.5 py-0.2 rounded text-[9px] font-black ${isCommOnly ? 'bg-violet-100 text-violet-800 border border-violet-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'} shrink-0">${m.maker}</span>
+                      <span class="text-slate-400 text-[10px] font-normal shrink-0">(${isCommOnly ? `Comm ${m.comm_count}건` : `${m.item_count}건`})</span>
+                      ${cUsd > 0 ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-violet-100 text-violet-800 border border-violet-200 truncate" title="Commission: $${cUsd.toLocaleString()} (≈₩${cKrw.toLocaleString()}) / 미입금 $${Math.round(m.comm_unpaid_usd || 0).toLocaleString()}">💎 +$${Math.round(cUsd).toLocaleString()}</span>` : ''}
                     </span>
-                    <span class="font-mono font-bold text-slate-900 shrink-0">₩${Math.round(m.billing).toLocaleString()}</span>
+                    <span class="font-mono font-bold ${isCommOnly ? 'text-violet-800' : 'text-slate-900'} shrink-0">${isCommOnly ? `₩${cKrw.toLocaleString()}` : `₩${Math.round(m.billing).toLocaleString()}`}</span>
                   </div>
                   <div class="flex items-center gap-2 text-[10px] text-slate-400">
                     <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                      <div class="bg-emerald-500 h-full rounded-full" style="width: ${Math.min(pct * 2.5, 100)}%"></div>
+                      <div class="${isCommOnly ? 'bg-violet-500' : 'bg-emerald-500'} h-full rounded-full" style="width: ${isCommOnly ? '100' : Math.min(Number(pct) * 2.5, 100)}%"></div>
                     </div>
-                    <span class="shrink-0 font-mono text-[9px] font-bold text-emerald-800">${pct}%</span>
+                    <span class="shrink-0 font-mono text-[9px] font-bold ${isCommOnly ? 'text-violet-700' : 'text-emerald-800'}">${isCommOnly ? 'COMM' : `${pct}%`}</span>
                   </div>
                 </div>
               `;
@@ -808,8 +916,6 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
           <div class="text-slate-400 text-center py-4">영업 메모를 불러오는 중입니다...</div>
         </div>
       </div>
-
-      ${renderCommissionAnalyticsSection(a.commission, currentYear, isMonthly, selectedMonthNum)}
 
     </div>
   `;
