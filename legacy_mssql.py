@@ -2046,6 +2046,330 @@ def query_remittances(query: Optional[str] = None, mfg: Optional[str] = None, li
         return items[:limit]
 
 
+# ========================================================
+# 🧪 Phase 3 확장 모듈: 샘플 & Design-In 프로젝트 트래킹 (SAMPLE_* 5종 테이블)
+# ========================================================
+_SAMPLE_RESULT_MAP = {1: "Design Win", 2: "Design Fail", 3: "Pending", 4: "Working"}
+_SAMPLE_FAIL_MAP = {1: "Test Fail", 2: "Sample LT", 3: "PJT Drop", 4: "Others"}
+_BIZ_RESULT_MAP = {1: "Taking P.O", 2: "Fail", 3: "Waiting"}
+_BIZ_FAIL_MAP = {1: "Price", 2: "Others"}
+
+def query_sample_tracking(
+    query: Optional[str] = None,
+    sample_result: Optional[str] = None,
+    sales_rep: Optional[str] = None,
+    limit: int = 400
+) -> List[Dict[str, Any]]:
+    """SAMPLE_TRACKING + SAMPLE_OUTFILE / DBRWFile + CustomerFile 조인 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = ["COALESCE(t.DEL_YN, 'N') <> 'Y'"]
+        params = []
+        if sample_result and sample_result.strip().upper() not in ("", "ALL"):
+            sr_val = sample_result.strip()
+            if sr_val.isdigit():
+                conditions.append("t.SAMPLE_RESULT = %s")
+                params.append(int(sr_val))
+        if sales_rep and sales_rep.strip().upper() not in ("", "ALL"):
+            s_val = sales_rep.strip()
+            conditions.append("(LTRIM(RTRIM(o.SALES)) = %s OR LTRIM(RTRIM(b.Sales)) = %s)")
+            params.extend([s_val, s_val])
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("""(
+                t.APP LIKE %s OR t.PRJ_MODEL LIKE %s OR t.CHIPSET_VENDOR LIKE %s OR
+                t.CHIPSET_PARTNO LIKE %s OR t.COMPETITOR LIKE %s OR t.REMARK LIKE %s OR
+                o.PARTNO LIKE %s OR b.Partno LIKE %s OR c1.Kname LIKE %s OR c1.Cname LIKE %s OR
+                c2.Kname LIKE %s OR c2.Cname LIKE %s
+            )""")
+            params.extend([term] * 12)
+        where_sql = f"WHERE {' AND '.join(conditions)}"
+        sql = f"""
+            SELECT TOP {int(limit)}
+                t.IDX as idx, t.APP as app, t.PRJ_MODEL as prj_model,
+                t.VOLUME as volume, t.PP_DATE as pp_date, t.MP_DATE as mp_date,
+                t.CHIPSET_VENDOR as chipset_vendor, t.CHIPSET_PARTNO as chipset_partno,
+                t.COMPETITOR as competitor, t.COMP_PARTNO as comp_partno,
+                t.COMP_PRICE as comp_price, t.SAMPLE_DATE as sample_date,
+                t.SAMPLE_QTY as sample_qty, t.QUOTE_QTY as quote_qty,
+                t.QUOTE_PRICE as quote_price, t.SAMPLE_RESULT as sample_result,
+                t.SAMPLE_RESULT2 as sample_result2, t.BUSINESS_RESULT as business_result,
+                t.BUSINESS_RESULT2 as business_result2, t.UPDATEDT as update_dt,
+                t.REMARK as remark, t.OUT_KIND as out_kind,
+                COALESCE(o.PARTNO, b.Partno, '') as part_no,
+                COALESCE(o.MFG, b.Mfg, '') as mfg,
+                COALESCE(o.SALES, b.Sales, '') as sales,
+                COALESCE(c1.Kname, c1.Cname, c2.Kname, c2.Cname, '') as customer_name
+            FROM SAMPLE_TRACKING t
+            LEFT JOIN SAMPLE_OUTFILE o ON t.OUT_KIND = 'SM_OUT' AND t.OUT_IDX = o.IDX
+            LEFT JOIN CustomerFile c1 ON o.CUSTID = c1.CID
+            LEFT JOIN DBRWFile b ON t.OUT_KIND <> 'SM_OUT' AND t.OUT_IDX = b.IDX
+            LEFT JOIN CustomerFile c2 ON b.Custid = c2.CID
+            {where_sql}
+            ORDER BY t.IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        results = []
+        for r in rows:
+            sr = int(r.get("sample_result") or 0)
+            sr2 = int(r.get("sample_result2") or 0)
+            br = int(r.get("business_result") or 0)
+            br2 = int(r.get("business_result2") or 0)
+            sr_label = _SAMPLE_RESULT_MAP.get(sr, "Working")
+            if sr == 2 and sr2 in _SAMPLE_FAIL_MAP:
+                sr_label = f"Design Fail ({_SAMPLE_FAIL_MAP[sr2]})"
+            br_label = _BIZ_RESULT_MAP.get(br, "Waiting")
+            if br == 2 and br2 in _BIZ_FAIL_MAP:
+                br_label = f"Fail ({_BIZ_FAIL_MAP[br2]})"
+            results.append({
+                "idx": r["idx"],
+                "customer_name": clean_val(r.get("customer_name")) or "-",
+                "part_no": clean_val(r.get("part_no")) or "-",
+                "mfg": clean_val(r.get("mfg")) or "-",
+                "sales": clean_val(r.get("sales")) or "-",
+                "app": clean_val(r.get("app")),
+                "prj_model": clean_val(r.get("prj_model")),
+                "volume": int(r.get("volume") or 0),
+                "pp_date": _fmt_dt(r.get("pp_date")),
+                "mp_date": _fmt_dt(r.get("mp_date")),
+                "chipset_vendor": clean_val(r.get("chipset_vendor")),
+                "chipset_partno": clean_val(r.get("chipset_partno")),
+                "competitor": clean_val(r.get("competitor")),
+                "comp_partno": clean_val(r.get("comp_partno")),
+                "comp_price": float(r.get("comp_price") or 0.0),
+                "sample_date": _fmt_dt(r.get("sample_date")),
+                "sample_qty": int(r.get("sample_qty") or 0),
+                "quote_qty": int(r.get("quote_qty") or 0),
+                "quote_price": float(r.get("quote_price") or 0.0),
+                "sample_result": sr,
+                "sample_result_label": sr_label,
+                "business_result": br,
+                "business_result_label": br_label,
+                "update_dt": _fmt_dt(r.get("update_dt")),
+                "remark": clean_val(r.get("remark")),
+                "source": "LEGACY",
+            })
+        return results
+    except Exception:
+        bundle = _load_phase1_bundle("samples_bundle.json") or {}
+        items = bundle.get("tracking", [])
+        if sample_result and sample_result.strip().upper() not in ("", "ALL"):
+            items = [it for it in items if str(it.get("sample_result")) == str(sample_result).strip()]
+        if sales_rep and sales_rep.strip().upper() not in ("", "ALL"):
+            s_up = sales_rep.strip().upper()
+            items = [it for it in items if (it.get("sales") or "").upper() == s_up]
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('customer_name','')} {it.get('part_no','')} {it.get('mfg','')} {it.get('app','')} {it.get('prj_model','')} {it.get('chipset_vendor','')} {it.get('chipset_partno','')} {it.get('competitor','')} {it.get('remark','')}".lower()]
+        return items[:limit]
+
+def query_sample_stock(query: Optional[str] = None, only_avail: bool = True, limit: int = 400) -> List[Dict[str, Any]]:
+    """SAMPLE_STOCKFILE: 샘플 보유 재고 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = ["COALESCE(DEL_YN, 'N') <> 'Y'"]
+        params = []
+        if only_avail:
+            conditions.append("QTY > 0")
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(PARTNO LIKE %s OR MFG LIKE %s)")
+            params.extend([term, term])
+        where_sql = f"WHERE {' AND '.join(conditions)}"
+        sql = f"""
+            SELECT TOP {int(limit)}
+                IDX as idx, PARTNO as part_no, MFG as mfg,
+                QTY as qty, TIMESTAMP as updated_at
+            FROM SAMPLE_STOCKFILE
+            {where_sql}
+            ORDER BY TIMESTAMP DESC, IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "idx": r["idx"],
+            "part_no": clean_val(r.get("part_no")),
+            "mfg": clean_val(r.get("mfg")) or "OTHERS",
+            "qty": int(r.get("qty") or 0),
+            "updated_at": _fmt_dt(r.get("updated_at")),
+        } for r in rows if clean_val(r.get("part_no"))]
+    except Exception:
+        bundle = _load_phase1_bundle("samples_bundle.json") or {}
+        items = bundle.get("stock", [])
+        if only_avail:
+            items = [it for it in items if (it.get("qty") or 0) > 0]
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('part_no','')} {it.get('mfg','')}".lower()]
+        return items[:limit]
+
+def query_sample_requests(query: Optional[str] = None, limit: int = 300) -> List[Dict[str, Any]]:
+    """SAMPLE_REQFILE: 샘플 요청 내역 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = ["COALESCE(r.DEL_YN, 'N') <> 'Y'"]
+        params = []
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(r.SRNO LIKE %s OR r.PARTNO LIKE %s OR r.MFG LIKE %s OR r.SALES LIKE %s OR r.REALCUST LIKE %s OR c.Kname LIKE %s OR c.Cname LIKE %s)")
+            params.extend([term] * 7)
+        where_sql = f"WHERE {' AND '.join(conditions)}"
+        sql = f"""
+            SELECT TOP {int(limit)}
+                r.IDX as idx, r.REQDATE as req_date, r.SRNO as sr_no,
+                COALESCE(c.Kname, c.Cname, '') as customer_name,
+                r.REALCUST as real_cust, r.MFG as mfg, r.SUPPLIER as supplier,
+                r.PARTNO as part_no, r.QTY as qty, r.CRD as crd_date,
+                r.SHIPDT as ship_date, r.SALES as sales, r.STATUS as status,
+                r.APP as app, r.REMARK as remark
+            FROM SAMPLE_REQFILE r
+            LEFT JOIN CustomerFile c ON r.CUSTID = c.CID
+            {where_sql}
+            ORDER BY r.IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "idx": r["idx"],
+            "req_date": _fmt_dt(r.get("req_date")),
+            "sr_no": clean_val(r.get("sr_no")),
+            "customer_name": clean_val(r.get("customer_name")) or clean_val(r.get("real_cust")) or "-",
+            "real_cust": clean_val(r.get("real_cust")),
+            "mfg": clean_val(r.get("mfg")) or "OTHERS",
+            "supplier": clean_val(r.get("supplier")),
+            "part_no": clean_val(r.get("part_no")),
+            "qty": int(r.get("qty") or 0),
+            "crd_date": _fmt_dt(r.get("crd_date")),
+            "ship_date": _fmt_dt(r.get("ship_date")),
+            "sales": clean_val(r.get("sales")),
+            "status": clean_val(r.get("status")) or "REQ",
+            "app": clean_val(r.get("app")),
+            "remark": clean_val(r.get("remark")),
+        } for r in rows]
+    except Exception:
+        bundle = _load_phase1_bundle("samples_bundle.json") or {}
+        items = bundle.get("requests", [])
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('sr_no','')} {it.get('part_no','')} {it.get('mfg','')} {it.get('customer_name','')} {it.get('real_cust','')} {it.get('sales','')}".lower()]
+        return items[:limit]
+
+def query_sample_incomes(query: Optional[str] = None, limit: int = 300) -> List[Dict[str, Any]]:
+    """SAMPLE_INCOMEFILE: 샘플 입고 내역 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = ["COALESCE(i.DEL_YN, 'N') <> 'Y'"]
+        params = []
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(i.SRNO LIKE %s OR i.PARTNO LIKE %s OR i.MFG LIKE %s OR i.AWBNO LIKE %s OR i.SALES LIKE %s OR i.REALCUST LIKE %s)")
+            params.extend([term] * 6)
+        where_sql = f"WHERE {' AND '.join(conditions)}"
+        sql = f"""
+            SELECT TOP {int(limit)}
+                i.IDX as idx, i.SRNO as sr_no, i.PARTNO as part_no,
+                i.MFG as mfg, i.SUPPLIER as supplier, i.STATUS as status,
+                i.SHIPDT as ship_date, i.INDT as in_date,
+                i.INQTY as in_qty, i.NOTOUTQTY as remain_qty,
+                i.DATECODE as date_code, i.LOTNO as lot_no, i.AWBNO as awb_no,
+                i.SALES as sales, i.REALCUST as real_cust, i.REMARK as remark
+            FROM SAMPLE_INCOMEFILE i
+            {where_sql}
+            ORDER BY i.IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "idx": r["idx"],
+            "sr_no": clean_val(r.get("sr_no")),
+            "part_no": clean_val(r.get("part_no")),
+            "mfg": clean_val(r.get("mfg")) or "OTHERS",
+            "supplier": clean_val(r.get("supplier")),
+            "status": clean_val(r.get("status")) or "IN",
+            "ship_date": _fmt_dt(r.get("ship_date")),
+            "in_date": _fmt_dt(r.get("in_date")),
+            "in_qty": int(r.get("in_qty") or 0),
+            "remain_qty": int(r.get("remain_qty") or 0),
+            "date_code": clean_val(r.get("date_code")),
+            "lot_no": clean_val(r.get("lot_no")),
+            "awb_no": clean_val(r.get("awb_no")),
+            "sales": clean_val(r.get("sales")),
+            "real_cust": clean_val(r.get("real_cust")),
+            "remark": clean_val(r.get("remark")),
+        } for r in rows]
+    except Exception:
+        bundle = _load_phase1_bundle("samples_bundle.json") or {}
+        items = bundle.get("incomes", [])
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('sr_no','')} {it.get('part_no','')} {it.get('mfg','')} {it.get('awb_no','')} {it.get('real_cust','')} {it.get('sales','')}".lower()]
+        return items[:limit]
+
+def query_sample_outflows(query: Optional[str] = None, limit: int = 300) -> List[Dict[str, Any]]:
+    """SAMPLE_OUTFILE: 샘플 출고 및 반납 내역 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = ["COALESCE(o.DEL_YN, 'N') <> 'Y'"]
+        params = []
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(o.SONO LIKE %s OR o.PARTNO LIKE %s OR o.MFG LIKE %s OR o.SALES LIKE %s OR o.CONTACT LIKE %s OR c.Kname LIKE %s OR c.Cname LIKE %s)")
+            params.extend([term] * 7)
+        where_sql = f"WHERE {' AND '.join(conditions)}"
+        sql = f"""
+            SELECT TOP {int(limit)}
+                o.IDX as idx, COALESCE(c.Kname, c.Cname, '') as customer_name,
+                o.PARTNO as part_no, o.MFG as mfg, o.STATUS as status,
+                o.GUBUN as gubun, o.SONO as so_no, o.OUTDT as out_date,
+                o.RTNDT as rtn_date, o.RTN_PLANDT as rtn_plan_date,
+                o.QTY as qty, o.SALES as sales, o.ITEM as item_type,
+                o.DELIVERY as delivery, o.CONTACT as contact, o.REMARK as remark
+            FROM SAMPLE_OUTFILE o
+            LEFT JOIN CustomerFile c ON o.CUSTID = c.CID
+            {where_sql}
+            ORDER BY o.IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "idx": r["idx"],
+            "customer_name": clean_val(r.get("customer_name")) or "-",
+            "part_no": clean_val(r.get("part_no")),
+            "mfg": clean_val(r.get("mfg")) or "OTHERS",
+            "status": clean_val(r.get("status")) or "OUT",
+            "gubun": clean_val(r.get("gubun")) or "SAM",
+            "so_no": clean_val(r.get("so_no")),
+            "out_date": _fmt_dt(r.get("out_date")),
+            "rtn_date": _fmt_dt(r.get("rtn_date")),
+            "rtn_plan_date": _fmt_dt(r.get("rtn_plan_date")),
+            "qty": int(r.get("qty") or 0),
+            "sales": clean_val(r.get("sales")),
+            "item_type": clean_val(r.get("item_type")),
+            "delivery": clean_val(r.get("delivery")),
+            "contact": clean_val(r.get("contact")),
+            "remark": clean_val(r.get("remark")),
+        } for r in rows]
+    except Exception:
+        bundle = _load_phase1_bundle("samples_bundle.json") or {}
+        items = bundle.get("outflows", [])
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('so_no','')} {it.get('part_no','')} {it.get('mfg','')} {it.get('customer_name','')} {it.get('contact','')} {it.get('sales','')}".lower()]
+        return items[:limit]
+
+
+
 
 
 

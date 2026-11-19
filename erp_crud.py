@@ -868,6 +868,26 @@ class SalesMemoUpdateInput(BaseModel):
     input_date: Optional[str] = None
 
 
+class SampleTrackingCrudInput(BaseModel):
+    customer_name: str
+    part_no: str
+    mfg: Optional[str] = "OTHERS"
+    sales: Optional[str] = "BSK"
+    app: Optional[str] = ""
+    prj_model: Optional[str] = ""
+    volume: Optional[int] = 0
+    pp_date: Optional[str] = ""
+    mp_date: Optional[str] = ""
+    chipset_vendor: Optional[str] = ""
+    chipset_partno: Optional[str] = ""
+    competitor: Optional[str] = ""
+    sample_qty: Optional[int] = 0
+    sample_date: Optional[str] = ""
+    sample_result: Optional[int] = 4   # 1:Design Win, 2:Design Fail, 3:Pending, 4:Working
+    business_result: Optional[int] = 3 # 1:Taking P.O, 2:Fail, 3:Waiting
+    remark: Optional[str] = ""
+
+
 def list_cloud_sales_memos(sales_rep: Optional[str] = None, limit: int = 40) -> List[Dict[str, Any]]:
     params = [
         ("select", "id,item_id,part_name,user_email,details,created_at"),
@@ -1247,6 +1267,145 @@ def register_crud_routes(app):
         import legacy_mssql
         items = legacy_mssql.query_remittances(query=query, mfg=mfg, limit=limit)
         return {"status": "success", "total": len(items), "items": items}
+
+    # 9. Phase 3 확장 API (샘플·Design-In 프로젝트 트래킹 조회 + 클라우드 CRUD)
+    @app.get("/api/samples/tracking")
+    def api_list_sample_tracking(query: Optional[str] = None, sample_result: Optional[str] = None, sales_rep: Optional[str] = None, limit: int = 400):
+        import legacy_mssql, json
+        legacy_items = legacy_mssql.query_sample_tracking(query=query, sample_result=sample_result, sales_rep=sales_rep, limit=limit)
+        cloud_items = []
+        try:
+            r = requests.get(
+                _sb_url("inventory_audit_logs"),
+                headers=_sb_headers(prefer=""),
+                params=[("action_type", "eq.SAMPLE_TRACKING"), ("order", "id.desc"), ("limit", "100")],
+                timeout=3.5,
+            )
+            if r.status_code == 200:
+                sr_map = {1: "Design Win", 2: "Design Fail", 3: "Pending", 4: "Working"}
+                br_map = {1: "Taking P.O", 2: "Fail", 3: "Waiting"}
+                for row in r.json() or []:
+                    try:
+                        d = json.loads(row.get("details") or "{}")
+                        sr = int(d.get("sample_result") or 4)
+                        br = int(d.get("business_result") or 3)
+                        item = {
+                            "idx": f"CLOUD-{row.get('id')}",
+                            "cloud_id": row.get("id"),
+                            "customer_name": d.get("customer_name") or "-",
+                            "part_no": d.get("part_no") or row.get("part_name") or "-",
+                            "mfg": d.get("mfg") or "OTHERS",
+                            "sales": d.get("sales") or "BSK",
+                            "app": d.get("app") or "",
+                            "prj_model": d.get("prj_model") or "",
+                            "volume": int(d.get("volume") or 0),
+                            "pp_date": d.get("pp_date") or "",
+                            "mp_date": d.get("mp_date") or "",
+                            "chipset_vendor": d.get("chipset_vendor") or "",
+                            "chipset_partno": d.get("chipset_partno") or "",
+                            "competitor": d.get("competitor") or "",
+                            "sample_qty": int(d.get("sample_qty") or 0),
+                            "sample_date": d.get("sample_date") or (row.get("created_at") or "")[:10],
+                            "sample_result": sr,
+                            "sample_result_label": sr_map.get(sr, "Working"),
+                            "business_result": br,
+                            "business_result_label": br_map.get(br, "Waiting"),
+                            "update_dt": (row.get("created_at") or "")[:10],
+                            "remark": d.get("remark") or "",
+                            "source": "CLOUD",
+                        }
+                        if sample_result and sample_result.strip().upper() not in ("", "ALL"):
+                            if str(sr) != str(sample_result).strip():
+                                continue
+                        if sales_rep and sales_rep.strip().upper() not in ("", "ALL"):
+                            if item["sales"].upper() != sales_rep.strip().upper():
+                                continue
+                        if query and query.strip():
+                            q_low = query.strip().lower()
+                            if q_low not in f"{item['customer_name']} {item['part_no']} {item['mfg']} {item['app']} {item['prj_model']} {item['chipset_vendor']} {item['remark']}".lower():
+                                continue
+                        cloud_items.append(item)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        combined = (cloud_items + legacy_items)[:limit]
+        return {"status": "success", "total": len(combined), "items": combined}
+
+    @app.post("/api/samples/tracking")
+    def api_create_sample_tracking(data: SampleTrackingCrudInput):
+        import json
+        payload = {
+            "part_name": (data.part_no or "-").strip(),
+            "action_type": "SAMPLE_TRACKING",
+            "user_email": (data.sales or "BSK").strip().upper(),
+            "details": json.dumps(data.dict(), ensure_ascii=False),
+        }
+        res = requests.post(_sb_url("inventory_audit_logs"), headers=_sb_headers(), json=payload, timeout=6)
+        if res.status_code not in (200, 201):
+            raise HTTPException(status_code=500, detail=f"프로젝트 트래킹 등록 실패: {res.text[:200]}")
+        created = (res.json() or [{}])[0]
+        return {"status": "success", "id": f"CLOUD-{created.get('id', '')}"}
+
+    @app.put("/api/samples/tracking/{record_id}")
+    def api_update_sample_tracking(record_id: str, data: SampleTrackingCrudInput):
+        import json
+        clean_id = str(record_id).replace("CLOUD-", "").strip()
+        if not clean_id.isdigit():
+            raise HTTPException(status_code=400, detail="웹 클라우드에서 등록된 프로젝트만 직접 수정할 수 있습니다.")
+        patch_body = {
+            "part_name": (data.part_no or "-").strip(),
+            "user_email": (data.sales or "BSK").strip().upper(),
+            "details": json.dumps(data.dict(), ensure_ascii=False),
+        }
+        res = requests.patch(
+            f"{_sb_url('inventory_audit_logs')}?id=eq.{clean_id}&action_type=eq.SAMPLE_TRACKING",
+            headers=_sb_headers(),
+            json=patch_body,
+            timeout=6,
+        )
+        if res.status_code not in (200, 204):
+            raise HTTPException(status_code=500, detail=f"프로젝트 수정 실패: {res.text[:200]}")
+        return {"status": "success", "id": record_id}
+
+    @app.delete("/api/samples/tracking/{record_id}")
+    def api_delete_sample_tracking(record_id: str):
+        clean_id = str(record_id).replace("CLOUD-", "").strip()
+        if not clean_id.isdigit():
+            raise HTTPException(status_code=400, detail="웹 클라우드에서 등록된 프로젝트만 삭제할 수 있습니다.")
+        res = requests.delete(
+            f"{_sb_url('inventory_audit_logs')}?id=eq.{clean_id}&action_type=eq.SAMPLE_TRACKING",
+            headers=_sb_headers(),
+            timeout=6,
+        )
+        if res.status_code not in (200, 204):
+            raise HTTPException(status_code=500, detail=f"프로젝트 삭제 실패: {res.text[:200]}")
+        return {"status": "success", "deleted_id": record_id}
+
+    @app.get("/api/samples/stock")
+    def api_list_sample_stock(query: Optional[str] = None, only_avail: bool = True, limit: int = 400):
+        import legacy_mssql
+        items = legacy_mssql.query_sample_stock(query=query, only_avail=only_avail, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+    @app.get("/api/samples/requests")
+    def api_list_sample_requests(query: Optional[str] = None, limit: int = 300):
+        import legacy_mssql
+        items = legacy_mssql.query_sample_requests(query=query, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+    @app.get("/api/samples/incomes")
+    def api_list_sample_incomes(query: Optional[str] = None, limit: int = 300):
+        import legacy_mssql
+        items = legacy_mssql.query_sample_incomes(query=query, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+    @app.get("/api/samples/outflows")
+    def api_list_sample_outflows(query: Optional[str] = None, limit: int = 300):
+        import legacy_mssql
+        items = legacy_mssql.query_sample_outflows(query=query, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
 
 
 

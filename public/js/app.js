@@ -2,6 +2,7 @@ import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './sh
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
 import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261111_1020';
 import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js';
+import { initSamplesTab } from './samples.js';
 import { supabase, sbClient } from './supabase.js';
 import * as InventoryModule from './inventory.js';
 import { initAuth, isCsOrAdminUser, isPaymentApprovalAdmin, getCurrentUserEmail, APPROVAL_ADMIN_EMAILS } from './modules/auth.js';
@@ -680,6 +681,7 @@ function bindTabSwitch() {
   const tabFulfillment = document.getElementById('tabFulfillment');
   const tabShipments = document.getElementById('tabShipments');
   const tabQuotations = document.getElementById('tabQuotations');
+  const tabSamples = document.getElementById('tabSamples');
   const tabUnpaid = document.getElementById('tabUnpaid');
   const tabAnalytics = document.getElementById('tabAnalytics');
   const tabPayment = document.getElementById('tabPayment');
@@ -689,6 +691,7 @@ function bindTabSwitch() {
   const formSection = document.getElementById('formSection');
   const shipmentsSection = document.getElementById('shipmentsSection');
   const quotationsSection = document.getElementById('quotationsSection');
+  const samplesSection = document.getElementById('samplesSection');
   const unpaidSection = document.getElementById('unpaidSection');
   const analyticsSection = document.getElementById('analyticsSection');
   const paymentSection = document.getElementById('paymentSection');
@@ -702,6 +705,7 @@ function bindTabSwitch() {
     if (tabFulfillment) tabFulfillment.className = (active === 'fulfillment') ? activeStyle : inactiveStyle;
     if (tabShipments) tabShipments.className = (active === 'shipments') ? activeStyle : inactiveStyle;
     if (tabQuotations) tabQuotations.className = (active === 'quotations') ? activeStyle : inactiveStyle;
+    if (tabSamples) tabSamples.className = (active === 'samples') ? activeStyle : inactiveStyle;
     if (tabUnpaid) tabUnpaid.className = (active === 'unpaid') ? activeStyle : inactiveStyle;
     if (tabAnalytics) tabAnalytics.className = (active === 'analytics') ? activeStyle : inactiveStyle;
     if (tabPayment) tabPayment.className = (active === 'payment') ? activeStyle : inactiveStyle;
@@ -711,6 +715,7 @@ function bindTabSwitch() {
       'fulfillment': tabFulfillment,
       'shipments': tabShipments,
       'quotations': tabQuotations,
+      'samples': tabSamples,
       'unpaid': tabUnpaid,
       'analytics': tabAnalytics,
       'payment': tabPayment
@@ -728,6 +733,7 @@ function bindTabSwitch() {
 
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (samplesSection) samplesSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
     if (analyticsSection) analyticsSection.classList.add('hidden');
     if (paymentSection) paymentSection.classList.add('hidden');
@@ -746,6 +752,7 @@ function bindTabSwitch() {
 
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (samplesSection) samplesSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
     if (analyticsSection) analyticsSection.classList.add('hidden');
     if (paymentSection) paymentSection.classList.add('hidden');
@@ -760,14 +767,14 @@ function bindTabSwitch() {
 
   // 🚀 탭별 스마트 TTL 캐시 (60초 이내 재방문 시 0ms 즉시 전환, 불필요한 API 재호출 차단)
   const TAB_CACHE_TTL = 60000;
-  const tabLoadedAt = { shipments: 0, quotations: 0, unpaid: 0, analytics: 0 };
+  const tabLoadedAt = { shipments: 0, quotations: 0, samples: 0, unpaid: 0, analytics: 0 };
   window.invalidateTabCache = (tabKey) => {
     if (tabKey && tabKey in tabLoadedAt) tabLoadedAt[tabKey] = 0;
     else Object.keys(tabLoadedAt).forEach(k => { tabLoadedAt[k] = 0; });
   };
 
   const showOnlySection = (activeSection) => {
-    [invMain, shipmentsSection, quotationsSection, unpaidSection, analyticsSection, paymentSection].forEach(sec => {
+    [invMain, shipmentsSection, quotationsSection, samplesSection, unpaidSection, analyticsSection, paymentSection].forEach(sec => {
       if (sec) sec.classList.toggle('hidden', sec !== activeSection);
     });
   };
@@ -814,6 +821,30 @@ function bindTabSwitch() {
     }
 
     if (csHeaderDesc) csHeaderDesc.innerText = "세일즈 마스터 MS-SQL 연동 견적 이력 및 BSK 견적서 재발행을 관리합니다.";
+  });
+
+  // 4-B. [샘플·프로젝트 (SAMPLE_* 5대 원장)] 탭 클릭
+  tabSamples?.addEventListener('click', async () => {
+    activeTab = 'samples';
+    setTabs('samples');
+    showOnlySection(samplesSection);
+
+    if (samplesSection) {
+      const isFresh = tabLoadedAt.samples > 0 && (Date.now() - tabLoadedAt.samples < TAB_CACHE_TTL) && samplesSection.children.length > 0;
+      if (!isFresh) {
+        samplesSection.innerHTML = `
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+            <div class="inline-block animate-spin text-3xl">⏳</div>
+            <div class="font-bold text-sm text-slate-700">샘플 관리 및 Design-In 프로젝트 트래킹 데이터를 불러오는 중입니다...</div>
+          </div>
+        `;
+        await initSamplesTab('samplesSection');
+        tabLoadedAt.samples = Date.now();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    if (csHeaderDesc) csHeaderDesc.innerText = "샘플 요청·입고·재고·출고 및 고객사 Design-In 양산(PP/MP) 프로젝트를 통합 관리합니다.";
   });
 
   // 5. [미수금 및 결제예정 관리] 탭 클릭 (세일즈 마스터 FrmUnpaidCustList 연동)
@@ -872,6 +903,7 @@ function bindTabSwitch() {
     if (invMain) invMain.classList.add('hidden');
     if (shipmentsSection) shipmentsSection.classList.add('hidden');
     if (quotationsSection) quotationsSection.classList.add('hidden');
+    if (samplesSection) samplesSection.classList.add('hidden');
     if (unpaidSection) unpaidSection.classList.add('hidden');
     if (analyticsSection) analyticsSection.classList.add('hidden');
     if (paymentSection) {

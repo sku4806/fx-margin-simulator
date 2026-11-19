@@ -640,6 +640,22 @@ def sync_bundled_files(conn):
     except Exception as p2e:
         print(f"⚠️ Phase 2 번들 갱신 예외: {p2e}")
 
+    # 7. Phase 3 확장 번들 (샘플 & Design-In 프로젝트 트래킹 SAMPLE_* 5종)
+    try:
+        samples_bundle = {
+            "tracking": legacy_mssql.query_sample_tracking(limit=600),
+            "stock": legacy_mssql.query_sample_stock(only_avail=False, limit=600),
+            "requests": legacy_mssql.query_sample_requests(limit=400),
+            "incomes": legacy_mssql.query_sample_incomes(limit=400),
+            "outflows": legacy_mssql.query_sample_outflows(limit=400),
+        }
+        for p_dir in ["api/data", "data"]:
+            with open(os.path.join(p_dir, "samples_bundle.json"), "w", encoding="utf-8") as f:
+                json.dump(samples_bundle, f, ensure_ascii=False)
+        print(f"[*] Phase 3 번들 저장 완료: 트래킹 {len(samples_bundle['tracking'])}건, 재고 {len(samples_bundle['stock'])}건, 요청/입고/출고 {len(samples_bundle['requests'])}/{len(samples_bundle['incomes'])}/{len(samples_bundle['outflows'])}건")
+    except Exception as p3e:
+        print(f"⚠️ Phase 3 번들 갱신 예외: {p3e}")
+
     print(f"✅ 번들 데이터 갱신 완료!")
 
 def main():
