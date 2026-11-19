@@ -1,7 +1,7 @@
-import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js';
+import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261119_comm';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
-import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261111_1020';
-import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js';
+import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261119_comm';
+import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261119_comm';
 import { initSamplesTab } from './samples.js';
 import { toEnglishSalesName } from './modules/utils.js';
 window.toEnglishSalesName = toEnglishSalesName;
@@ -37,10 +37,10 @@ window.openPurchaseOrdersModal = openPurchaseOrdersModal;
 window.fetchPurchaseOrdersSummary = fetchPurchaseOrdersSummary;
 window.refreshPoHeaderBadge = fetchPurchaseOrdersSummary;
 
-import { openCustomerMasterModal } from './customers.js';
+import { openCustomerMasterModal } from './customers.js?v=20261119_comm';
 window.openCustomerMasterModal = openCustomerMasterModal;
 
-import { openPriceHistoryModal } from './price-history.js';
+import { openPriceHistoryModal } from './price-history.js?v=20261119_comm';
 window.openPriceHistoryModal = openPriceHistoryModal;
 
 import { initPaymentModule, updatePaymentPendingBadge, switchPaymentSubTab } from './expense-approval.js';

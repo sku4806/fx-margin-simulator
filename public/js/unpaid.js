@@ -672,9 +672,16 @@ function bindCommUnpaidEvents() {
     renderUnpaidView('unpaidSection');
   });
   document.getElementById('commUnpaidSearchInput')?.addEventListener('input', debounce((e) => {
-    commUnpaidQuery = e.target.value;
+    const val = e.target.value;
+    const pos = e.target.selectionStart ?? val.length;
+    commUnpaidQuery = val;
     renderUnpaidView('unpaidSection');
-  }, 200));
+    const restored = document.getElementById('commUnpaidSearchInput');
+    if (restored) {
+      restored.focus();
+      try { restored.setSelectionRange(pos, pos); } catch (_) {}
+    }
+  }, 250));
   document.getElementById('btnCommUnpaidExcelExport')?.addEventListener('click', () => {
     const items = getFilteredCommUnpaid();
     if (!items.length) { alert('내보낼 Commission 미수 데이터가 없습니다.'); return; }

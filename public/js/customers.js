@@ -254,8 +254,8 @@ async function switchMasterTab(tab) {
 let commCustomerCache = null;
 
 async function loadCommissionCustomersTab(query = '') {
-  const body = document.getElementById('custMasterTableContainer');
-  const countEl = document.getElementById('custMasterTotalCount');
+  const body = document.getElementById('custMasterTableWrap');
+  const countEl = document.getElementById('custMasterCountBadge');
   if (!body) return;
 
   if (!commCustomerCache) {

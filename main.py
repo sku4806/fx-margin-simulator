@@ -198,6 +198,8 @@ def list_shipped_info(
     mfg: Optional[str] = None,
     supply: Optional[str] = None,
     query: Optional[str] = None,
+    biz_type: Optional[str] = None,
+    comm_status: Optional[str] = None,
     limit: int = 1500
 ):
     try:
@@ -207,6 +209,8 @@ def list_shipped_info(
             mfg=mfg,
             supply=supply,
             search_query=query,
+            biz_type=biz_type,
+            comm_status=comm_status,
             limit=limit
         )
         return {"status": "success", "total": len(results), "items": results}
@@ -219,6 +223,28 @@ def list_shipped_info(
                     return {"status": "success", "total": len(cached), "items": cached, "source": "bundled_fallback"}
         except Exception:
             pass
+        return {"status": "error", "message": str(e), "items": []}
+
+@app.get("/api/unpaid/commissions")
+def list_unpaid_commissions(
+    status: str = "UNPAID",
+    maker: Optional[str] = None,
+    sales_rep: Optional[str] = None,
+    query: Optional[str] = None,
+    min_date: str = "2024-01-01",
+    limit: int = 1500
+):
+    try:
+        items = legacy_mssql.query_unpaid_commissions(
+            status=status,
+            maker=maker,
+            sales_rep=sales_rep,
+            search_query=query,
+            min_date=min_date,
+            limit=limit
+        )
+        return {"status": "success", "total": len(items), "items": items}
+    except Exception as e:
         return {"status": "error", "message": str(e), "items": []}
 
 @app.get("/api/shipped-info/filters")
