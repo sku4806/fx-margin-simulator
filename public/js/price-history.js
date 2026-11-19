@@ -345,7 +345,10 @@ function renderSalesTable(sales) {
                 <span class="font-mono font-bold text-emerald-700">₩${Math.round(s.mgn).toLocaleString()}</span>
               </div>
             </div>
-            ${s.remark ? `<div class="text-[10px] text-slate-500 truncate">${s.remark}</div>` : ''}
+            ${s.remark ? (() => {
+              const trk = (typeof window.extractTrackingNumber === 'function') ? window.extractTrackingNumber(s.remark) : '';
+              return `<div class="text-[10px] text-slate-500 flex items-center justify-between gap-1.5"><span class="truncate">${s.remark}</span>${trk ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${trk}', '${String(s.remark).replace(/'/g, '')}')" class="shrink-0 px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 font-bold cursor-pointer">🚚 추적</button>` : ''}</div>`;
+            })() : ''}
           </div>
         `;
       }).join('')}
@@ -392,7 +395,14 @@ function renderSalesTable(sales) {
                   <span class="px-1.5 py-0.5 rounded border text-[10px] font-black ${mBadge}">${mRate}%</span>
                 </td>
                 <td class="py-2 px-2.5 text-center font-bold text-indigo-900 whitespace-nowrap">${s.sales_rep || '-'}</td>
-                <td class="py-2 px-3 text-slate-500 truncate max-w-[140px]" title="${s.remark}">${s.remark || '-'}</td>
+                <td class="py-2 px-3 text-slate-500 max-w-[190px]" title="${s.remark || ''}">
+                  ${(() => {
+                    const trk = (typeof window.extractTrackingNumber === 'function') ? window.extractTrackingNumber(s.remark) : '';
+                    return trk
+                      ? `<div class="flex items-center gap-1"><span class="truncate">${s.remark}</span><button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${trk}', '${String(s.remark).replace(/'/g, '')}')" class="shrink-0 px-1.5 py-0.5 rounded bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-[10px] cursor-pointer" title="실시간 배송 추적 (${trk})">🚚</button></div>`
+                      : `<span class="truncate block">${s.remark || '-'}</span>`;
+                  })()}
+                </td>
               </tr>
             `;
           }).join('')}

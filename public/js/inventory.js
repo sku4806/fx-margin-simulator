@@ -501,6 +501,7 @@ function generateLegacyMasterRow(item, canEdit) {
       </td>
       <td class="py-2.5 px-2 align-middle max-w-[220px]">
         ${poDisplayHtml}
+        ${(item.trackingNo || item.tracking_no) ? `<button type="button" onclick="event.stopPropagation(); window.openTrackingModal && window.openTrackingModal('${String(item.trackingNo || item.tracking_no).replace(/'/g, '')}')" class="mt-0.5 inline-flex items-center gap-0.5 text-[10px] font-mono font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-1.5 py-0.5 rounded cursor-pointer" title="운송장/AWB 실시간 배송 조회"><span>🚚</span> ${item.trackingNo || item.tracking_no}</button>` : ''}
       </td>
     </tr>
   `;

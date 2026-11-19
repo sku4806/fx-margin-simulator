@@ -68,18 +68,24 @@ def sync_inventory(conn, sb):
                 NULLIF(LTRIM(RTRIM(s2.PoNo)), ''),
                 NULLIF(LTRIM(RTRIM(s3.PoNo)), ''),
                 NULLIF(LTRIM(RTRIM(p2.PONO)), '')
-            ) as po_no
+            ) as po_no,
+            COALESCE(
+                NULLIF(LTRIM(RTRIM(d.AWBNO)), ''),
+                NULLIF(LTRIM(RTRIM(s1.AWBNO)), ''),
+                NULLIF(LTRIM(RTRIM(s2.AWBNO)), ''),
+                NULLIF(LTRIM(RTRIM(s3.AWBNO)), '')
+            ) as awb_no
         FROM DincomeFile d
         LEFT JOIN DPOFile p1 ON d.DPOIDX = p1.idx
         LEFT JOIN ShippingFile s1 ON d.idxship = s1.IDX
         LEFT JOIN (
-            SELECT INVOICENO, PartNo, MAX(PoNo) as PoNo
+            SELECT INVOICENO, PartNo, MAX(PoNo) as PoNo, MAX(AWBNO) as AWBNO
             FROM ShippingFile
             GROUP BY INVOICENO, PartNo
         ) s2 ON LTRIM(RTRIM(d.INVOICENO)) = LTRIM(RTRIM(s2.INVOICENO)) 
              AND LTRIM(RTRIM(d.PARTNO)) = LTRIM(RTRIM(s2.PartNo))
         LEFT JOIN (
-            SELECT INVOICENO, MAX(PoNo) as PoNo
+            SELECT INVOICENO, MAX(PoNo) as PoNo, MAX(AWBNO) as AWBNO
             FROM ShippingFile
             GROUP BY INVOICENO
         ) s3 ON LTRIM(RTRIM(d.INVOICENO)) = LTRIM(RTRIM(s3.INVOICENO))
@@ -125,6 +131,7 @@ def sync_inventory(conn, sb):
             "entry_date": indt_str,
             "invoice_no": clean_val(r['INVOICENO']),
             "po_no": clean_val(r.get('po_no')),
+            "tracking_no": clean_val(r.get('awb_no')),
             "memo": clean_val(r['Remark']),
             "customer": clean_val(r['Remark']) or "BIGSHINE KOREA",
             "real_customer": clean_val(r['Remark']) or "BIGSHINE KOREA",
