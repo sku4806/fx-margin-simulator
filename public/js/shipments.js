@@ -217,6 +217,25 @@ export async function fetchWebShipments() {
 /**
  * 메인 fetchShipments (기본 원장 및 필터 초기화)
  */
+function getMergedLedgerShipments() {
+  const q = (currentSearchQuery || '').trim().toLowerCase();
+  const filteredWeb = (cachedWebShipments || []).filter(item => {
+    const sd = (item.ship_date || '').slice(0, 10);
+    if (currentStartDate && sd && sd < currentStartDate) return false;
+    if (currentEndDate && sd && sd > currentEndDate) return false;
+    if (currentMfg && (item.maker || '').toLowerCase() !== currentMfg.toLowerCase()) return false;
+    if (currentSupply && (item.supply || '').toLowerCase() !== currentSupply.toLowerCase()) return false;
+    if (currentBizType === 'COMMISSION') return false;
+    if (currentCommStatus) return false;
+    if (q) {
+      const hay = `${item.part_no || ''} ${item.customer || ''} ${item.real_cust || ''} ${item.po_no || ''} ${item.app || ''} ${item.maker || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  return [...filteredWeb, ...(cachedLedgerShipments || [])];
+}
+
 export async function fetchShipments() {
   // 1. 전역 실시간 환율 재사용 (중복 /api/fx-rate 호출 제거)
   const globalFx = (typeof window.getLiveFxRate === 'function') ? window.getLiveFxRate() : (window.rawFxRate || 0);
@@ -232,14 +251,9 @@ export async function fetchShipments() {
     }
   }
 
-  // 2. 필터 목록과 출하 원장 데이터를 병렬(Promise.all)로 동시 로드
-  if (activeShipmentMode === 'ledger') {
-    await Promise.all([fetchShippedFilters(), fetchLedgerShipments()]);
-    lastFilteredShipments = cachedLedgerShipments;
-  } else {
-    await Promise.all([fetchShippedFilters(), fetchWebShipments()]);
-    lastFilteredShipments = cachedWebShipments;
-  }
+  // 2. 필터 목록, 공식 출하 원장, 웹 출하 데이터를 병렬(Promise.all)로 동시 로드 후 통합
+  await Promise.all([fetchShippedFilters(), fetchLedgerShipments(), fetchWebShipments()]);
+  lastFilteredShipments = getMergedLedgerShipments();
   return lastFilteredShipments;
 }
 
@@ -250,7 +264,7 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  const activeItems = (activeShipmentMode === 'ledger') ? cachedLedgerShipments : cachedWebShipments;
+  const activeItems = getMergedLedgerShipments();
   lastFilteredShipments = activeItems;
   shipmentPage = 1;
 
@@ -321,9 +335,6 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
           <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto scrollbar-none max-w-full">
             <button type="button" id="btnModeLedger" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${activeShipmentMode === 'ledger' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
               🚚 출하 원장
-            </button>
-            <button type="button" id="btnModeWeb" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${activeShipmentMode === 'web' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
-              📦 웹 출하
             </button>
             <button type="button" id="btnModeBorrow" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${activeShipmentMode === 'borrow' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
               🔄 대여/반납
@@ -757,14 +768,7 @@ function bindShipmentToolbarEvents() {
   btnLedger?.addEventListener("click", async () => {
     if (activeShipmentMode === 'ledger') return;
     activeShipmentMode = 'ledger';
-    await fetchLedgerShipments();
-    renderShipmentsView('shipmentsSection');
-  });
-
-  btnWeb?.addEventListener("click", async () => {
-    if (activeShipmentMode === 'web') return;
-    activeShipmentMode = 'web';
-    await fetchWebShipments();
+    await Promise.all([fetchLedgerShipments(), fetchWebShipments()]);
     renderShipmentsView('shipmentsSection');
   });
 
@@ -808,11 +812,10 @@ function bindShipmentToolbarEvents() {
     btnSearch.disabled = true;
     btnSearch.innerHTML = `<span>⏳</span> 조회중...`;
 
-    if (activeShipmentMode === 'ledger') {
-      await fetchLedgerShipments({ startDate, endDate, mfg, supply, bizType, commStatus, query });
-    } else {
-      await fetchWebShipments();
-    }
+    await Promise.all([
+      fetchLedgerShipments({ startDate, endDate, mfg, supply, bizType, commStatus, query }),
+      fetchWebShipments()
+    ]);
     renderShipmentsView('shipmentsSection');
   });
 
@@ -828,7 +831,7 @@ function bindShipmentToolbarEvents() {
 
   // 실시간 라이브 필터링 (200ms 디바운스)
   const handleLiveFilter = debounce((term) => {
-    const raw = (activeShipmentMode === 'ledger') ? cachedLedgerShipments : cachedWebShipments;
+    const raw = getMergedLedgerShipments();
     if (!term) {
       lastFilteredShipments = raw;
     } else {
@@ -969,11 +972,13 @@ function generateTableRows(items) {
     const commRate = Number(item.comm_rate) || 0;
     const isComm = commAmt > 0 || item.biz_type === 'COMMISSION';
     const isDom = !isComm && (item.biz_type === 'DOMESTIC' || item.ship_result === 'IN');
-    const bizBadge = isComm
-      ? `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-black bg-violet-100 text-violet-800 border border-violet-200">💎 COMM</span>`
-      : isDom
-        ? `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 text-sky-700 border border-sky-200">🏢 DOM</span>`
-        : `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-600">DIRECT</span>`;
+    const bizBadge = item.is_web
+      ? `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">WEB</span>`
+      : isComm
+        ? `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-black bg-violet-100 text-violet-800 border border-violet-200">💎 COMM</span>`
+        : isDom
+          ? `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 text-sky-700 border border-sky-200">🏢 DOM</span>`
+          : `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-600">DIRECT</span>`;
 
     const bankDt = (item.bank_dt || '').trim();
     const commDt = (item.comm_dt || '').trim();
@@ -1095,9 +1100,11 @@ function generateShipmentMobileCards(items) {
     const isComm = commAmt > 0 || item.biz_type === 'COMMISSION';
     const bankDt = (item.bank_dt || '').trim();
     const commDt = (item.comm_dt || '').trim();
-    const commBadge = isComm
-      ? `<span class="text-[9px] font-black text-violet-800 bg-violet-100 px-1.5 py-0.5 rounded border border-violet-200">💎 COMM ${commRate.toFixed(1)}%</span>`
-      : `<span class="text-[9px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">🏢 DOM</span>`;
+    const commBadge = item.is_web
+      ? `<span class="text-[9px] font-black text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">WEB</span>`
+      : isComm
+        ? `<span class="text-[9px] font-black text-violet-800 bg-violet-100 px-1.5 py-0.5 rounded border border-violet-200">💎 COMM ${commRate.toFixed(1)}%</span>`
+        : `<span class="text-[9px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">🏢 DOM</span>`;
     return `
       <div class="p-3.5 bg-white rounded-xl border ${isComm ? 'border-violet-200' : 'border-slate-200'} shadow-xs space-y-2.5">
         <div class="flex items-start justify-between gap-1.5">
@@ -1581,11 +1588,11 @@ async function saveShipmentCrudForm() {
     if (!res.ok || data.status !== 'success') throw new Error(data.detail || data.message || '저장 실패');
 
     document.getElementById('shipmentCrudModal')?.classList.add('hidden');
-    alert(editingShipmentId ? '✅ 웹 출하 내역이 수정되었습니다.' : '✅ 신규 출하 내역이 등록되었습니다. [📦 웹 수주 출하완료건] 뷰에서 확인됩니다.');
+    alert(editingShipmentId ? '✅ 출하 내역이 수정되었습니다.' : '✅ 신규 출하 내역이 등록되었습니다. (출하 원장 상단에 WEB 배지로 표시됩니다)');
 
-    activeShipmentMode = 'web';
+    activeShipmentMode = 'ledger';
     await fetchWebShipments();
-    lastFilteredShipments = cachedWebShipments;
+    lastFilteredShipments = getMergedLedgerShipments();
     shipmentPage = 1;
     renderShipmentsView('shipmentsSection');
   } catch (err) {
@@ -1610,7 +1617,7 @@ export async function deleteWebShipmentByIndex(idx) {
     if (!res.ok || data.status !== 'success') throw new Error(data.detail || '삭제 실패');
     alert('🗑️ 웹 출하 내역이 삭제되었습니다.');
     await fetchWebShipments();
-    lastFilteredShipments = cachedWebShipments;
+    lastFilteredShipments = getMergedLedgerShipments();
     renderShipmentsView('shipmentsSection');
   } catch (err) {
     alert('출하 삭제 오류: ' + err.message);
