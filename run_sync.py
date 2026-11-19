@@ -503,9 +503,9 @@ def sync_bundled_files(conn):
             json.dump(ph_data, f, ensure_ascii=False, default=float)
     print(f"[*] price_history.json: 매입 {len(incomes)}건, 매출 {len(sales)}건 저장 완료")
 
-    # 3. 출하 종합 원장 (shipped_info.json)
+    # 3. 출하 종합 원장 (shipped_info.json — Commission/Domestic 전체 포함)
     try:
-        shipped_rows = legacy_mssql.query_shipped_info(limit=3000)
+        shipped_rows = legacy_mssql.query_shipped_info(limit=4000)
         for p_dir in ["api/data", "data"]:
             with open(os.path.join(p_dir, "shipped_info.json"), "w", encoding="utf-8") as f:
                 json.dump(shipped_rows, f, ensure_ascii=False, default=float)

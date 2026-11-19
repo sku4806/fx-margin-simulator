@@ -558,6 +558,8 @@ def list_shipped_info(
     mfg: Optional[str] = None,
     supply: Optional[str] = None,
     query: Optional[str] = None,
+    biz_type: Optional[str] = None,
+    comm_status: Optional[str] = None,
     limit: int = 1500
 ):
     if not is_vercel:
@@ -569,6 +571,8 @@ def list_shipped_info(
                 mfg=mfg,
                 supply=supply,
                 search_query=query,
+                biz_type=biz_type,
+                comm_status=comm_status,
                 limit=limit
             )
             return {"status": "success", "total": len(results), "items": results}
@@ -579,6 +583,8 @@ def list_shipped_info(
     items = get_bundled_shipped_data()
     filtered = []
     q_lower = query.lower().strip() if query else None
+    bt_upper = biz_type.strip().upper() if biz_type and biz_type.strip().upper() != "ALL" else None
+    cs_upper = comm_status.strip().upper() if comm_status and comm_status.strip().upper() != "ALL" else None
 
     for item in items:
         # Date filter
@@ -588,16 +594,29 @@ def list_shipped_info(
         if end_date and s_date and s_date > end_date:
             continue
         # Mfg filter
-        if mfg and mfg.strip():
+        if mfg and mfg.strip() and mfg.strip().upper() != "ALL":
             if (item.get("maker") or "").strip().lower() != mfg.strip().lower():
                 continue
         # Supply filter
-        if supply and supply.strip():
+        if supply and supply.strip() and supply.strip().upper() != "ALL":
             if (item.get("supply") or "").strip().lower() != supply.strip().lower():
+                continue
+        # Biz Type filter (COMMISSION / DOMESTIC / DIRECT)
+        if bt_upper:
+            it_bt = (item.get("biz_type") or ("COMMISSION" if (item.get("comm_amt") or 0) > 0 else "DOMESTIC")).upper()
+            if it_bt != bt_upper:
+                continue
+        # Commission Status filter (UNPAID / PAID)
+        if cs_upper:
+            c_amt = float(item.get("comm_amt") or 0)
+            is_paid = bool((item.get("bank_dt") or "").strip() or (item.get("comm_dt") or "").strip())
+            if cs_upper == "UNPAID" and not (c_amt > 0 and not is_paid):
+                continue
+            if cs_upper == "PAID" and not (c_amt > 0 and is_paid):
                 continue
         # Search query
         if q_lower:
-            text = f"{item.get('part_no','')} {item.get('customer','')} {item.get('real_cust','')} {item.get('po_no','')} {item.get('app','')} {item.get('invoice_no','')}".lower()
+            text = f"{item.get('part_no','')} {item.get('customer','')} {item.get('real_cust','')} {item.get('po_no','')} {item.get('app','')} {item.get('invoice_no','')} {item.get('file_no','')} {item.get('sales_rep','')}".lower()
             if q_lower not in text:
                 continue
 
@@ -606,6 +625,73 @@ def list_shipped_info(
             break
 
     return {"status": "success", "total": len(filtered), "items": filtered, "source": "bundled_fallback" if is_vercel else "fallback"}
+
+@app.get("/api/unpaid/commissions")
+def list_unpaid_commissions(
+    status: str = "UNPAID",
+    maker: Optional[str] = None,
+    sales_rep: Optional[str] = None,
+    query: Optional[str] = None,
+    min_date: str = "2024-01-01",
+    limit: int = 1500
+):
+    """💎 미수 커미션(해외 공급사 수취 예정 커미션) 조회 API"""
+    if not is_vercel:
+        try:
+            import legacy_mssql
+            items = legacy_mssql.query_unpaid_commissions(
+                status=status,
+                maker=maker,
+                sales_rep=sales_rep,
+                search_query=query,
+                min_date=min_date,
+                limit=limit
+            )
+            return {"status": "success", "total": len(items), "items": items}
+        except Exception as e:
+            print(f"[WARN] Local MS-SQL unpaid commissions query failed: {e}")
+
+    # Fallback: shipped_info.json 필터링
+    items = get_bundled_shipped_data()
+    today = datetime.date.today()
+    q_lower = query.lower().strip() if query else None
+    st_upper = (status or "UNPAID").strip().upper()
+    out = []
+    for item in items:
+        c_amt = float(item.get("comm_amt") or 0)
+        if c_amt <= 0:
+            continue
+        s_date = item.get("ship_date") or ""
+        if min_date and s_date and s_date < min_date:
+            continue
+        is_paid = bool((item.get("bank_dt") or "").strip() or (item.get("comm_dt") or "").strip())
+        if st_upper == "UNPAID" and is_paid:
+            continue
+        if st_upper == "PAID" and not is_paid:
+            continue
+        if maker and maker.strip() and maker.strip().upper() != "ALL":
+            if (item.get("maker") or "").strip().lower() != maker.strip().lower():
+                continue
+        if sales_rep and sales_rep.strip() and sales_rep.strip().upper() != "ALL":
+            if (item.get("sales_rep") or "").strip().upper() != sales_rep.strip().upper():
+                continue
+        if q_lower:
+            text = f"{item.get('part_no','')} {item.get('customer','')} {item.get('real_cust','')} {item.get('po_no','')} {item.get('invoice_no','')} {item.get('maker','')} {item.get('sales_rep','')}".lower()
+            if q_lower not in text:
+                continue
+        overdue_days = 0
+        if len(s_date) >= 10:
+            try:
+                overdue_days = max(0, (today - datetime.date.fromisoformat(s_date[:10])).days)
+            except Exception:
+                pass
+        row = dict(item)
+        row["overdue_days"] = overdue_days
+        out.append(row)
+        if len(out) >= limit:
+            break
+
+    return {"status": "success", "total": len(out), "items": out, "source": "bundled_fallback" if is_vercel else "fallback"}
 
 @app.get("/api/shipped-info/filters")
 def list_shipped_info_filters():

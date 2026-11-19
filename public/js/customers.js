@@ -78,6 +78,9 @@ export async function openCustomerMasterModal(initialTab = 'customers') {
         <button type="button" data-master-tab="forwarders" class="cm-tab-btn px-3 py-2 text-xs font-bold border-b-2 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5">
           <span>🚚</span> 고객사 지정 포워더
         </button>
+        <button type="button" data-master-tab="commissions" class="cm-tab-btn px-3 py-2 text-xs font-bold border-b-2 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5">
+          <span>💎</span> 커미션 거래처
+        </button>
       </div>
 
       <!-- 신규/수정 입력 패널 (매출 고객사 전용, 기본 접힘) -->
@@ -169,6 +172,7 @@ function bindCustomerModalEvents() {
     if (activeMasterTab === 'customers') loadCustomersPage(1);
     else if (activeMasterTab === 'suppliers') loadSuppliersTab(custQuery);
     else if (activeMasterTab === 'forwarders') loadForwardersTab(custQuery);
+    else if (activeMasterTab === 'commissions') loadCommissionCustomersTab(custQuery);
   };
 
   btnSearch?.addEventListener('click', triggerSearch);
@@ -238,7 +242,101 @@ async function switchMasterTab(tab) {
     editor?.classList.add('hidden');
     pag?.classList.add('hidden');
     await loadForwardersTab(inp?.value.trim() || '');
+  } else if (tab === 'commissions') {
+    if (inp) inp.placeholder = '커미션 거래처명, 제조사(SMI/Giantec/ISSI), 영업담당자 검색...';
+    btnNew?.classList.add('hidden');
+    editor?.classList.add('hidden');
+    pag?.classList.add('hidden');
+    await loadCommissionCustomersTab(inp?.value.trim() || '');
   }
+}
+
+let commCustomerCache = null;
+
+async function loadCommissionCustomersTab(query = '') {
+  const body = document.getElementById('custMasterTableContainer');
+  const countEl = document.getElementById('custMasterTotalCount');
+  if (!body) return;
+
+  if (!commCustomerCache) {
+    body.innerHTML = `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ 커미션 거래처별 실적을 집계하는 중입니다...</div>`;
+    try {
+      const res = await fetch('/api/shipped-info?biz_type=COMMISSION&limit=2500');
+      const data = await res.json();
+      const rows = (data.status === 'success' && Array.isArray(data.items)) ? data.items : [];
+      const map = {};
+      rows.forEach(r => {
+        const name = (r.customer || '기타').trim();
+        if (!map[name]) {
+          map[name] = { customer: name, count: 0, ship_amt: 0, comm_amt: 0, unpaid_amt: 0, makers: new Set(), sales: new Set(), last_date: '' };
+        }
+        const slot = map[name];
+        slot.count += 1;
+        slot.ship_amt += Number(r.ship_amt) || 0;
+        const ca = Number(r.comm_amt) || 0;
+        slot.comm_amt += ca;
+        const isPaid = Boolean((r.bank_dt || '').trim() || (r.comm_dt || '').trim());
+        if (!isPaid) slot.unpaid_amt += ca;
+        if (r.maker) slot.makers.add(r.maker);
+        const sr = toEnglishSalesName(r.sales_rep || '');
+        if (sr) slot.sales.add(sr);
+        if (r.ship_date && r.ship_date > slot.last_date) slot.last_date = r.ship_date;
+      });
+      commCustomerCache = Object.values(map)
+        .map(v => ({ ...v, makers: Array.from(v.makers).join(', '), sales: Array.from(v.sales).join(', ') }))
+        .sort((a, b) => b.comm_amt - a.comm_amt);
+    } catch (e) {
+      console.error('커미션 거래처 집계 오류:', e);
+      commCustomerCache = [];
+    }
+  }
+
+  const q = query.trim().toLowerCase();
+  const list = q
+    ? commCustomerCache.filter(c => `${c.customer} ${c.makers} ${c.sales}`.toLowerCase().includes(q))
+    : commCustomerCache;
+
+  if (countEl) countEl.textContent = `커미션 거래처 ${list.length.toLocaleString()}개사`;
+
+  if (!list.length) {
+    body.innerHTML = `<div class="py-12 text-center text-slate-400 font-bold text-xs">조건에 일치하는 커미션 거래처가 없습니다.</div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs border-collapse">
+        <thead class="bg-violet-50 text-violet-950 font-bold text-[11px] border-b border-violet-200 sticky top-0 z-10">
+          <tr>
+            <th class="py-2 px-3 text-center w-10">#</th>
+            <th class="py-2 px-3 min-w-[180px]">고객사명</th>
+            <th class="py-2 px-3 min-w-[120px]">주요 제조사</th>
+            <th class="py-2 px-3 text-center w-20">거래건수</th>
+            <th class="py-2 px-3 text-right w-28">누적 선적액($)</th>
+            <th class="py-2 px-3 text-right w-28">💎 누적 커미션($)</th>
+            <th class="py-2 px-3 text-right w-28">미입금 잔액($)</th>
+            <th class="py-2 px-3 text-center w-24">최근 선적일</th>
+            <th class="py-2 px-3 text-center w-24">담당자</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
+          ${list.map((c, i) => `
+            <tr class="hover:bg-violet-50/30">
+              <td class="py-2 px-3 text-center font-mono text-slate-400">${i + 1}</td>
+              <td class="py-2 px-3 font-black text-slate-900">${escHtml(c.customer)}</td>
+              <td class="py-2 px-3 text-indigo-800 font-bold">${escHtml(c.makers || '-')}</td>
+              <td class="py-2 px-3 text-center font-mono font-bold text-slate-700">${c.count.toLocaleString()}건</td>
+              <td class="py-2 px-3 text-right font-mono text-slate-700">$${Math.round(c.ship_amt).toLocaleString()}</td>
+              <td class="py-2 px-3 text-right font-mono font-black text-violet-800">$${c.comm_amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td class="py-2 px-3 text-right font-mono font-bold ${c.unpaid_amt > 0 ? 'text-rose-600' : 'text-emerald-600'}">$${c.unpaid_amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td class="py-2 px-3 text-center font-mono text-slate-500">${escHtml(c.last_date || '-')}</td>
+              <td class="py-2 px-3 text-center font-bold text-indigo-900">${escHtml(c.sales || '-')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 // ========================================================

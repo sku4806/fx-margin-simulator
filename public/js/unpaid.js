@@ -14,6 +14,14 @@ let unpaidPage = 1;
 let unpaidPageSize = 50;
 let lastFilteredUnpaid = [];
 
+// 💎 Commission 미수금 서브탭 상태
+let activeUnpaidMode = 'domestic'; // 'domestic' | 'commission'
+let cachedCommUnpaid = null;
+let commUnpaidStatus = 'UNPAID';   // 'UNPAID' | 'PAID' | 'ALL'
+let commUnpaidMaker = 'ALL';
+let commUnpaidSales = 'ALL';
+let commUnpaidQuery = '';
+
 const AGING_COLOR_MAP = {
   'upcoming': 0,
   'overdue_1_29': 1,
@@ -246,18 +254,30 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
           </div>
 
           <div class="flex items-center gap-2 text-xs w-full sm:w-auto justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-indigo-900/60">
-            ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+            ${(activeUnpaidMode === 'domestic' && typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
               <button type="button" onclick="window.openUnpaidCrudModal && window.openUnpaidCrudModal(null)" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer">
                 <span>➕</span> 신규 미수금 등록
               </button>
             ` : ''}
             <!-- 엑셀 내보내기 -->
-            <button id="btnUnpaidExcelExport" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer">
+            <button id="${activeUnpaidMode === 'commission' ? 'btnCommUnpaidExcelExport' : 'btnUnpaidExcelExport'}" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer">
               <span>📥</span> Excel 다운로드
             </button>
           </div>
         </div>
       </div>
+
+      <!-- 1-2. Domestic vs Commission 미수금 서브탭 스위처 -->
+      <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit">
+        <button type="button" onclick="window.switchUnpaidMode && window.switchUnpaidMode('domestic')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeUnpaidMode === 'domestic' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+          🏢 Domestic 미수금 <span class="opacity-80 text-[10px]">(국내 외상)</span>
+        </button>
+        <button type="button" onclick="window.switchUnpaidMode && window.switchUnpaidMode('commission')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeUnpaidMode === 'commission' ? 'bg-violet-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+          💎 Commission 미수금 <span class="opacity-80 text-[10px]">(해외 커미션 USD)</span>
+        </button>
+      </div>
+
+      ${activeUnpaidMode === 'commission' ? renderCommissionUnpaidBody() : `
 
       <!-- 2. 상단 4대 핵심 Grand KPI 카드 -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
@@ -415,15 +435,264 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
 
       <!-- 📄 미수금 페이지네이션 컨트롤러 -->
       <div id="unpaidPagination" class="flex flex-wrap items-center justify-between gap-2 pt-1 px-1 text-xs select-none"></div>
-
+      `}
     </div>
   `;
+
+  if (activeUnpaidMode === 'commission') {
+    bindCommUnpaidEvents();
+    if (cachedCommUnpaid === null) {
+      fetchCommissionUnpaid().then(() => renderUnpaidView(containerId));
+    }
+    return;
+  }
 
   // 페이지 렌더링
   updateUnpaidCurrentPage();
 
   // 이벤트 바인딩
   bindUnpaidEvents();
+}
+
+// ========================================================
+// 💎 Commission 미수금 서브탭 (ShippingFile 커미션 미입금 채권)
+// ========================================================
+async function fetchCommissionUnpaid() {
+  try {
+    const params = new URLSearchParams({
+      status: commUnpaidStatus,
+      min_date: '2024-01-01',
+      limit: '1500'
+    });
+    const res = await fetch(`/api/unpaid/commissions?${params.toString()}`);
+    const data = await res.json();
+    cachedCommUnpaid = (data.status === 'success' && Array.isArray(data.items)) ? data.items : [];
+  } catch (err) {
+    console.error("Commission 미수금 조회 실패:", err);
+    cachedCommUnpaid = [];
+  }
+  return cachedCommUnpaid;
+}
+
+window.switchUnpaidMode = async function(mode) {
+  activeUnpaidMode = mode;
+  renderUnpaidView('unpaidSection');
+  if (mode === 'commission' && cachedCommUnpaid === null) {
+    await fetchCommissionUnpaid();
+    renderUnpaidView('unpaidSection');
+  }
+};
+
+function getFilteredCommUnpaid() {
+  const raw = cachedCommUnpaid || [];
+  const q = (commUnpaidQuery || '').trim().toLowerCase();
+  return raw.filter(it => {
+    if (commUnpaidMaker !== 'ALL' && (it.maker || 'OTHERS') !== commUnpaidMaker) return false;
+    if (commUnpaidSales !== 'ALL' && toEnglishSalesName(it.sales_rep || '') !== commUnpaidSales) return false;
+    if (q) {
+      const hay = `${it.customer || ''} ${it.real_cust || ''} ${it.part_no || ''} ${it.po_no || ''} ${it.invoice_no || ''} ${it.maker || ''} ${it.sales_rep || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderCommissionUnpaidBody() {
+  if (cachedCommUnpaid === null) {
+    return `<div class="py-16 text-center text-slate-400 font-bold text-xs">⏳ 해외 Commission 미수 내역을 불러오는 중입니다...</div>`;
+  }
+  const fx = (typeof window.getLiveFxRate === 'function' ? window.getLiveFxRate() : window.rawFxRate) || 1380;
+  const items = getFilteredCommUnpaid();
+  const totalCommUsd = items.reduce((s, r) => s + (Number(r.comm_amt) || 0), 0);
+  const totalShipUsd = items.reduce((s, r) => s + (Number(r.ship_amt) || 0), 0);
+  const avgRate = totalShipUsd > 0 ? (totalCommUsd / totalShipUsd * 100) : 0;
+  const over60Cnt = items.filter(r => (Number(r.overdue_days) || 0) >= 60 && r.comm_status === '미입금').length;
+
+  const makerTotals = {};
+  items.forEach(r => {
+    const m = r.maker || 'OTHERS';
+    makerTotals[m] = (makerTotals[m] || 0) + (Number(r.comm_amt) || 0);
+  });
+  const topMaker = Object.entries(makerTotals).sort((a, b) => b[1] - a[1])[0] || null;
+  const allMakers = Array.from(new Set((cachedCommUnpaid || []).map(r => r.maker || 'OTHERS'))).sort();
+  const allSales = Array.from(new Set((cachedCommUnpaid || []).map(r => toEnglishSalesName(r.sales_rep || '')).filter(Boolean))).sort();
+
+  const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  return `
+    <!-- 💎 Commission 미수금 4대 KPI -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+      <div class="bg-violet-50/70 border border-violet-200 rounded-xl p-3 shadow-xs">
+        <div class="text-[11px] font-bold text-violet-800 flex items-center justify-between">
+          <span>${commUnpaidStatus === 'PAID' ? '정산/입금 커미션' : '미수 커미션 총액 (USD)'}</span>
+          <span class="font-mono text-[10px]">💎 USD</span>
+        </div>
+        <div class="mt-1">
+          <div class="text-base sm:text-lg font-black text-violet-900 font-mono">$${totalCommUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="text-[10px] text-violet-700 font-medium mt-0.5">원화 환산 약 ₩${Math.round(totalCommUsd * fx).toLocaleString()}</div>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 shadow-xs">
+        <div class="text-[11px] font-bold text-slate-600 flex items-center justify-between">
+          <span>조회 건수 / 장기 미수</span>
+          <span class="text-xs">📋</span>
+        </div>
+        <div class="mt-1">
+          <div class="text-base sm:text-lg font-black text-slate-900 font-mono">${items.length.toLocaleString()}건</div>
+          <div class="text-[10px] ${over60Cnt > 0 ? 'text-rose-600 font-bold' : 'text-slate-500'} mt-0.5">60일 이상 경과 미입금: ${over60Cnt.toLocaleString()}건</div>
+        </div>
+      </div>
+
+      <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-3 shadow-xs">
+        <div class="text-[11px] font-bold text-amber-800 flex items-center justify-between">
+          <span>최대 미수 제조사</span>
+          <span class="text-xs">🏭</span>
+        </div>
+        <div class="mt-1">
+          <div class="text-sm sm:text-base font-black text-amber-950 truncate">${topMaker ? esc(topMaker[0]) : '-'}</div>
+          <div class="text-[10px] text-amber-700 font-mono font-bold mt-0.5">${topMaker ? '$' + topMaker[1].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</div>
+        </div>
+      </div>
+
+      <div class="bg-blue-50/60 border border-blue-200 rounded-xl p-3 shadow-xs">
+        <div class="text-[11px] font-bold text-blue-800 flex items-center justify-between">
+          <span>연동 선적액 / 평균 요율</span>
+          <span class="text-xs">📊</span>
+        </div>
+        <div class="mt-1">
+          <div class="text-base sm:text-lg font-black text-blue-900 font-mono">$${Math.round(totalShipUsd).toLocaleString()}</div>
+          <div class="text-[10px] text-blue-700 font-bold mt-0.5">평균 커미션율 ${avgRate.toFixed(2)}%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 필터 바 -->
+    <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex flex-wrap items-center gap-2 text-xs">
+      <select id="commUnpaidStatusSelect" class="bg-white border border-violet-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-violet-900 outline-none cursor-pointer">
+        <option value="UNPAID" ${commUnpaidStatus === 'UNPAID' ? 'selected' : ''}>⏳ 미입금 커미션만</option>
+        <option value="PAID" ${commUnpaidStatus === 'PAID' ? 'selected' : ''}>✅ 입금·정산완료</option>
+        <option value="ALL" ${commUnpaidStatus === 'ALL' ? 'selected' : ''}>💎 전체 커미션</option>
+      </select>
+      <select id="commUnpaidMakerSelect" class="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none cursor-pointer">
+        <option value="ALL" ${commUnpaidMaker === 'ALL' ? 'selected' : ''}>제조사 전체</option>
+        ${allMakers.map(m => `<option value="${esc(m)}" ${commUnpaidMaker === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}
+      </select>
+      <select id="commUnpaidSalesSelect" class="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none cursor-pointer">
+        <option value="ALL" ${commUnpaidSales === 'ALL' ? 'selected' : ''}>담당자 전체</option>
+        ${allSales.map(s => `<option value="${esc(s)}" ${commUnpaidSales === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+      </select>
+      <input type="text" id="commUnpaidSearchInput" value="${esc(commUnpaidQuery)}" placeholder="고객사, 품번, PO, 인보이스 검색..."
+             class="flex-1 min-w-[180px] bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-violet-500">
+    </div>
+
+    <!-- 모바일 카드 뷰 -->
+    <div class="block md:hidden space-y-2 max-h-[60vh] overflow-y-auto">
+      ${items.length === 0 ? `<div class="py-10 text-center text-slate-400 font-bold text-xs">조건에 일치하는 Commission 내역이 없습니다.</div>` : items.slice(0, 120).map(r => {
+        const days = Number(r.overdue_days) || 0;
+        const badgeCls = r.comm_status !== '미입금' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : (days >= 60 ? 'bg-rose-100 text-rose-800 border-rose-300' : (days >= 30 ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-violet-50 text-violet-700 border-violet-200'));
+        return `
+          <div class="bg-white border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs shadow-2xs">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="font-mono text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">${esc(r.ship_date)}</span>
+                <span class="text-[10px] font-bold bg-indigo-50 text-indigo-800 px-1.5 py-0.5 rounded">${esc(r.maker)}</span>
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeCls}">${r.comm_status === '미입금' ? `미입금 +${days}일` : esc(r.comm_status)}</span>
+              </div>
+              <span class="font-mono font-black text-violet-700 text-sm">$${(Number(r.comm_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div class="font-mono font-black text-slate-900 truncate">${esc(r.part_no)}</div>
+            <div class="flex items-center justify-between text-[11px] text-slate-600">
+              <span class="font-bold truncate">${esc(r.customer)}</span>
+              <span class="font-mono text-[10px] shrink-0">선적 $${(Number(r.ship_amt) || 0).toLocaleString()} (${(Number(r.comm_rate) || 0).toFixed(1)}%) · ${esc(toEnglishSalesName(r.sales_rep || ''))}</span>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+
+    <!-- 데스크톱 테이블 -->
+    <div class="hidden md:block overflow-x-auto max-h-[60vh] overflow-y-auto border border-slate-200 rounded-xl">
+      <table class="w-full text-left text-xs border-collapse">
+        <thead class="bg-violet-50 text-violet-950 font-bold text-[11px] border-b border-violet-200 sticky top-0 z-10">
+          <tr>
+            <th class="py-2 px-2 text-center w-9">#</th>
+            <th class="py-2 px-2 text-center w-22">선적일</th>
+            <th class="py-2 px-2 text-center w-20">경과/상태</th>
+            <th class="py-2 px-2 text-center w-24">제조사(MFG)</th>
+            <th class="py-2 px-2 text-left min-w-[140px]">고객사</th>
+            <th class="py-2 px-2 text-left min-w-[155px]">품번 (PartNo)</th>
+            <th class="py-2 px-2 text-left min-w-[120px]">PO / Invoice</th>
+            <th class="py-2 px-2 text-right w-24">선적액($)</th>
+            <th class="py-2 px-2 text-right w-16">요율</th>
+            <th class="py-2 px-2 text-right w-26">💎 커미션($)</th>
+            <th class="py-2 px-2 text-center w-20">담당자</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
+          ${items.length === 0 ? `<tr><td colspan="11" class="py-12 text-center text-slate-400 font-bold">조건에 일치하는 Commission 내역이 없습니다.</td></tr>` : items.slice(0, 300).map((r, i) => {
+            const days = Number(r.overdue_days) || 0;
+            const statusBadge = r.comm_status !== '미입금'
+              ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${esc(r.comm_status)}</span><div class="text-[9px] font-mono text-emerald-600">${esc(r.bank_dt || r.comm_dt)}</div>`
+              : `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold border ${days >= 60 ? 'bg-rose-100 text-rose-800 border-rose-300' : (days >= 30 ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-violet-50 text-violet-700 border-violet-200')}">+${days}일</span>`;
+            return `
+              <tr class="hover:bg-violet-50/30">
+                <td class="py-1.5 px-2 text-center font-mono text-slate-400">${i + 1}</td>
+                <td class="py-1.5 px-2 text-center font-mono text-slate-700 whitespace-nowrap">${esc(r.ship_date)}</td>
+                <td class="py-1.5 px-2 text-center whitespace-nowrap">${statusBadge}</td>
+                <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${esc(r.maker)}</td>
+                <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[175px]" title="${esc(r.customer)}">${esc(r.customer)}</td>
+                <td class="py-1.5 px-2 font-mono font-bold text-slate-900 truncate max-w-[175px]" title="${esc(r.part_no)}">${esc(r.part_no)}</td>
+                <td class="py-1.5 px-2 font-mono text-[10px] text-slate-600 truncate max-w-[140px]" title="${esc(r.po_no)} / ${esc(r.invoice_no)}">${esc(r.po_no || '-')}${r.invoice_no ? `<div class="text-[9px] text-slate-400">${esc(r.invoice_no)}</div>` : ''}</td>
+                <td class="py-1.5 px-2 text-right font-mono text-slate-700 whitespace-nowrap">$${(Number(r.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="py-1.5 px-2 text-right font-mono font-bold text-violet-700 whitespace-nowrap">${(Number(r.comm_rate) || 0).toFixed(2)}%</td>
+                <td class="py-1.5 px-2 text-right font-mono font-black text-violet-800 whitespace-nowrap">$${(Number(r.comm_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${esc(toEnglishSalesName(r.sales_rep || '')) || '-'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function bindCommUnpaidEvents() {
+  document.getElementById('commUnpaidStatusSelect')?.addEventListener('change', async (e) => {
+    commUnpaidStatus = e.target.value;
+    cachedCommUnpaid = null;
+    renderUnpaidView('unpaidSection');
+  });
+  document.getElementById('commUnpaidMakerSelect')?.addEventListener('change', (e) => {
+    commUnpaidMaker = e.target.value;
+    renderUnpaidView('unpaidSection');
+  });
+  document.getElementById('commUnpaidSalesSelect')?.addEventListener('change', (e) => {
+    commUnpaidSales = e.target.value;
+    renderUnpaidView('unpaidSection');
+  });
+  document.getElementById('commUnpaidSearchInput')?.addEventListener('input', debounce((e) => {
+    commUnpaidQuery = e.target.value;
+    renderUnpaidView('unpaidSection');
+  }, 200));
+  document.getElementById('btnCommUnpaidExcelExport')?.addEventListener('click', () => {
+    const items = getFilteredCommUnpaid();
+    if (!items.length) { alert('내보낼 Commission 미수 데이터가 없습니다.'); return; }
+    const headers = ['선적일', '경과일', '정산상태', '제조사', '고객사', '품번', 'PO번호', '인보이스', '선적액(USD)', '요율(%)', '커미션(USD)', '정산일', '입금일', '담당자'];
+    const rows = items.map(r => [
+      `"${r.ship_date || ''}"`, r.overdue_days || 0, `"${r.comm_status || ''}"`, `"${r.maker || ''}"`,
+      `"${(r.customer || '').replace(/"/g, '""')}"`, `"${(r.part_no || '').replace(/"/g, '""')}"`,
+      `"${(r.po_no || '').replace(/"/g, '""')}"`, `"${(r.invoice_no || '').replace(/"/g, '""')}"`,
+      (Number(r.ship_amt) || 0).toFixed(2), (Number(r.comm_rate) || 0).toFixed(2), (Number(r.comm_amt) || 0).toFixed(2),
+      `"${r.comm_dt || ''}"`, `"${r.bank_dt || ''}"`, `"${toEnglishSalesName(r.sales_rep || '')}"`
+    ]);
+    const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `BSK_Commission_미수금_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+  });
 }
 
 /**

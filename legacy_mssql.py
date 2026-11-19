@@ -905,6 +905,119 @@ def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dic
             slot["margin_rate"] = round((slot["margin"] / (slot["billing"] or 1.0)) * 100, 1)
             sales_reps.append(slot)
 
+        # 5. 💎 Commission(커미션) 실적 집계 (ShippingFile 기준, USD)
+        comm_year_start = f"{year}-01-01"
+        comm_year_end = f"{year}-12-31"
+        cur.execute("""
+            SELECT
+                CONVERT(VARCHAR(7), s.SHIPDT, 120) as ym,
+                COUNT(*) as cnt,
+                SUM(ISNULL(s.ShipAmt, 0)) as ship_amt,
+                SUM(ISNULL(s.CommAmt, 0)) as comm_amt,
+                SUM(CASE WHEN LTRIM(RTRIM(ISNULL(s.BANKDT, ''))) <> '' OR LTRIM(RTRIM(ISNULL(s.CommDT, ''))) <> '' THEN ISNULL(s.CommAmt, 0) ELSE 0 END) as paid_amt,
+                SUM(CASE WHEN LTRIM(RTRIM(ISNULL(s.BANKDT, ''))) = '' AND LTRIM(RTRIM(ISNULL(s.CommDT, ''))) = '' THEN 1 ELSE 0 END) as unpaid_cnt
+            FROM ShippingFile s
+            WHERE s.SHIPDT >= %s AND s.SHIPDT <= %s AND ISNULL(s.CommAmt, 0) > 0
+            GROUP BY CONVERT(VARCHAR(7), s.SHIPDT, 120)
+            ORDER BY ym ASC
+        """, (comm_year_start, comm_year_end))
+        comm_monthly = []
+        for r in cur.fetchall():
+            c_amt = float(r["comm_amt"] or 0.0)
+            p_amt = float(r["paid_amt"] or 0.0)
+            comm_monthly.append({
+                "month": clean_val(r["ym"]),
+                "count": int(r["cnt"] or 0),
+                "ship_amt": round(float(r["ship_amt"] or 0.0), 2),
+                "comm_amt": round(c_amt, 2),
+                "paid_amt": round(p_amt, 2),
+                "unpaid_amt": round(max(0.0, c_amt - p_amt), 2),
+                "unpaid_count": int(r["unpaid_cnt"] or 0)
+            })
+
+        cur.execute("""
+            SELECT
+                LTRIM(RTRIM(ISNULL(m.Mfg, ''))) as maker,
+                LTRIM(RTRIM(ISNULL(m.Sales, ''))) as sales_rep,
+                COALESCE(c.CNAME, c.KNAME, m.RealCust, '기타') as customer,
+                ISNULL(s.ShipAmt, 0) as ship_amt,
+                ISNULL(s.CommAmt, 0) as comm_amt,
+                ISNULL(s.Rate, 0) as comm_rate,
+                CASE WHEN LTRIM(RTRIM(ISNULL(s.BANKDT, ''))) <> '' OR LTRIM(RTRIM(ISNULL(s.CommDT, ''))) <> '' THEN 1 ELSE 0 END as is_paid
+            FROM ShippingFile s
+            LEFT JOIN CustomerFile c ON s.Custid = c.CID
+            LEFT JOIN MainSubFile sub ON s.Idxsub = sub.IDX
+            LEFT JOIN MainFile m ON sub.Midx = m.IDX
+            WHERE s.SHIPDT >= %s AND s.SHIPDT <= %s AND ISNULL(s.CommAmt, 0) > 0
+        """, (filter_start, filter_end))
+        comm_rows = cur.fetchall()
+
+        comm_total_amt = 0.0
+        comm_paid_amt = 0.0
+        comm_unpaid_amt = 0.0
+        comm_ship_amt = 0.0
+        comm_unpaid_cnt = 0
+        maker_comm_map: Dict[str, Dict[str, Any]] = {}
+        sales_comm_map: Dict[str, Dict[str, Any]] = {}
+        cust_comm_map: Dict[str, Dict[str, Any]] = {}
+
+        for r in comm_rows:
+            c_amt = float(r["comm_amt"] or 0.0)
+            s_amt = float(r["ship_amt"] or 0.0)
+            is_paid = bool(r["is_paid"])
+            comm_total_amt += c_amt
+            comm_ship_amt += s_amt
+            if is_paid:
+                comm_paid_amt += c_amt
+            else:
+                comm_unpaid_amt += c_amt
+                comm_unpaid_cnt += 1
+
+            mk = clean_val(r["maker"]) or "OTHERS"
+            mslot = maker_comm_map.setdefault(mk, {"maker": mk, "comm_amt": 0.0, "ship_amt": 0.0, "unpaid_amt": 0.0, "count": 0})
+            mslot["comm_amt"] += c_amt
+            mslot["ship_amt"] += s_amt
+            if not is_paid:
+                mslot["unpaid_amt"] += c_amt
+            mslot["count"] += 1
+
+            sr = normalize_sales_rep(r["sales_rep"]) or "BSK"
+            sslot = sales_comm_map.setdefault(sr, {"sales_rep": sr, "comm_amt": 0.0, "ship_amt": 0.0, "unpaid_amt": 0.0, "count": 0})
+            sslot["comm_amt"] += c_amt
+            sslot["ship_amt"] += s_amt
+            if not is_paid:
+                sslot["unpaid_amt"] += c_amt
+            sslot["count"] += 1
+
+            cu = clean_val(r["customer"]) or "기타"
+            cslot = cust_comm_map.setdefault(cu, {"customer": cu, "comm_amt": 0.0, "ship_amt": 0.0, "count": 0})
+            cslot["comm_amt"] += c_amt
+            cslot["ship_amt"] += s_amt
+            cslot["count"] += 1
+
+        commission_summary = {
+            "total_comm_amt": round(comm_total_amt, 2),
+            "paid_comm_amt": round(comm_paid_amt, 2),
+            "unpaid_comm_amt": round(comm_unpaid_amt, 2),
+            "total_ship_amt": round(comm_ship_amt, 2),
+            "comm_count": len(comm_rows),
+            "unpaid_count": comm_unpaid_cnt,
+            "avg_rate": round((comm_total_amt / comm_ship_amt * 100), 2) if comm_ship_amt > 0 else 0.0,
+            "monthly": comm_monthly,
+            "by_maker": sorted(
+                [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in m.items()} for m in maker_comm_map.values()],
+                key=lambda x: x["comm_amt"], reverse=True
+            )[:12],
+            "by_sales": sorted(
+                [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in s.items()} for s in sales_comm_map.values()],
+                key=lambda x: x["comm_amt"], reverse=True
+            ),
+            "by_customer": sorted(
+                [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in c.items()} for c in cust_comm_map.values()],
+                key=lambda x: x["comm_amt"], reverse=True
+            )[:10]
+        }
+
         conn.close()
 
         # 선택된 기간의 실적 수치 계산
@@ -949,7 +1062,8 @@ def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dic
             "monthly": monthly_data,
             "top_customers": top_customers,
             "top_makers": top_makers,
-            "sales_reps": sales_reps
+            "sales_reps": sales_reps,
+            "commission": commission_summary
         }
     except Exception as e:
         print(f"[ERROR] get_sales_analytics 에러: {e}")
@@ -1513,11 +1627,13 @@ def query_shipped_info(
     mfg: Optional[str] = None,
     supply: Optional[str] = None,
     search_query: Optional[str] = None,
+    biz_type: Optional[str] = None,
+    comm_status: Optional[str] = None,
     limit: int = 1000
 ) -> List[Dict[str, Any]]:
     """
     세일즈 마스터 [Sales Daily Report - FrmShippedInfo] 공식 출하 원장 조회
-    ShippingFile + CustomerFile + MainSubFile + MainFile 조인
+    ShippingFile + CustomerFile + MainSubFile + MainFile 조인 (Commission/Domestic 구분 포함)
     """
     conditions = []
     params = []
@@ -1528,12 +1644,26 @@ def query_shipped_info(
     if end_date:
         conditions.append("s.SHIPDT <= %s")
         params.append(f"{end_date} 23:59:59")
-    if mfg and mfg.strip():
+    if mfg and mfg.strip() and mfg.strip().upper() != 'ALL':
         conditions.append("LTRIM(RTRIM(m.Mfg)) = %s")
         params.append(mfg.strip())
-    if supply and supply.strip():
+    if supply and supply.strip() and supply.strip().upper() != 'ALL':
         conditions.append("LTRIM(RTRIM(m.SUPPLY)) = %s")
         params.append(supply.strip())
+    if biz_type and biz_type.strip().upper() != 'ALL':
+        bt = biz_type.strip().upper()
+        if bt == 'COMMISSION':
+            conditions.append("ISNULL(s.CommAmt, 0) > 0")
+        elif bt == 'DOMESTIC':
+            conditions.append("(ISNULL(s.CommAmt, 0) = 0 AND LTRIM(RTRIM(ISNULL(s.Result, ''))) = 'IN')")
+        elif bt == 'DIRECT':
+            conditions.append("(ISNULL(s.CommAmt, 0) = 0 AND LTRIM(RTRIM(ISNULL(s.Result, ''))) <> 'IN')")
+    if comm_status and comm_status.strip().upper() != 'ALL':
+        cs = comm_status.strip().upper()
+        if cs == 'UNPAID':
+            conditions.append("(ISNULL(s.CommAmt, 0) > 0 AND LTRIM(RTRIM(ISNULL(s.BANKDT, ''))) = '' AND LTRIM(RTRIM(ISNULL(s.CommDT, ''))) = '')")
+        elif cs == 'PAID':
+            conditions.append("(ISNULL(s.CommAmt, 0) > 0 AND (LTRIM(RTRIM(ISNULL(s.BANKDT, ''))) <> '' OR LTRIM(RTRIM(ISNULL(s.CommDT, ''))) <> ''))")
     if search_query and search_query.strip():
         term = f"%{search_query.strip()}%"
         conditions.append("""(
@@ -1545,9 +1675,11 @@ def query_shipped_info(
             m.RealCust LIKE %s OR 
             sub.APP LIKE %s OR 
             m.App LIKE %s OR
-            s.INVOICENO LIKE %s
+            s.INVOICENO LIKE %s OR
+            m.FileNo LIKE %s OR
+            m.Sales LIKE %s
         )""")
-        params.extend([term, term, term, term, term, term, term, term, term])
+        params.extend([term] * 11)
 
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -1560,6 +1692,7 @@ def query_shipped_info(
             s.PartNo as part_no,
             CONVERT(VARCHAR, s.SHIPDT, 23) as ship_date,
             s.SHIPQTY as ship_qty,
+            s.Slup as sl_up,
             s.Netup as net_up,
             s.ShipAmt as ship_amt,
             COALESCE(sub.APP, m.App, '') as app,
@@ -1567,7 +1700,14 @@ def query_shipped_info(
             m.SUPPLY as supply,
             s.INVOICENO as invoice_no,
             s.AWBNO as awb_no,
-            s.Lotno as lot_no
+            s.Lotno as lot_no,
+            LTRIM(RTRIM(ISNULL(s.Result, ''))) as ship_result,
+            ISNULL(s.Rate, 0) as comm_rate,
+            ISNULL(s.CommAmt, 0) as comm_amt,
+            LTRIM(RTRIM(ISNULL(s.CommDT, ''))) as comm_dt,
+            LTRIM(RTRIM(ISNULL(s.BANKDT, ''))) as bank_dt,
+            LTRIM(RTRIM(ISNULL(m.Sales, ''))) as sales_rep,
+            LTRIM(RTRIM(ISNULL(m.FileNo, ''))) as file_no
         FROM ShippingFile s
         LEFT JOIN CustomerFile c ON s.Custid = c.CID
         LEFT JOIN MainSubFile sub ON s.Idxsub = sub.IDX
@@ -1585,6 +1725,21 @@ def query_shipped_info(
 
         results = []
         for r in rows:
+            comm_amt = round(float(r["comm_amt"] or 0.0), 4)
+            comm_rate = round(float(r["comm_rate"] or 0.0), 2)
+            ship_res = clean_val(r["ship_result"]).upper()
+            comm_dt = clean_val(r["comm_dt"])
+            bank_dt = clean_val(r["bank_dt"])
+            if comm_amt > 0:
+                biz_t = "COMMISSION"
+                c_status = "입금완료" if bank_dt else ("정산완료" if comm_dt else "미입금")
+            elif ship_res == "IN":
+                biz_t = "DOMESTIC"
+                c_status = ""
+            else:
+                biz_t = "DIRECT"
+                c_status = ""
+
             results.append({
                 "idx": r["idx"],
                 "customer": clean_val(r["customer"]),
@@ -1593,19 +1748,68 @@ def query_shipped_info(
                 "part_no": clean_val(r["part_no"]),
                 "ship_date": clean_val(r["ship_date"]),
                 "ship_qty": int(r["ship_qty"] or 0),
+                "sl_up": float(r["sl_up"] or 0.0),
                 "net_up": float(r["net_up"] or 0.0),
-                "ship_amt": float(r["ship_amt"] or 0.0),
+                "ship_amt": round(float(r["ship_amt"] or 0.0), 2),
                 "app": clean_val(r["app"]),
                 "maker": clean_val(r["maker"]) or "OTHERS",
                 "supply": clean_val(r["supply"]) or "OTHERS",
                 "invoice_no": clean_val(r["invoice_no"]),
                 "awb_no": clean_val(r["awb_no"]),
-                "lot_no": clean_val(r["lot_no"])
+                "lot_no": clean_val(r["lot_no"]),
+                "biz_type": biz_t,
+                "ship_result": ship_res,
+                "comm_rate": comm_rate,
+                "comm_amt": round(comm_amt, 2),
+                "comm_dt": comm_dt,
+                "bank_dt": bank_dt,
+                "comm_status": c_status,
+                "sales_rep": normalize_sales_rep(r["sales_rep"]),
+                "file_no": clean_val(r["file_no"])
             })
         return results
     except Exception as e:
         print(f"[ERROR] query_shipped_info 에러: {e}")
         return []
+
+
+def query_unpaid_commissions(
+    status: str = "UNPAID",
+    maker: Optional[str] = None,
+    sales_rep: Optional[str] = None,
+    search_query: Optional[str] = None,
+    min_date: str = "2024-01-01",
+    limit: int = 1000
+) -> List[Dict[str, Any]]:
+    """
+    💎 미수 커미션(해외 공급사/제조사로부터 수취 예정 커미션) 전용 조회
+    ShippingFile에서 CommAmt > 0 이며 미입금/정산대기 건 조회
+    """
+    rows = query_shipped_info(
+        start_date=min_date,
+        mfg=maker if (maker and maker != "ALL") else None,
+        search_query=search_query,
+        biz_type="COMMISSION",
+        comm_status=status if (status and status.upper() != "ALL") else None,
+        limit=limit
+    )
+    today = datetime.date.today()
+    out = []
+    for r in rows:
+        if sales_rep and sales_rep != "ALL":
+            if (r.get("sales_rep") or "").upper() != sales_rep.strip().upper():
+                continue
+        sd = r.get("ship_date") or ""
+        overdue_days = 0
+        if len(sd) >= 10:
+            try:
+                d = datetime.date.fromisoformat(sd[:10])
+                overdue_days = max(0, (today - d).days)
+            except Exception:
+                overdue_days = 0
+        r["overdue_days"] = overdue_days
+        out.append(r)
+    return out
 
 
 # ========================================================

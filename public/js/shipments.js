@@ -32,6 +32,8 @@ let currentStartDate = initDates.start;
 let currentEndDate = initDates.end;
 let currentMfg = '';
 let currentSupply = '';
+let currentBizType = '';     // '' | 'COMMISSION' | 'DOMESTIC'
+let currentCommStatus = '';  // '' | 'UNPAID' | 'PAID'
 let currentSearchQuery = '';
 let currentFxRate = 1350;
 
@@ -124,12 +126,16 @@ export async function fetchLedgerShipments(params = {}) {
   const end = params.endDate !== undefined ? params.endDate : currentEndDate;
   const mfg = params.mfg !== undefined ? params.mfg : currentMfg;
   const supply = params.supply !== undefined ? params.supply : currentSupply;
+  const bizType = params.bizType !== undefined ? params.bizType : currentBizType;
+  const commStatus = params.commStatus !== undefined ? params.commStatus : currentCommStatus;
   const query = params.query !== undefined ? params.query : currentSearchQuery;
 
   currentStartDate = start;
   currentEndDate = end;
   currentMfg = mfg;
   currentSupply = supply;
+  currentBizType = bizType;
+  currentCommStatus = commStatus;
   currentSearchQuery = query;
 
   const urlParams = new URLSearchParams();
@@ -137,6 +143,8 @@ export async function fetchLedgerShipments(params = {}) {
   if (end) urlParams.append('end_date', end);
   if (mfg) urlParams.append('mfg', mfg);
   if (supply) urlParams.append('supply', supply);
+  if (bizType) urlParams.append('biz_type', bizType);
+  if (commStatus) urlParams.append('comm_status', commStatus);
   if (query) urlParams.append('query', query);
   urlParams.append('limit', '2000');
 
@@ -246,7 +254,7 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
   lastFilteredShipments = activeItems;
   shipmentPage = 1;
 
-  // 전체 통계 계산
+  // 전체 통계 계산 (Commission 합계 및 미입금 커미션 포함)
   const totalCount = lastFilteredShipments.length;
   const totalQty = lastFilteredShipments.reduce((sum, item) => sum + (Number(item.ship_qty) || 0), 0);
   const totalUsd = lastFilteredShipments.reduce((sum, item) => sum + (Number(item.ship_amt) || 0), 0);
@@ -254,6 +262,13 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
     if (item.total_krw) return sum + item.total_krw;
     return sum + Math.round((Number(item.ship_amt) || 0) * currentFxRate);
   }, 0);
+  const totalCommUsd = lastFilteredShipments.reduce((sum, item) => sum + (Number(item.comm_amt) || 0), 0);
+  const unpaidCommUsd = lastFilteredShipments.reduce((sum, item) => {
+    const c = Number(item.comm_amt) || 0;
+    const isPaid = Boolean((item.bank_dt || '').trim() || (item.comm_dt || '').trim());
+    return sum + (c > 0 && !isPaid ? c : 0);
+  }, 0);
+  const commCount = lastFilteredShipments.filter(item => (Number(item.comm_amt) || 0) > 0).length;
 
   // Maker 드롭다운 옵션 HTML
   const makerOptionsHtml = `
@@ -338,18 +353,34 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
             <button type="button" onclick="window.setShipmentDatePreset('ALL')" class="shrink-0 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 text-[11px] sm:text-[10px] font-bold rounded-lg border border-slate-200 transition cursor-pointer whitespace-nowrap">전체</button>
           </div>
 
-          <!-- MFG / SUPPLY 필터 (모바일 2열 균등 분할) -->
-          <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+          <!-- MFG / SUPPLY / 거래구분(Commission/Domestic) / 커미션 정산상태 필터 -->
+          <div class="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 w-full sm:w-auto">
             <div class="flex items-center gap-1 min-w-0">
               <span class="font-bold text-slate-700 text-[10px] sm:text-[11px] shrink-0">MFG</span>
-              <select id="shipmentMfgSelect" class="w-full min-w-0 sm:max-w-[140px] bg-white border border-slate-300 rounded-lg px-2 py-1.5 sm:py-1 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+              <select id="shipmentMfgSelect" class="w-full min-w-0 sm:max-w-[130px] bg-white border border-slate-300 rounded-lg px-2 py-1.5 sm:py-1 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
                 ${makerOptionsHtml}
               </select>
             </div>
             <div class="flex items-center gap-1 min-w-0">
               <span class="font-bold text-slate-700 text-[10px] sm:text-[11px] shrink-0">SUP</span>
-              <select id="shipmentSupplySelect" class="w-full min-w-0 sm:max-w-[140px] bg-white border border-slate-300 rounded-lg px-2 py-1.5 sm:py-1 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+              <select id="shipmentSupplySelect" class="w-full min-w-0 sm:max-w-[130px] bg-white border border-slate-300 rounded-lg px-2 py-1.5 sm:py-1 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
                 ${supplyOptionsHtml}
+              </select>
+            </div>
+            <div class="flex items-center gap-1 min-w-0">
+              <span class="font-bold text-violet-700 text-[10px] sm:text-[11px] shrink-0">구분</span>
+              <select id="shipmentBizTypeSelect" class="w-full min-w-0 sm:max-w-[145px] bg-white border border-violet-300 rounded-lg px-2 py-1.5 sm:py-1 text-xs font-bold text-violet-900 outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer">
+                <option value="" ${currentBizType === '' ? 'selected' : ''}>전체 (Comm+Dom)</option>
+                <option value="COMMISSION" ${currentBizType === 'COMMISSION' ? 'selected' : ''}>💎 Commission</option>
+                <option value="DOMESTIC" ${currentBizType === 'DOMESTIC' ? 'selected' : ''}>🏢 Domestic</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-1 min-w-0">
+              <span class="font-bold text-violet-700 text-[10px] sm:text-[11px] shrink-0">정산</span>
+              <select id="shipmentCommStatusSelect" class="w-full min-w-0 sm:max-w-[130px] bg-white border border-violet-300 rounded-lg px-2 py-1.5 sm:py-1 text-xs font-bold text-violet-900 outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer">
+                <option value="" ${currentCommStatus === '' ? 'selected' : ''}>정산 전체</option>
+                <option value="UNPAID" ${currentCommStatus === 'UNPAID' ? 'selected' : ''}>⏳ 커미션 미입금</option>
+                <option value="PAID" ${currentCommStatus === 'PAID' ? 'selected' : ''}>✅ 커미션 정산완료</option>
               </select>
             </div>
           </div>
@@ -373,18 +404,22 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
         </div>
       </div>
 
-      <!-- 요약 바 (Grand Summaries — 모바일 3단 그리드 / 데스크톱 1열) -->
+      <!-- 요약 바 (Grand Summaries + Commission KPI) -->
       <div class="bg-amber-50/90 border border-amber-200 rounded-xl p-3 text-xs font-mono font-bold text-slate-800 flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2.5 shadow-xs">
         <div class="flex items-center justify-between sm:justify-start gap-2">
           <span class="text-amber-900 font-sans font-black text-xs sm:text-sm">🚚 SHIPPED INFO GRAND SUMMARIES</span>
-          <span id="shipmentSummaryCount" class="text-slate-600 font-sans font-bold text-xs bg-white/70 px-2 py-0.5 rounded-full border border-amber-200">${totalCount.toLocaleString()}건</span>
+          <span id="shipmentSummaryCount" class="text-slate-600 font-sans font-bold text-xs bg-white/70 px-2 py-0.5 rounded-full border border-amber-200">${totalCount.toLocaleString()}건 (Comm ${commCount.toLocaleString()})</span>
         </div>
-        <div class="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center gap-1.5 sm:gap-4 text-xs font-mono">
+        <div class="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center gap-1.5 sm:gap-3.5 text-xs font-mono">
           <div class="flex justify-between sm:block"><span>총 출하수량:</span> <span id="shipmentSumQty" class="text-indigo-900 font-black text-sm">${totalQty.toLocaleString()} EA</span></div>
           <span class="text-slate-300 hidden sm:inline">|</span>
           <div class="flex justify-between sm:block"><span>총 외화금액:</span> <span id="shipmentSumUsd" class="text-blue-700 font-black text-sm">$${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
           <span class="text-slate-300 hidden sm:inline">|</span>
-          <div class="flex justify-between sm:block"><span>원화 환산(@${currentFxRate.toLocaleString()}):</span> <span id="shipmentSumKrw" class="text-rose-700 font-black text-sm">₩${Math.round(totalKrw).toLocaleString()}</span></div>
+          <div class="flex justify-between sm:block"><span class="text-violet-800">💎 커미션:</span> <span id="shipmentSumComm" class="text-violet-700 font-black text-sm">$${totalCommUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+          <span class="text-slate-300 hidden sm:inline">|</span>
+          <div class="flex justify-between sm:block"><span class="text-rose-700">미입금 커미션:</span> <span id="shipmentSumUnpaidComm" class="text-rose-600 font-black text-sm">$${unpaidCommUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+          <span class="text-slate-300 hidden sm:inline">|</span>
+          <div class="flex justify-between sm:block"><span>원화 환산(@${currentFxRate.toLocaleString()}):</span> <span id="shipmentSumKrw" class="text-slate-700 font-black text-sm">₩${Math.round(totalKrw).toLocaleString()}</span></div>
         </div>
       </div>
 
@@ -399,15 +434,18 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
           <thead class="bg-slate-100/95 backdrop-blur-sm text-slate-700 border-b uppercase font-bold sticky top-0 z-10 shadow-xs text-[11px]">
             <tr>
               <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-8">#</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">구분</th>
               <th class="py-2.5 px-2 text-left min-w-[115px]">CUSTOMER</th>
-              <th class="py-2.5 px-2 text-left min-w-[105px]">REALCUST</th>
-              <th class="py-2.5 px-2 text-left min-w-[120px]">PONO</th>
-              <th class="py-2.5 px-2 text-left min-w-[155px]">PARTNO</th>
+              <th class="py-2.5 px-2 text-left min-w-[100px]">REALCUST</th>
+              <th class="py-2.5 px-2 text-left min-w-[115px]">PONO</th>
+              <th class="py-2.5 px-2 text-left min-w-[150px]">PARTNO</th>
               <th class="py-2.5 px-2 text-center whitespace-nowrap w-22">SHIP_DATE</th>
               <th class="py-2.5 px-2 text-right whitespace-nowrap w-20">SHIP_QTY</th>
               <th class="py-2.5 px-2 text-right whitespace-nowrap w-20">NET_UP($)</th>
               <th class="py-2.5 px-2 text-right whitespace-nowrap w-24">SHIP_AMT($)</th>
-              <th class="py-2.5 px-2 text-left min-w-[120px]">APP (용도)</th>
+              <th class="py-2.5 px-2 text-right whitespace-nowrap w-24 text-violet-800">💎 COMM($/%)</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-20 text-violet-800">정산상태</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">담당자</th>
               <th class="py-2.5 px-2 text-center whitespace-nowrap w-28 no-print">문서</th>
             </tr>
           </thead>
@@ -729,19 +767,24 @@ function bindShipmentToolbarEvents() {
     if (e.key === 'Enter') runSubSearch();
   });
 
+  const selectBizType = document.getElementById("shipmentBizTypeSelect");
+  const selectCommStatus = document.getElementById("shipmentCommStatusSelect");
+
   // 검색 버튼 클릭
   btnSearch?.addEventListener("click", async () => {
     const startDate = inputStart?.value || '';
     const endDate = inputEnd?.value || '';
     const mfg = selectMfg?.value || '';
     const supply = selectSupply?.value || '';
+    const bizType = selectBizType?.value || '';
+    const commStatus = selectCommStatus?.value || '';
     const query = liveFilter?.value || '';
 
     btnSearch.disabled = true;
     btnSearch.innerHTML = `<span>⏳</span> 조회중...`;
 
     if (activeShipmentMode === 'ledger') {
-      await fetchLedgerShipments({ startDate, endDate, mfg, supply, query });
+      await fetchLedgerShipments({ startDate, endDate, mfg, supply, bizType, commStatus, query });
     } else {
       await fetchWebShipments();
     }
@@ -751,6 +794,8 @@ function bindShipmentToolbarEvents() {
   // 드롭다운 변경 시 즉시 검색
   selectMfg?.addEventListener("change", () => btnSearch?.click());
   selectSupply?.addEventListener("change", () => btnSearch?.click());
+  selectBizType?.addEventListener("change", () => btnSearch?.click());
+  selectCommStatus?.addEventListener("change", () => btnSearch?.click());
 
   // Enter 키 검색
   inputStart?.addEventListener("keydown", (e) => { if (e.key === "Enter") btnSearch?.click(); });
@@ -840,25 +885,36 @@ function updateShipmentCurrentPage() {
     if (cardContainer) cardContainer.innerHTML = '';
   }
 
-  // 단일 순회(O(N))로 합계 지표 계산
+  // 단일 순회(O(N))로 합계 지표 계산 (Commission 포함)
   const totalCount = lastFilteredShipments.length;
-  let totalQty = 0, totalUsd = 0, totalKrw = 0;
+  let totalQty = 0, totalUsd = 0, totalKrw = 0, totalCommUsd = 0, unpaidCommUsd = 0, commCount = 0;
   for (let i = 0; i < totalCount; i++) {
     const item = lastFilteredShipments[i];
     const amt = Number(item.ship_amt) || 0;
+    const cAmt = Number(item.comm_amt) || 0;
     totalQty += Number(item.ship_qty) || 0;
     totalUsd += amt;
     totalKrw += item.total_krw ? item.total_krw : Math.round(amt * currentFxRate);
+    if (cAmt > 0) {
+      commCount++;
+      totalCommUsd += cAmt;
+      const isPaid = Boolean((item.bank_dt || '').trim() || (item.comm_dt || '').trim());
+      if (!isPaid) unpaidCommUsd += cAmt;
+    }
   }
 
   const elCount = document.getElementById("shipmentSummaryCount");
   const elQty = document.getElementById("shipmentSumQty");
   const elUsd = document.getElementById("shipmentSumUsd");
+  const elComm = document.getElementById("shipmentSumComm");
+  const elUnpaidComm = document.getElementById("shipmentSumUnpaidComm");
   const elKrw = document.getElementById("shipmentSumKrw");
 
-  if (elCount) elCount.innerText = `(${totalCount.toLocaleString()}건)`;
-  if (elQty) elQty.innerText = totalQty.toLocaleString();
+  if (elCount) elCount.innerText = `${totalCount.toLocaleString()}건 (Comm ${commCount.toLocaleString()})`;
+  if (elQty) elQty.innerText = `${totalQty.toLocaleString()} EA`;
   if (elUsd) elUsd.innerText = `$${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (elComm) elComm.innerText = `$${totalCommUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (elUnpaidComm) elUnpaidComm.innerText = `$${unpaidCommUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   if (elKrw) elKrw.innerText = `₩${Math.round(totalKrw).toLocaleString()}`;
 
   renderShipmentPaginationUI();
@@ -871,7 +927,7 @@ function generateTableRows(items) {
   if (!items || items.length === 0) {
     return `
       <tr>
-        <td colspan="11" class="py-12 text-center text-slate-400 font-bold bg-white">
+        <td colspan="14" class="py-12 text-center text-slate-400 font-bold bg-white">
           <div class="text-3xl mb-2">🚚</div>
           <div>지정된 기간 및 조건에 해당하는 출하 원장 내역이 없습니다.</div>
         </td>
@@ -884,31 +940,52 @@ function generateTableRows(items) {
   return items.map((item, idx) => {
     const rowNum = startIdx + idx + 1;
     const cleanPart = (item.part_no || '').trim();
-    const hasApp = Boolean(item.app && item.app.trim() && item.app !== '-');
+    const commAmt = Number(item.comm_amt) || 0;
+    const commRate = Number(item.comm_rate) || 0;
+    const isComm = commAmt > 0 || item.biz_type === 'COMMISSION';
+    const isDom = !isComm && (item.biz_type === 'DOMESTIC' || item.ship_result === 'IN');
+    const bizBadge = isComm
+      ? `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-black bg-violet-100 text-violet-800 border border-violet-200">💎 COMM</span>`
+      : isDom
+        ? `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 text-sky-700 border border-sky-200">🏢 DOM</span>`
+        : `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-600">DIRECT</span>`;
+
+    const bankDt = (item.bank_dt || '').trim();
+    const commDt = (item.comm_dt || '').trim();
+    const commStatusHtml = isComm
+      ? (bankDt
+          ? `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="은행입금: ${bankDt}">✅ 입금완료</span><div class="text-[9px] font-mono text-emerald-600 mt-0.5">${bankDt}</div>`
+          : commDt
+            ? `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200" title="정산기준: ${commDt}">📋 정산완료</span><div class="text-[9px] font-mono text-blue-600 mt-0.5">${commDt}</div>`
+            : `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200">⏳ 미입금</span>`)
+      : `<span class="text-slate-300">-</span>`;
 
     return `
-      <tr class="hover:bg-slate-50 transition-colors text-[11px] group">
-        <td class="py-2 px-2 text-center font-mono text-slate-400 whitespace-nowrap">${rowNum}</td>
+      <tr class="hover:bg-slate-50 transition-colors text-[11px] group ${isComm ? 'bg-violet-50/15' : ''}">
+        <td class="py-2 px-1.5 text-center font-mono text-slate-400 whitespace-nowrap">${rowNum}</td>
+
+        <!-- 거래구분 (COMM / DOM) -->
+        <td class="py-2 px-2 text-center whitespace-nowrap">${bizBadge}</td>
         
         <!-- CUSTOMER -->
-        <td class="py-2 px-3 font-bold text-slate-900 truncate max-w-[150px]" title="${item.customer || '-'}">
+        <td class="py-2 px-2 font-bold text-slate-900 truncate max-w-[140px]" title="${item.customer || '-'}">
           ${item.customer || '-'}
         </td>
 
         <!-- REALCUST -->
-        <td class="py-2 px-3 font-semibold text-indigo-900 truncate max-w-[130px]" title="${item.real_cust || '-'}">
+        <td class="py-2 px-2 font-semibold text-indigo-900 truncate max-w-[120px]" title="${item.real_cust || '-'}">
           ${item.real_cust ? `<span class="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">${item.real_cust}</span>` : '-'}
         </td>
 
         <!-- PONO -->
-        <td class="py-2 px-3 font-mono text-slate-600 text-[10px] truncate max-w-[150px]" title="${item.po_no || '-'}">
+        <td class="py-2 px-2 font-mono text-slate-600 text-[10px] truncate max-w-[140px]" title="${item.po_no || '-'}">
           ${item.po_no || '-'}
         </td>
 
         <!-- PARTNO + [이력] 버튼 -->
-        <td class="py-2 px-3">
+        <td class="py-2 px-2">
           <div class="flex items-center gap-1.5">
-            <span class="font-bold text-slate-900 font-mono truncate max-w-[180px]" title="${cleanPart}">${cleanPart}</span>
+            <span class="font-bold text-slate-900 font-mono truncate max-w-[165px]" title="${cleanPart}">${cleanPart}</span>
             <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${cleanPart}')" 
                     class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[9px] font-bold cursor-pointer transition shrink-0" title="과거 매입·판매 단가 이력 조회">
               📈 이력
@@ -917,26 +994,36 @@ function generateTableRows(items) {
         </td>
 
         <!-- SHIP_DATE -->
-        <td class="py-2 px-3 text-center font-mono text-slate-600 whitespace-nowrap">${item.ship_date || '-'}</td>
+        <td class="py-2 px-2 text-center font-mono text-slate-600 whitespace-nowrap">${item.ship_date || '-'}</td>
 
         <!-- SHIP_QTY -->
-        <td class="py-2 px-3 text-right font-black text-slate-900 whitespace-nowrap font-mono">
+        <td class="py-2 px-2 text-right font-black text-slate-900 whitespace-nowrap font-mono">
           ${(Number(item.ship_qty) || 0).toLocaleString()} EA
         </td>
 
         <!-- NET_UP ($) -->
-        <td class="py-2 px-3 text-right font-mono font-bold text-blue-700 whitespace-nowrap">
+        <td class="py-2 px-2 text-right font-mono font-bold text-blue-700 whitespace-nowrap">
           $${(Number(item.net_up) || 0).toFixed(4)}
         </td>
 
         <!-- SHIP_AMT ($) -->
-        <td class="py-2 px-3 text-right font-mono font-black text-slate-900 whitespace-nowrap">
-          $${(Number(item.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+        <td class="py-2 px-2 text-right font-mono font-black text-slate-900 whitespace-nowrap">
+          $${(Number(item.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </td>
 
-        <!-- APP (용도) -->
-        <td class="py-2 px-3 truncate max-w-[170px]" title="${item.app || '-'}">
-          ${hasApp ? `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">${item.app}</span>` : '<span class="text-slate-300">-</span>'}
+        <!-- 💎 COMM ($ / %) -->
+        <td class="py-2 px-2 text-right font-mono whitespace-nowrap">
+          ${isComm
+            ? `<div class="font-black text-violet-700">$${commAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div><div class="text-[9px] text-violet-500 font-bold">${commRate.toFixed(2)}%</div>`
+            : `<span class="text-slate-300">-</span>`}
+        </td>
+
+        <!-- 커미션 정산상태 -->
+        <td class="py-2 px-2 text-center whitespace-nowrap">${commStatusHtml}</td>
+
+        <!-- 영업담당 -->
+        <td class="py-2 px-2 text-center font-bold text-indigo-900 text-[10px] whitespace-nowrap">
+          ${toEnglishSalesName(item.sales_rep || '') || '-'}
         </td>
 
         <!-- 문서 / 관리 -->
@@ -978,24 +1065,35 @@ function generateShipmentMobileCards(items) {
   }
   return items.map((item, idx) => {
     const cleanPart = (item.part_no || '').trim();
+    const commAmt = Number(item.comm_amt) || 0;
+    const commRate = Number(item.comm_rate) || 0;
+    const isComm = commAmt > 0 || item.biz_type === 'COMMISSION';
+    const bankDt = (item.bank_dt || '').trim();
+    const commDt = (item.comm_dt || '').trim();
+    const commBadge = isComm
+      ? `<span class="text-[9px] font-black text-violet-800 bg-violet-100 px-1.5 py-0.5 rounded border border-violet-200">💎 COMM ${commRate.toFixed(1)}%</span>`
+      : `<span class="text-[9px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">🏢 DOM</span>`;
     return `
-      <div class="p-3.5 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2.5">
+      <div class="p-3.5 bg-white rounded-xl border ${isComm ? 'border-violet-200' : 'border-slate-200'} shadow-xs space-y-2.5">
         <div class="flex items-start justify-between gap-1.5">
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1.5 flex-wrap">
+              ${commBadge}
               <span class="text-[9px] font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">${item.ship_date || '-'}</span>
               <span class="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">${item.maker || '-'}</span>
-              ${item.real_cust ? `<span class="text-[9px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">${item.real_cust}</span>` : ''}
+              ${item.sales_rep ? `<span class="text-[9px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">${toEnglishSalesName(item.sales_rep)}</span>` : ''}
             </div>
             <h4 class="font-black text-xs text-slate-900 mt-1 truncate" title="${cleanPart}">
               ${cleanPart}
             </h4>
-            <div class="text-[10px] text-slate-500 font-bold truncate mt-0.5">${item.customer || '-'}</div>
+            <div class="text-[10px] text-slate-500 font-bold truncate mt-0.5">${item.customer || '-'}${item.real_cust ? ` · ${item.real_cust}` : ''}</div>
           </div>
           <div class="text-right shrink-0">
             <span class="text-[9px] text-slate-400 block font-semibold">출하금액(USD)</span>
             <span class="font-black text-slate-900 font-mono text-sm">$${(Number(item.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <div class="text-[10px] text-rose-600 font-bold font-mono">₩${Math.round((Number(item.ship_amt) || 0) * currentFxRate).toLocaleString()}</div>
+            ${isComm
+              ? `<div class="text-[10px] text-violet-700 font-black font-mono">💎 $${commAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${bankDt ? '✅' : (commDt ? '📋' : '⏳')}</div>`
+              : `<div class="text-[10px] text-rose-600 font-bold font-mono">₩${Math.round((Number(item.ship_amt) || 0) * currentFxRate).toLocaleString()}</div>`}
           </div>
         </div>
 
@@ -1148,6 +1246,7 @@ window.exportShipmentLedgerExcel = function () {
 
   const headers = [
     "연번",
+    "구분(BIZ_TYPE)",
     "CUSTOMER(계약처)",
     "REALCUST(실수요처)",
     "PONO(발주번호)",
@@ -1156,6 +1255,12 @@ window.exportShipmentLedgerExcel = function () {
     "SHIP_QTY(수량)",
     "NET_UP_USD(순단가)",
     "SHIP_AMT_USD(출하금액)",
+    "COMM_RATE(%)",
+    "COMM_AMT_USD(커미션)",
+    "COMM_STATUS(정산상태)",
+    "COMM_DT(정산일)",
+    "BANK_DT(입금일)",
+    "SALES(영업담당)",
     "SHIP_AMT_KRW(원화환산)",
     "APP(용도)",
     "MFG(제조사)",
@@ -1165,6 +1270,7 @@ window.exportShipmentLedgerExcel = function () {
 
   const rows = items.map((item, idx) => [
     idx + 1,
+    `"${(item.biz_type || ((Number(item.comm_amt) || 0) > 0 ? 'COMMISSION' : 'DOMESTIC'))}"`,
     `"${(item.customer || '').replace(/"/g, '""')}"`,
     `"${(item.real_cust || '').replace(/"/g, '""')}"`,
     `"${(item.po_no || '').replace(/"/g, '""')}"`,
@@ -1173,6 +1279,12 @@ window.exportShipmentLedgerExcel = function () {
     Number(item.ship_qty) || 0,
     (Number(item.net_up) || 0).toFixed(4),
     (Number(item.ship_amt) || 0).toFixed(4),
+    (Number(item.comm_rate) || 0).toFixed(2),
+    (Number(item.comm_amt) || 0).toFixed(2),
+    `"${(item.comm_status || '').replace(/"/g, '""')}"`,
+    `"${(item.comm_dt || '').replace(/"/g, '""')}"`,
+    `"${(item.bank_dt || '').replace(/"/g, '""')}"`,
+    `"${(toEnglishSalesName(item.sales_rep || '') || '').replace(/"/g, '""')}"`,
     Math.round((Number(item.ship_amt) || 0) * currentFxRate),
     `"${(item.app || '').replace(/"/g, '""')}"`,
     `"${(item.maker || '').replace(/"/g, '""')}"`,

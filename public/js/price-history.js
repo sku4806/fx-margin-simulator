@@ -59,11 +59,22 @@ export async function openPriceHistoryModal(partNo) {
   `;
 
   try {
-    const res = await fetch(`/api/price-history?part_no=${encodeURIComponent(cleanPartNo)}`);
+    const [res, commRes] = await Promise.all([
+      fetch(`/api/price-history?part_no=${encodeURIComponent(cleanPartNo)}`),
+      fetch(`/api/shipped-info?biz_type=COMMISSION&query=${encodeURIComponent(cleanPartNo)}&limit=100`).catch(() => null)
+    ]);
     const data = await res.json();
+    let commItems = [];
+    if (commRes && commRes.ok) {
+      try {
+        const cd = await commRes.json();
+        const needle = cleanPartNo.toLowerCase();
+        commItems = (cd.items || []).filter(it => (it.part_no || '').toLowerCase().includes(needle));
+      } catch (_) {}
+    }
 
     if (data.status === 'success' && data.data) {
-      renderPriceHistoryContent(data.data);
+      renderPriceHistoryContent({ ...data.data, commissions: commItems });
     } else {
       showPriceHistoryError('단가 이력 데이터를 불러오지 못했습니다.');
     }
@@ -91,10 +102,11 @@ function renderPriceHistoryContent(payload) {
   const container = document.getElementById('priceHistoryContent');
   if (!container) return;
 
-  const { summary = {}, purchases = [], sales = [], quotations = [], purchase_orders = [] } = payload;
+  const { summary = {}, purchases = [], sales = [], quotations = [], purchase_orders = [], commissions = [] } = payload;
   sales.forEach(s => { s.sales_rep = toEnglishSalesName(s.sales_rep); });
   quotations.forEach(q => { q.sales_rep = toEnglishSalesName(q.sales_rep); });
   purchase_orders.forEach(p => { p.sales_rep = toEnglishSalesName(p.sales_rep); });
+  commissions.forEach(c => { c.sales_rep = toEnglishSalesName(c.sales_rep); });
 
   const avgMargin = summary.avg_margin_rate || 0;
   let marginColor = 'text-emerald-700 bg-emerald-50 border-emerald-300';
@@ -174,6 +186,9 @@ function renderPriceHistoryContent(payload) {
       <button type="button" data-tab="pos" class="ph-tab-btn px-2.5 sm:px-3 py-2 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0">
         <span>🚢</span> 발주·입고예정 <span class="text-[10px] opacity-80">(${purchase_orders.length})</span>
       </button>
+      <button type="button" data-tab="commissions" class="ph-tab-btn px-2.5 sm:px-3 py-2 text-xs font-bold border-b-2 border-transparent text-violet-700 hover:text-violet-900 cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0">
+        <span>💎</span> Commission 단가 <span class="text-[10px] opacity-80">(${commissions.length})</span>
+      </button>
     </div>
 
     <!-- 탭 콘텐츠 본문 (스크롤) -->
@@ -199,6 +214,11 @@ function renderPriceHistoryContent(payload) {
         ${renderPosTable(purchase_orders)}
       </div>
 
+      <!-- 5. 💎 Commission 단가·요율 이력 탭 -->
+      <div id="phTabCommissions" class="ph-tab-content hidden">
+        ${renderCommissionsTable(commissions)}
+      </div>
+
     </div>
   `;
 
@@ -218,8 +238,78 @@ function renderPriceHistoryContent(payload) {
       document.getElementById('phTabSales').classList.toggle('hidden', targetTab !== 'sales');
       document.getElementById('phTabQuotations').classList.toggle('hidden', targetTab !== 'quotations');
       document.getElementById('phTabPos').classList.toggle('hidden', targetTab !== 'pos');
+      document.getElementById('phTabCommissions').classList.toggle('hidden', targetTab !== 'commissions');
     });
   });
+}
+
+function renderCommissionsTable(commissions) {
+  if (!commissions || commissions.length === 0) {
+    return `<div class="py-12 text-center text-slate-400 font-bold">기록된 Commission(해외 직송 커미션) 출하 이력이 없습니다.</div>`;
+  }
+  const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const mobileCards = `
+    <div class="md:hidden space-y-2">
+      ${commissions.map(c => `
+        <div class="bg-white border border-violet-200 rounded-xl p-3 space-y-1.5 text-xs shadow-2xs">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="font-mono text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">${esc(c.ship_date || '-')}</span>
+              <span class="text-[10px] font-bold bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded">💎 ${(Number(c.comm_rate) || 0).toFixed(2)}%</span>
+              <span class="text-[10px] font-bold ${c.comm_status === '미입금' ? 'text-rose-600' : 'text-emerald-700'}">${esc(c.comm_status || '-')}</span>
+            </div>
+            <span class="font-mono font-black text-violet-800">$${(Number(c.comm_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div class="font-bold text-slate-900 truncate">${esc(c.customer || '-')}</div>
+          <div class="flex items-center justify-between text-[11px] text-slate-600 font-mono">
+            <span>${(Number(c.ship_qty) || 0).toLocaleString()} EA @ $${(Number(c.net_up) || 0).toFixed(4)}</span>
+            <span>선적 $${(Number(c.ship_amt) || 0).toLocaleString()} · ${esc(c.sales_rep || '-')}</span>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  const desktopTable = `
+    <div class="hidden md:block bg-white rounded-xl border border-violet-200 overflow-hidden shadow-xs">
+      <table class="w-full text-left text-xs border-collapse">
+        <thead class="bg-violet-50 text-violet-950 font-bold border-b border-violet-200">
+          <tr>
+            <th class="py-2.5 px-3 text-center">선적일</th>
+            <th class="py-2.5 px-3">고객사</th>
+            <th class="py-2.5 px-3 text-center">제조사</th>
+            <th class="py-2.5 px-3">PO / 인보이스</th>
+            <th class="py-2.5 px-3 text-right">수량</th>
+            <th class="py-2.5 px-3 text-right">단가($)</th>
+            <th class="py-2.5 px-3 text-right">선적액($)</th>
+            <th class="py-2.5 px-3 text-right">요율(%)</th>
+            <th class="py-2.5 px-3 text-right">💎 커미션($)</th>
+            <th class="py-2.5 px-3 text-center">정산상태</th>
+            <th class="py-2.5 px-3 text-center">담당자</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-[11px]">
+          ${commissions.map(c => `
+            <tr class="hover:bg-violet-50/30">
+              <td class="py-2 px-3 text-center font-mono text-slate-600 whitespace-nowrap">${esc(c.ship_date || '-')}</td>
+              <td class="py-2 px-3 font-bold text-slate-900 truncate max-w-[160px]" title="${esc(c.customer)}">${esc(c.customer || '-')}</td>
+              <td class="py-2 px-3 text-center font-bold text-indigo-800 whitespace-nowrap">${esc(c.maker || '-')}</td>
+              <td class="py-2 px-3 font-mono text-[10px] text-slate-600 truncate max-w-[140px]">${esc(c.po_no || '-')}${c.invoice_no ? `<div class="text-[9px] text-slate-400">${esc(c.invoice_no)}</div>` : ''}</td>
+              <td class="py-2 px-3 text-right font-mono font-bold text-slate-800 whitespace-nowrap">${(Number(c.ship_qty) || 0).toLocaleString()}</td>
+              <td class="py-2 px-3 text-right font-mono font-bold text-blue-700 whitespace-nowrap">$${(Number(c.net_up) || 0).toFixed(4)}</td>
+              <td class="py-2 px-3 text-right font-mono text-slate-800 whitespace-nowrap">$${(Number(c.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td class="py-2 px-3 text-right font-mono font-bold text-violet-700 whitespace-nowrap">${(Number(c.comm_rate) || 0).toFixed(2)}%</td>
+              <td class="py-2 px-3 text-right font-mono font-black text-violet-900 whitespace-nowrap">$${(Number(c.comm_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td class="py-2 px-3 text-center whitespace-nowrap">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${c.comm_status === '미입금' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">${esc(c.comm_status || '-')}</span>
+              </td>
+              <td class="py-2 px-3 text-center font-bold text-indigo-900 whitespace-nowrap">${esc(c.sales_rep || '-')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  return mobileCards + desktopTable;
 }
 
 function renderPurchasesTable(purchases) {
