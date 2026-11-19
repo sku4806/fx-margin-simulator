@@ -76,14 +76,35 @@ class ShipmentCrudInput(BaseModel):
     create_unpaid: Optional[bool] = False    # 미수금 자동 연동 옵션
     sales_rep: Optional[str] = ""
     due_date: Optional[str] = None
+    biz_type: Optional[str] = "DOMESTIC"     # DOMESTIC | COMMISSION
+    comm_rate: Optional[float] = 0.0         # 커미션 요율 (%)
+    comm_amt: Optional[float] = 0.0          # 커미션 금액 (USD)
+    awb_no: Optional[str] = ""               # 운송장 / AWB 번호
 
 
-def _encode_shipment_status(base_status: str, customer: str, real_cust: str, app: str) -> str:
-    """legacy_shipments 테이블 스키마를 보존하면서 거래처/실수요처/용도 메타 저장"""
+def _encode_shipment_status(
+    base_status: str,
+    customer: str,
+    real_cust: str,
+    app: str,
+    biz_type: str = "DOMESTIC",
+    comm_rate: float = 0.0,
+    comm_amt: float = 0.0,
+    sales_rep: str = "",
+    awb_no: str = "",
+) -> str:
+    """legacy_shipments 테이블 스키마를 보존하면서 거래처/실수요처/용도/커미션/담당자/송장 메타 저장"""
     clean_base = (base_status or "SHIPPED").split("||")[0].strip() or "SHIPPED"
     c = (customer or "").replace("||", " ").strip()
     rc = (real_cust or "").replace("||", " ").strip()
     a = (app or "").replace("||", " ").strip()
+    bt = (biz_type or "DOMESTIC").strip().upper()
+    cr = round(float(comm_rate or 0.0), 2)
+    ca = round(float(comm_amt or 0.0), 2)
+    sr = (sales_rep or "").replace("||", " ").strip().upper()
+    awb = (awb_no or "").replace("||", " ").strip()
+    if bt != "DOMESTIC" or cr > 0 or ca > 0 or sr or awb:
+        return f"{clean_base}||{c}||{rc}||{a}||{bt}||{cr}||{ca}||{sr}||{awb}"
     if c or rc or a:
         return f"{clean_base}||{c}||{rc}||{a}"
     return clean_base
@@ -103,7 +124,24 @@ def create_shipment_record(data: ShipmentCrudInput) -> Dict[str, Any]:
 
     total_sales = round(unit_krw * qty)
     ship_date = (data.order_date or "").strip() or datetime.date.today().isoformat()
-    encoded_status = _encode_shipment_status(data.status or "SHIPPED", data.customer_name or "", data.real_cust or "", data.app or "")
+    biz_type = (data.biz_type or "DOMESTIC").strip().upper()
+    comm_rate = float(data.comm_rate or 0.0)
+    comm_amt = float(data.comm_amt or 0.0)
+    if biz_type == "COMMISSION" and comm_amt <= 0 and comm_rate > 0:
+        ship_usd = (float(data.unit_usd or 0.0) * qty) if (data.unit_usd and float(data.unit_usd) > 0) else (total_sales / fx if fx > 0 else 0.0)
+        comm_amt = round(ship_usd * (comm_rate / 100.0), 2)
+
+    encoded_status = _encode_shipment_status(
+        data.status or "SHIPPED",
+        data.customer_name or "",
+        data.real_cust or "",
+        data.app or "",
+        biz_type=biz_type,
+        comm_rate=comm_rate,
+        comm_amt=comm_amt,
+        sales_rep=data.sales_rep or "",
+        awb_no=data.awb_no or "",
+    )
 
     payload = {
         "part_name": part,
@@ -159,7 +197,23 @@ def update_shipment_record(record_id: str, data: ShipmentCrudInput) -> Dict[str,
         unit_krw = float(data.unit_price or 0.0)
 
     total_sales = round(unit_krw * qty)
-    encoded_status = _encode_shipment_status(data.status or "SHIPPED", data.customer_name or "", data.real_cust or "", data.app or "")
+    biz_type = (data.biz_type or "DOMESTIC").strip().upper()
+    comm_rate = float(data.comm_rate or 0.0)
+    comm_amt = float(data.comm_amt or 0.0)
+    if biz_type == "COMMISSION" and comm_amt <= 0 and comm_rate > 0:
+        ship_usd = (float(data.unit_usd or 0.0) * qty) if (data.unit_usd and float(data.unit_usd) > 0) else (total_sales / fx if fx > 0 else 0.0)
+        comm_amt = round(ship_usd * (comm_rate / 100.0), 2)
+    encoded_status = _encode_shipment_status(
+        data.status or "SHIPPED",
+        data.customer_name or "",
+        data.real_cust or "",
+        data.app or "",
+        biz_type=biz_type,
+        comm_rate=comm_rate,
+        comm_amt=comm_amt,
+        sales_rep=data.sales_rep or "",
+        awb_no=data.awb_no or "",
+    )
 
     payload = {
         "part_name": (data.part_name or "").strip(),
@@ -1057,6 +1111,78 @@ def delete_cloud_sub_ledger(record_id: str) -> Dict[str, Any]:
     return {"status": "success", "deleted_id": record_id}
 
 
+class CommissionSettleInput(BaseModel):
+    idx: str
+    bank_dt: Optional[str] = ""
+    comm_amt: Optional[float] = 0.0
+    note: Optional[str] = ""
+
+
+def get_commission_settlement_map() -> Dict[str, Dict[str, Any]]:
+    """Supabase 클라우드에 기록된 커미션 입금완료 정산 맵 반환 ({str(idx): {bank_dt, cloud_id, note}})"""
+    params = [
+        ("select", "id,item_id,user_email,details"),
+        ("action_type", "eq.COMM_SETTLEMENT"),
+        ("order", "created_at.desc"),
+        ("limit", "1000"),
+    ]
+    try:
+        res = requests.get(_sb_url("inventory_audit_logs"), headers=_sb_headers(prefer=""), params=params, timeout=6)
+        if res.status_code != 200:
+            return {}
+        out: Dict[str, Dict[str, Any]] = {}
+        for r in (res.json() or []):
+            key = str(r.get("item_id") or "").strip()
+            if not key or key in out:
+                continue
+            try:
+                det = json.loads(r.get("details") or "{}")
+            except Exception:
+                det = {}
+            out[key] = {
+                "bank_dt": (r.get("user_email") or det.get("bank_dt") or "")[:10],
+                "cloud_id": r.get("id"),
+                "note": det.get("note") or "",
+            }
+        return out
+    except Exception as e:
+        print(f"[WARN] 커미션 정산 맵 조회 실패: {e}")
+        return {}
+
+
+def settle_commission_record(data: CommissionSettleInput) -> Dict[str, Any]:
+    idx_key = str(data.idx or "").strip()
+    if not idx_key:
+        raise HTTPException(status_code=400, detail="정산할 커미션 ID(idx)가 필요합니다.")
+    bank_dt = (data.bank_dt or "").strip() or datetime.date.today().isoformat()
+    payload = {
+        "item_id": idx_key,
+        "part_name": f"COMM-{idx_key}",
+        "action_type": "COMM_SETTLEMENT",
+        "user_email": bank_dt,
+        "details": json.dumps({"idx": idx_key, "bank_dt": bank_dt, "comm_amt": float(data.comm_amt or 0.0), "note": (data.note or "").strip()}, ensure_ascii=False),
+    }
+    res = requests.post(_sb_url("inventory_audit_logs"), headers=_sb_headers(), json=[payload], timeout=8)
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"커미션 입금완료 저장 실패: {res.text[:200]}")
+    created = res.json()[0] if res.json() else {}
+    return {"status": "success", "idx": idx_key, "bank_dt": bank_dt, "cloud_id": created.get("id")}
+
+
+def unsettle_commission_record(idx: str) -> Dict[str, Any]:
+    idx_key = str(idx or "").strip()
+    if not idx_key:
+        raise HTTPException(status_code=400, detail="정산 취소할 커미션 ID가 필요합니다.")
+    res = requests.delete(
+        f"{_sb_url('inventory_audit_logs')}?action_type=eq.COMM_SETTLEMENT&item_id=eq.{idx_key}",
+        headers=_sb_headers(),
+        timeout=8,
+    )
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"커미션 정산 취소 실패: {res.text[:200]}")
+    return {"status": "success", "idx": idx_key}
+
+
 def list_cloud_sales_memos(sales_rep: Optional[str] = None, limit: int = 40) -> List[Dict[str, Any]]:
     params = [
         ("select", "id,item_id,part_name,user_email,details,created_at"),
@@ -1465,6 +1591,15 @@ def register_crud_routes(app):
     @app.delete("/api/shipped-info/losses/{record_id}")
     def api_delete_loss(record_id: str):
         return delete_cloud_sub_ledger(record_id)
+
+    # 💎 Commission 미수금 클라우드 입금완료 정산 / 취소
+    @app.post("/api/unpaid/commissions/settle")
+    def api_settle_commission(payload: CommissionSettleInput):
+        return settle_commission_record(payload)
+
+    @app.delete("/api/unpaid/commissions/settle/{idx}")
+    def api_unsettle_commission(idx: str):
+        return unsettle_commission_record(idx)
 
     # 8. Phase 2 확장 조회 API (수입 통관·B/L·부대비용 DchargeFile & 해외 송금 FinanceFile)
     @app.get("/api/import-charges")

@@ -187,6 +187,12 @@ export async function fetchWebShipments() {
         const parsedCust = stParts[1] || item.customer_name || '(거래처 미지정)';
         const parsedRealCust = stParts[2] || item.real_cust || '-';
         const parsedApp = stParts[3] || item.application || '-';
+        const parsedBizType = (stParts[4] || 'DOMESTIC').toUpperCase();
+        const parsedCommRate = parseFloat(stParts[5] || '0') || 0;
+        const parsedCommAmt = parseFloat(stParts[6] || '0') || 0;
+        const parsedSalesRep = toEnglishSalesName(stParts[7] || '');
+        const parsedAwbNo = (stParts[8] || '').trim();
+        const isCommWeb = parsedBizType === 'COMMISSION' || parsedCommAmt > 0;
         return {
           id: item.id,
           idx: item.id || item.legacy_out_id,
@@ -204,6 +210,14 @@ export async function fetchWebShipments() {
           app: parsedApp,
           maker: item.maker || 'OTHERS',
           supply: 'WEB',
+          biz_type: isCommWeb ? 'COMMISSION' : 'DOMESTIC',
+          comm_rate: parsedCommRate,
+          comm_amt: parsedCommAmt,
+          comm_dt: '',
+          bank_dt: '',
+          comm_status: isCommWeb ? '미입금' : '',
+          sales_rep: parsedSalesRep,
+          awb_no: parsedAwbNo,
           is_web: true,
           status: baseStatus
         };
@@ -227,10 +241,12 @@ function getMergedLedgerShipments() {
     if (currentEndDate && sd && sd > currentEndDate) return false;
     if (currentMfg && (item.maker || '').toLowerCase() !== currentMfg.toLowerCase()) return false;
     if (currentSupply && (item.supply || '').toLowerCase() !== currentSupply.toLowerCase()) return false;
-    if (currentBizType === 'COMMISSION') return false;
-    if (currentCommStatus) return false;
+    if (currentBizType === 'COMMISSION' && item.biz_type !== 'COMMISSION') return false;
+    if (currentBizType === 'DOMESTIC' && item.biz_type === 'COMMISSION') return false;
+    if (currentCommStatus === 'UNPAID' && !(item.biz_type === 'COMMISSION' && item.comm_status === '미입금')) return false;
+    if (currentCommStatus === 'PAID' && !(item.biz_type === 'COMMISSION' && item.comm_status !== '미입금')) return false;
     if (q) {
-      const hay = `${item.part_no || ''} ${item.customer || ''} ${item.real_cust || ''} ${item.po_no || ''} ${item.app || ''} ${item.maker || ''}`.toLowerCase();
+      const hay = `${item.part_no || ''} ${item.customer || ''} ${item.real_cust || ''} ${item.po_no || ''} ${item.app || ''} ${item.maker || ''} ${item.sales_rep || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -601,7 +617,7 @@ function renderSubLedgerSection() {
                         ? `<div class="flex items-center gap-1 min-w-0"><span class="truncate">${escSub(b.remark)}</span><button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escSub(trk)}', '${escSub(b.remark || '')}')" class="shrink-0 px-1.5 py-0.5 rounded bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-[10px] cursor-pointer" title="실시간 배송 추적">🚚</button></div>`
                         : `<span class="truncate block">${escSub(b.remark || '-')}</span>`;
                     })()}
-                    ${b.is_web ? `<div class="flex items-center gap-1 shrink-0"><button type="button" onclick="window.openSubLedgerCrudModalByIdx('borrow', ${i})" class="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold cursor-pointer" title="수정">✏️</button><button type="button" onclick="window.deleteSubLedgerRecord('borrow', '${escSub(b.id)}')" class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded text-[10px] font-bold cursor-pointer" title="삭제">🗑️</button></div>` : ''}
+                    ${b.is_web ? `<div class="flex items-center gap-1 shrink-0">${b.result !== '반납완료' ? `<button type="button" onclick="window.quickReturnBorrowByIdx(${i})" class="px-1.5 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded text-[10px] font-black cursor-pointer" title="오늘 날짜로 즉시 반납완료 처리">✅ 반납</button>` : ''}<button type="button" onclick="window.openSubLedgerCrudModalByIdx('borrow', ${i})" class="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold cursor-pointer" title="수정">✏️</button><button type="button" onclick="window.deleteSubLedgerRecord('borrow', '${escSub(b.id)}')" class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded text-[10px] font-bold cursor-pointer" title="삭제">🗑️</button></div>` : ''}
                   </div>
                 </td>
               </tr>
@@ -1494,9 +1510,26 @@ export function openShipmentCrudModal(item = null) {
         <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="text-white/80 hover:text-white font-bold cursor-pointer">✕</button>
       </div>
       <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-violet-50/50 border border-violet-200 rounded-xl p-2.5">
+          <div>
+            <label class="block text-[11px] font-bold text-violet-900 mb-1">거래 구분 *</label>
+            <select id="shipCrudBizType" class="w-full px-2.5 py-2 border border-violet-300 rounded-lg bg-white font-bold text-violet-950 outline-none focus:border-violet-500">
+              <option value="DOMESTIC" ${(item?.biz_type || 'DOMESTIC') !== 'COMMISSION' ? 'selected' : ''}>🏢 Domestic (국내판매)</option>
+              <option value="COMMISSION" ${item?.biz_type === 'COMMISSION' ? 'selected' : ''}>💎 Commission (직송커미션)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-violet-900 mb-1">커미션 요율 (%)</label>
+            <input type="number" step="0.01" id="shipCrudCommRate" value="${Number(item?.comm_rate || 0)}" placeholder="예: 3.0" class="w-full px-3 py-2 border border-violet-300 rounded-lg bg-white font-mono font-bold text-violet-900 outline-none focus:border-violet-500">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-violet-900 mb-1">커미션 금액 (USD · 자동)</label>
+            <input type="number" step="0.01" id="shipCrudCommAmt" value="${Number(item?.comm_amt || 0)}" placeholder="요율 입력 시 자동계산" class="w-full px-3 py-2 border border-violet-300 rounded-lg bg-white font-mono font-black text-violet-800 outline-none focus:border-violet-500">
+          </div>
+        </div>
         <div>
           <label class="block text-[11px] font-bold text-slate-600 mb-1">계약처 (CUSTOMER) *</label>
-          <input type="text" id="shipCrudCustomer" value="${esc(item?.customer === '웹 수주 거래처' ? '' : item?.customer)}" placeholder="예: LG이노텍" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+          <input type="text" id="shipCrudCustomer" value="${esc((item?.customer === '웹 수주 거래처' || item?.customer === '(거래처 미지정)') ? '' : item?.customer)}" placeholder="예: LG이노텍" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
         </div>
         <div>
           <label class="block text-[11px] font-bold text-slate-600 mb-1">실수요처 (REALCUST)</label>
@@ -1531,13 +1564,21 @@ export function openShipmentCrudModal(item = null) {
           <input type="number" id="shipCrudUnitKrw" value="${Math.round(Number(item?.unit_krw || 0))}" placeholder="USD 입력 시 자동환산" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
         </div>
         <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">영업 담당자 (영문)</label>
+          <input type="text" id="shipCrudSalesRep" value="${esc(toEnglishSalesName(item?.sales_rep || ''))}" placeholder="예: DUSTIN, STEVE, KELLY" class="w-full px-3 py-2 border border-slate-300 rounded-lg uppercase font-bold outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">운송장 / AWB 번호</label>
+          <input type="text" id="shipCrudAwbNo" value="${esc(item?.awb_no || '')}" placeholder="예: 45370526250 또는 DHL AWB" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
+        </div>
+        <div>
           <label class="block text-[11px] font-bold text-slate-600 mb-1">용도 (APP)</label>
           <input type="text" id="shipCrudApp" value="${esc(item?.app === '-' ? '' : item?.app)}" placeholder="예: AU04 : REAR CAMERA" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
         </div>
         ${!editingShipmentId ? `
           <div class="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center gap-2">
             <input type="checkbox" id="shipCrudCreateUnpaid" checked class="rounded cursor-pointer">
-            <label for="shipCrudCreateUnpaid" class="text-[11px] font-bold text-amber-900 cursor-pointer">미수금 관리 탭에도 자동으로 미결제 채권(VAT 포함, 30일 만기) 등록하기</label>
+            <label for="shipCrudCreateUnpaid" class="text-[11px] font-bold text-amber-900 cursor-pointer">Domestic 미수금 관리 탭에도 자동으로 미결제 채권(VAT 포함, 30일 만기) 등록하기</label>
           </div>
         ` : ''}
       </div>
@@ -1549,6 +1590,30 @@ export function openShipmentCrudModal(item = null) {
   `;
 
   modal.classList.remove('hidden');
+
+  // 커미션 자동계산 및 Domestic 미수금 체크박스 자동 전환
+  const bizSel = document.getElementById('shipCrudBizType');
+  const rateInp = document.getElementById('shipCrudCommRate');
+  const amtInp = document.getElementById('shipCrudCommAmt');
+  const qtyInp = document.getElementById('shipCrudQty');
+  const netInp = document.getElementById('shipCrudNetUp');
+  const unpaidChk = document.getElementById('shipCrudCreateUnpaid');
+  const recalcComm = () => {
+    const q = parseFloat(qtyInp?.value || '0') || 0;
+    const u = parseFloat(netInp?.value || '0') || 0;
+    const r = parseFloat(rateInp?.value || '0') || 0;
+    if (q > 0 && u > 0 && r > 0 && amtInp) {
+      amtInp.value = (q * u * (r / 100)).toFixed(2);
+    }
+  };
+  bizSel?.addEventListener('change', () => {
+    if (bizSel.value === 'COMMISSION' && unpaidChk) unpaidChk.checked = false;
+    recalcComm();
+  });
+  rateInp?.addEventListener('input', recalcComm);
+  qtyInp?.addEventListener('input', recalcComm);
+  netInp?.addEventListener('input', recalcComm);
+
   document.getElementById('btnSaveShipmentCrud')?.addEventListener('click', saveShipmentCrudForm);
 }
 
@@ -1558,9 +1623,12 @@ async function saveShipmentCrudForm() {
 
   const unitKrwVal = parseFloat(document.getElementById('shipCrudUnitKrw')?.value || '0') || 0;
   const netUpVal = parseFloat(document.getElementById('shipCrudNetUp')?.value || '0') || 0;
+  const bizType = document.getElementById('shipCrudBizType')?.value || 'DOMESTIC';
+  const commRate = parseFloat(document.getElementById('shipCrudCommRate')?.value || '0') || 0;
+  const commAmt = parseFloat(document.getElementById('shipCrudCommAmt')?.value || '0') || 0;
 
   const payload = {
-    customer_name: document.getElementById('shipCrudCustomer')?.value.trim() || '웹 출하 거래처',
+    customer_name: document.getElementById('shipCrudCustomer')?.value.trim() || '(거래처 미지정)',
     real_cust: document.getElementById('shipCrudRealCust')?.value.trim() || '',
     part_name,
     maker: document.getElementById('shipCrudMaker')?.value.trim() || 'OTHERS',
@@ -1571,7 +1639,12 @@ async function saveShipmentCrudForm() {
     unit_price: unitKrwVal > 0 ? unitKrwVal : 0,
     fx_rate: currentFxRate || 1350,
     app: document.getElementById('shipCrudApp')?.value.trim() || '',
-    create_unpaid: !!document.getElementById('shipCrudCreateUnpaid')?.checked
+    biz_type: bizType,
+    comm_rate: bizType === 'COMMISSION' ? commRate : 0,
+    comm_amt: bizType === 'COMMISSION' ? commAmt : 0,
+    sales_rep: toEnglishSalesName(document.getElementById('shipCrudSalesRep')?.value.trim() || ''),
+    awb_no: document.getElementById('shipCrudAwbNo')?.value.trim() || '',
+    create_unpaid: bizType !== 'COMMISSION' && !!document.getElementById('shipCrudCreateUnpaid')?.checked
   };
 
   const btn = document.getElementById('btnSaveShipmentCrud');
@@ -1908,4 +1981,48 @@ window.deleteSubLedgerRecord = async function (kind, recordId) {
   } catch (err) {
     alert(`${cfg.label} 삭제 오류: ` + err.message);
   }
+};
+
+// 🔄 대여/반납 원클릭 즉시 반납완료 처리
+window.quickReturnBorrowByIdx = async function (idx) {
+  const b = cachedBorrows && cachedBorrows[idx];
+  if (!b || !b.id) return;
+  const today = new Date().toISOString().slice(0, 10);
+  if (!confirm(`[${b.customer_name}] ${b.part_no} (${(b.qty || 0).toLocaleString()} EA)\n\n오늘(${today}) 날짜로 즉시 반납완료 처리하시겠습니까?`)) return;
+  try {
+    const res = await fetch(`/api/shipped-info/borrows/${encodeURIComponent(b.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...b, result: '반납완료', rtn_date: today })
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || '반납 처리 실패');
+    await fetchSubLedgerData('borrow', subLedgerQuery);
+    renderShipmentsView('shipmentsSection');
+  } catch (err) {
+    alert('반납 처리 오류: ' + err.message);
+  }
+};
+
+// 🔗 타 탭(실적 분석 등)에서 출하 원장으로 조건 필터링하여 즉시 점프 (Drill-Down)
+window.jumpToShipmentsFiltered = async function ({ query = '', mfg = '', bizType = '', year = '' } = {}) {
+  const targetYear = year || String(new Date().getFullYear());
+  activeShipmentMode = 'ledger';
+  currentStartDate = `${targetYear}-01-01`;
+  currentEndDate = `${targetYear}-12-31`;
+  currentMfg = mfg || '';
+  currentSupply = '';
+  currentBizType = bizType || '';
+  currentCommStatus = '';
+  currentSearchQuery = query || '';
+
+  document.getElementById('tabShipments')?.click();
+  await Promise.all([
+    fetchShippedFilters(),
+    fetchLedgerShipments({ startDate: currentStartDate, endDate: currentEndDate, mfg: currentMfg, supply: '', bizType: currentBizType, commStatus: '', query: currentSearchQuery }),
+    fetchWebShipments()
+  ]);
+  renderShipmentsView('shipmentsSection');
+  const inp = document.getElementById('shipmentLiveFilterInput');
+  if (inp && query) inp.value = query;
 };

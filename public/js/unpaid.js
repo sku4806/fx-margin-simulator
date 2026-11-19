@@ -627,13 +627,15 @@ function renderCommissionUnpaidBody() {
             <th class="py-2 px-2 text-right w-16">요율</th>
             <th class="py-2 px-2 text-right w-26">💎 커미션($)</th>
             <th class="py-2 px-2 text-center w-20">담당자</th>
+            <th class="py-2 px-2 text-center w-24">정산/추적</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
-          ${items.length === 0 ? `<tr><td colspan="11" class="py-12 text-center text-slate-400 font-bold">조건에 일치하는 Commission 내역이 없습니다.</td></tr>` : items.slice(0, 300).map((r, i) => {
+          ${items.length === 0 ? `<tr><td colspan="12" class="py-12 text-center text-slate-400 font-bold">조건에 일치하는 Commission 내역이 없습니다.</td></tr>` : items.slice(0, 300).map((r, i) => {
             const days = Number(r.overdue_days) || 0;
+            const isCs = typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser();
             const statusBadge = r.comm_status !== '미입금'
-              ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${esc(r.comm_status)}</span><div class="text-[9px] font-mono text-emerald-600">${esc(r.bank_dt || r.comm_dt)}</div>`
+              ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${esc(r.comm_status)}${r.cloud_settled ? ' ☁️' : ''}</span><div class="text-[9px] font-mono text-emerald-600">${esc(r.bank_dt || r.comm_dt)}</div>`
               : `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold border ${days >= 60 ? 'bg-rose-100 text-rose-800 border-rose-300' : (days >= 30 ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-violet-50 text-violet-700 border-violet-200')}">+${days}일</span>`;
             return `
               <tr class="hover:bg-violet-50/30">
@@ -641,13 +643,22 @@ function renderCommissionUnpaidBody() {
                 <td class="py-1.5 px-2 text-center font-mono text-slate-700 whitespace-nowrap">${esc(r.ship_date)}</td>
                 <td class="py-1.5 px-2 text-center whitespace-nowrap">${statusBadge}</td>
                 <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${esc(r.maker)}</td>
-                <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[175px]" title="${esc(r.customer)}">${esc(r.customer)}</td>
-                <td class="py-1.5 px-2 font-mono font-bold text-slate-900 truncate max-w-[175px]" title="${esc(r.part_no)}">${esc(r.part_no)}</td>
-                <td class="py-1.5 px-2 font-mono text-[10px] text-slate-600 truncate max-w-[140px]" title="${esc(r.po_no)} / ${esc(r.invoice_no)}">${esc(r.po_no || '-')}${r.invoice_no ? `<div class="text-[9px] text-slate-400">${esc(r.invoice_no)}</div>` : ''}</td>
+                <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[165px]" title="${esc(r.customer)}">${esc(r.customer)}</td>
+                <td class="py-1.5 px-2 font-mono font-bold text-slate-900 truncate max-w-[175px]" title="${esc(r.part_no)}">
+                  <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${esc(r.part_no)}')" class="text-left hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full" title="클릭하여 과거 단가·커미션 이력 보기">${esc(r.part_no)}</button>
+                </td>
+                <td class="py-1.5 px-2 font-mono text-[10px] text-slate-600 truncate max-w-[135px]" title="${esc(r.po_no)} / ${esc(r.invoice_no)}">${esc(r.po_no || '-')}${r.invoice_no ? `<div class="text-[9px] text-slate-400">${esc(r.invoice_no)}</div>` : ''}</td>
                 <td class="py-1.5 px-2 text-right font-mono text-slate-700 whitespace-nowrap">$${(Number(r.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td class="py-1.5 px-2 text-right font-mono font-bold text-violet-700 whitespace-nowrap">${(Number(r.comm_rate) || 0).toFixed(2)}%</td>
                 <td class="py-1.5 px-2 text-right font-mono font-black text-violet-800 whitespace-nowrap">$${(Number(r.comm_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${esc(toEnglishSalesName(r.sales_rep || '')) || '-'}</td>
+                <td class="py-1.5 px-2 text-center whitespace-nowrap">
+                  <div class="inline-flex items-center gap-1">
+                    ${r.awb_no ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${esc(r.awb_no)}')" class="px-1.5 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded text-[10px] font-bold cursor-pointer" title="AWB 배송 추적 (${esc(r.awb_no)})">🚚</button>` : ''}
+                    ${r.comm_status === '미입금' && isCs ? `<button type="button" onclick="window.settleCommissionRow('${esc(r.idx)}', ${Number(r.comm_amt) || 0}, '${esc(r.maker)}')" class="px-1.5 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded text-[10px] font-black cursor-pointer" title="커미션 입금완료 정산 처리">✅ 입금</button>` : ''}
+                    ${r.cloud_settled && isCs ? `<button type="button" onclick="window.unsettleCommissionRow('${esc(r.idx)}')" class="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 rounded text-[10px] font-bold cursor-pointer" title="클라우드 정산 취소">↩️ 취소</button>` : ''}
+                  </div>
+                </td>
               </tr>
             `;
           }).join('')}
@@ -701,6 +712,39 @@ function bindCommUnpaidEvents() {
     a.click();
   });
 }
+
+// 💎 Commission 미수금 원클릭 입금완료 정산 / 취소
+window.settleCommissionRow = async function (idx, commAmt, maker) {
+  const today = new Date().toISOString().slice(0, 10);
+  const bankDt = prompt(`[${maker}] 커미션 $${Number(commAmt || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\n은행 입금일자(YYYY-MM-DD)를 확인해 주세요:`, today);
+  if (bankDt === null) return;
+  try {
+    const res = await fetch('/api/unpaid/commissions/settle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idx: String(idx), bank_dt: bankDt.trim() || today, comm_amt: Number(commAmt || 0) })
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || '정산 실패');
+    cachedCommUnpaid = null;
+    renderUnpaidView('unpaidSection');
+  } catch (err) {
+    alert('커미션 입금완료 처리 오류: ' + err.message);
+  }
+};
+
+window.unsettleCommissionRow = async function (idx) {
+  if (!confirm('이 커미션의 클라우드 입금완료 정산을 취소하고 다시 미입금으로 되돌리시겠습니까?')) return;
+  try {
+    const res = await fetch(`/api/unpaid/commissions/settle/${encodeURIComponent(idx)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || '취소 실패');
+    cachedCommUnpaid = null;
+    renderUnpaidView('unpaidSection');
+  } catch (err) {
+    alert('커미션 정산 취소 오류: ' + err.message);
+  }
+};
 
 /**
  * 페이지 단위 행 렌더링

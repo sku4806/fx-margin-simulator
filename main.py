@@ -235,15 +235,37 @@ def list_unpaid_commissions(
     limit: int = 1500
 ):
     try:
+        import erp_crud
+        settle_map = erp_crud.get_commission_settlement_map()
+    except Exception:
+        settle_map = {}
+
+    try:
         items = legacy_mssql.query_unpaid_commissions(
-            status=status,
+            status="ALL",
             maker=maker,
             sales_rep=sales_rep,
             search_query=query,
             min_date=min_date,
             limit=limit
         )
-        return {"status": "success", "total": len(items), "items": items}
+        st_upper = (status or "UNPAID").strip().upper()
+        out = []
+        for item in items:
+            row = dict(item)
+            k = str(row.get("idx") or "").strip()
+            s_info = settle_map.get(k)
+            if s_info:
+                row["bank_dt"] = s_info.get("bank_dt") or row.get("bank_dt") or ""
+                row["comm_status"] = "입금완료"
+                row["cloud_settled"] = True
+            is_paid = bool((row.get("bank_dt") or "").strip() or (row.get("comm_dt") or "").strip())
+            if st_upper == "UNPAID" and is_paid:
+                continue
+            if st_upper == "PAID" and not is_paid:
+                continue
+            out.append(row)
+        return {"status": "success", "total": len(out), "items": out}
     except Exception as e:
         return {"status": "error", "message": str(e), "items": []}
 

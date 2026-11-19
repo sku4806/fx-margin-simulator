@@ -781,10 +781,11 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
           <div class="space-y-2 overflow-y-auto max-h-80 pr-1 text-xs">
             ${(a.top_customers && a.top_customers.length > 0) ? a.top_customers.map((c, idx) => {
               const pct = baseBilling > 0 ? ((c.billing / baseBilling) * 100).toFixed(1) : 0;
+              const safeCust = String(c.customer_name || '').replace(/'/g, "\\'");
               return `
-                <div class="space-y-0.5">
+                <div class="space-y-0.5 p-1 -mx-1 rounded-lg hover:bg-indigo-50/60 cursor-pointer transition-colors" onclick="window.jumpToShipmentsFiltered && window.jumpToShipmentsFiltered({ query: '${safeCust}', year: '${currentYear}' })" title="클릭하여 [${c.customer_name}] 출하 원장 바로 보기">
                   <div class="flex items-center justify-between text-[11px]">
-                    <span class="font-bold text-slate-800 truncate max-w-[150px]" title="${c.customer_name}">
+                    <span class="font-bold text-slate-800 truncate max-w-[150px]">
                       <span class="text-indigo-600 font-mono font-black">${idx + 1}.</span> ${c.customer_name}
                     </span>
                     <span class="font-mono font-bold text-slate-900">₩${Math.round(c.billing).toLocaleString()}</span>
@@ -820,8 +821,9 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
               const cUsd = m.comm_usd || 0;
               const cKrw = Math.round(cUsd * fxRate);
               const isCommOnly = m.billing <= 0 && cUsd > 0;
+              const safeMfg = String(m.maker || '').replace(/'/g, "\\'");
               return `
-                <div class="space-y-0.5">
+                <div class="space-y-0.5 p-1 -mx-1 rounded-lg hover:bg-emerald-50/60 cursor-pointer transition-colors" onclick="window.jumpToShipmentsFiltered && window.jumpToShipmentsFiltered({ mfg: '${safeMfg}', bizType: '${isCommOnly ? 'COMMISSION' : ''}', year: '${currentYear}' })" title="클릭하여 [${m.maker}] 출하 원장 바로 보기">
                   <div class="flex items-center justify-between text-[11px] gap-1">
                     <span class="font-bold text-slate-800 flex items-center gap-1 min-w-0">
                       <span class="px-1.5 py-0.2 rounded text-[9px] font-black ${isCommOnly ? 'bg-violet-100 text-violet-800 border border-violet-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'} shrink-0">${m.maker}</span>
@@ -858,8 +860,9 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
           <div class="space-y-2.5 overflow-y-auto max-h-80 pr-1 text-xs">
             ${mergedSalesReps.length > 0 ? mergedSalesReps.map(s => {
               const hasComm = s.comm_usd > 0;
+              const safeRep = String(s.sales_rep || '').replace(/'/g, "\\'");
               return `
-                <div class="bg-slate-50 p-2.5 rounded-lg border ${hasComm ? 'border-violet-200/80' : 'border-slate-200'} space-y-1">
+                <div class="bg-slate-50 hover:bg-violet-50/50 p-2.5 rounded-lg border ${hasComm ? 'border-violet-200/80' : 'border-slate-200'} space-y-1 cursor-pointer transition-colors" onclick="window.jumpToShipmentsFiltered && window.jumpToShipmentsFiltered({ query: '${safeRep}', year: '${currentYear}' })" title="클릭하여 [${s.sales_rep}] 담당 출하 원장 바로 보기">
                   <div class="flex items-center justify-between gap-2">
                     <span class="font-black text-indigo-950 flex items-center gap-1">
                       <span class="w-2 h-2 rounded-full ${hasComm ? 'bg-violet-600' : 'bg-indigo-600'}"></span>

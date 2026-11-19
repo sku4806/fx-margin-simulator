@@ -1,7 +1,7 @@
-import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261119_opt';
+import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261119_v51';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
-import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261119_opt';
-import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261119_opt';
+import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261119_v51';
+import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261119_v51';
 const initSamplesTab = async (...args) => (await import('./samples.js?v=20261119_opt')).initSamplesTab(...args);
 import { toEnglishSalesName } from './modules/utils.js';
 window.toEnglishSalesName = toEnglishSalesName;
@@ -12,7 +12,7 @@ window.isCsOrAdminUser = isCsOrAdminUser;
 window.isPaymentApprovalAdmin = isPaymentApprovalAdmin;
 window.getCurrentUserEmail = getCurrentUserEmail;
 window.APPROVAL_ADMIN_EMAILS = APPROVAL_ADMIN_EMAILS;
-import { initManualViewer } from './modules/manual.js';
+import { initManualViewer } from './modules/manual.js?v=20261119_v51';
 import {
   evaluatePackaging,
   fetchPackagingStandards,

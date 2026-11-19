@@ -635,19 +635,48 @@ def list_unpaid_commissions(
     min_date: str = "2024-01-01",
     limit: int = 1500
 ):
-    """💎 미수 커미션(해외 공급사 수취 예정 커미션) 조회 API"""
+    """💎 미수 커미션(해외 공급사 수취 예정 커미션) 조회 API + 클라우드 입금완료 정산 병합"""
+    try:
+        import erp_crud
+        settle_map = erp_crud.get_commission_settlement_map()
+    except Exception:
+        settle_map = {}
+
+    st_upper = (status or "UNPAID").strip().upper()
+
+    def _apply_settlements(rows):
+        merged = []
+        for item in rows:
+            row = dict(item)
+            k = str(row.get("idx") or "").strip()
+            s_info = settle_map.get(k)
+            if s_info:
+                row["bank_dt"] = s_info.get("bank_dt") or row.get("bank_dt") or ""
+                row["comm_status"] = "입금완료"
+                row["cloud_settled"] = True
+            is_paid = bool((row.get("bank_dt") or "").strip() or (row.get("comm_dt") or "").strip())
+            if st_upper == "UNPAID" and is_paid:
+                continue
+            if st_upper == "PAID" and not is_paid:
+                continue
+            merged.append(row)
+            if len(merged) >= limit:
+                break
+        return merged
+
     if not is_vercel:
         try:
             import legacy_mssql
             items = legacy_mssql.query_unpaid_commissions(
-                status=status,
+                status="ALL",
                 maker=maker,
                 sales_rep=sales_rep,
                 search_query=query,
                 min_date=min_date,
                 limit=limit
             )
-            return {"status": "success", "total": len(items), "items": items}
+            final_items = _apply_settlements(items)
+            return {"status": "success", "total": len(final_items), "items": final_items}
         except Exception as e:
             print(f"[WARN] Local MS-SQL unpaid commissions query failed: {e}")
 
@@ -655,19 +684,13 @@ def list_unpaid_commissions(
     items = get_bundled_shipped_data()
     today = datetime.date.today()
     q_lower = query.lower().strip() if query else None
-    st_upper = (status or "UNPAID").strip().upper()
-    out = []
+    pre = []
     for item in items:
         c_amt = float(item.get("comm_amt") or 0)
         if c_amt <= 0:
             continue
         s_date = item.get("ship_date") or ""
         if min_date and s_date and s_date < min_date:
-            continue
-        is_paid = bool((item.get("bank_dt") or "").strip() or (item.get("comm_dt") or "").strip())
-        if st_upper == "UNPAID" and is_paid:
-            continue
-        if st_upper == "PAID" and not is_paid:
             continue
         if maker and maker.strip() and maker.strip().upper() != "ALL":
             if (item.get("maker") or "").strip().lower() != maker.strip().lower():
@@ -687,10 +710,9 @@ def list_unpaid_commissions(
                 pass
         row = dict(item)
         row["overdue_days"] = overdue_days
-        out.append(row)
-        if len(out) >= limit:
-            break
+        pre.append(row)
 
+    out = _apply_settlements(pre)
     return {"status": "success", "total": len(out), "items": out, "source": "bundled_fallback" if is_vercel else "fallback"}
 
 @app.get("/api/shipped-info/filters")
