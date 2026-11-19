@@ -770,9 +770,17 @@ def query_customers(search_query: Optional[str] = None, limit: int = 30) -> List
 # ========================================================
 # 📊 매출 장부 및 다차원 실적 분석 (FrmSalesBKBL & FrmSalesGraph)
 # ========================================================
+_CACHED_SALES_ANALYTICS: Dict[str, Dict[str, Any]] = {}
+
+
 def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dict[str, Any]:
-    """월별 수주/매출(Book & Bill), Top 고객사, 제조사 비중, 영업사원 실적 집계 (연간 누적 또는 특정 월 선택)"""
+    """월별 수주/매출(Book & Bill), Top 고객사, 제조사 비중, 영업사원 + Commission 실적 집계 (60초 인메모리 캐시)"""
     import calendar
+    cache_key = f"{year}:{str(month or 'all').strip().lower()}"
+    now_ts = time.time()
+    cached_entry = _CACHED_SALES_ANALYTICS.get(cache_key)
+    if cached_entry and (now_ts - cached_entry["ts"] < 60.0):
+        return cached_entry["data"]
     try:
         conn = get_db_connection()
         cur = conn.cursor(as_dict=True)
@@ -1045,7 +1053,7 @@ def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dic
 
         overall_margin_rate = (total_margin_ytd / total_billing_ytd * 100) if total_billing_ytd > 0 else 0.0
 
-        return {
+        analytics_payload = {
             "year": year,
             "month": str(selected_month_num) if is_monthly else "all",
             "is_monthly": is_monthly,
@@ -1065,6 +1073,8 @@ def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dic
             "sales_reps": sales_reps,
             "commission": commission_summary
         }
+        _CACHED_SALES_ANALYTICS[cache_key] = {"ts": time.time(), "data": analytics_payload}
+        return analytics_payload
     except Exception as e:
         print(f"[ERROR] get_sales_analytics 에러: {e}")
         return {

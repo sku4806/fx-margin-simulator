@@ -757,7 +757,6 @@ function renderSubLedgerSection() {
  */
 function bindShipmentToolbarEvents() {
   const btnLedger = document.getElementById("btnModeLedger");
-  const btnWeb = document.getElementById("btnModeWeb");
   const btnSearch = document.getElementById("btnShipmentSearch");
   const btnExcel = document.getElementById("btnShipmentExcelExport");
   const inputStart = document.getElementById("shipmentStartDate");

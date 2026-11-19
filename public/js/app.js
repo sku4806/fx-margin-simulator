@@ -1,8 +1,8 @@
-import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261119_webclean';
+import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261119_opt';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
-import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261119_comm';
-import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261119_grouped2';
-import { initSamplesTab } from './samples.js';
+import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261119_opt';
+import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261119_opt';
+const initSamplesTab = async (...args) => (await import('./samples.js?v=20261119_opt')).initSamplesTab(...args);
 import { toEnglishSalesName } from './modules/utils.js';
 window.toEnglishSalesName = toEnglishSalesName;
 import { supabase, sbClient } from './supabase.js';
@@ -20,28 +20,25 @@ import {
   getAllStandards,
   savePackagingStandard
 } from './modules/packaging.js';
-import { openTrackingModal } from './modules/courier.js?v=20261119_logen';
+import { openTrackingModal } from './modules/courier.js?v=20261119_opt';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { recordAuditLog, renderAuditHistory, fetchAuditLogs } from './modules/audit.js';
 window.recordAuditLog = recordAuditLog;
 window.fetchAuditLogs = fetchAuditLogs;
 import { computeQuotation, computeAllocatedOverheadRate, computeFxVariance } from './calculator.js';
 import { attachCustomerAutocomplete } from './customer-autocomplete.js';
-import { openInvoiceModal, openPackingListModal, openStatementOfAccountModal } from './trade-documents.js';
-window.openTradeInvoice = openInvoiceModal;
-window.openTradePacking = openPackingListModal;
-window.openStatementOfAccount = openStatementOfAccountModal;
+// 🚀 무거운 모달 전용 모듈은 최초 클릭 시 동적 지연 로드(Lazy-Load)하여 초기 부팅 속도 최적화
+window.openTradeInvoice = async (...args) => (await import('./trade-documents.js?v=20261119_opt')).openInvoiceModal(...args);
+window.openTradePacking = async (...args) => (await import('./trade-documents.js?v=20261119_opt')).openPackingListModal(...args);
+window.openStatementOfAccount = async (...args) => (await import('./trade-documents.js?v=20261119_opt')).openStatementOfAccountModal(...args);
 
 import { openPurchaseOrdersModal, fetchPurchaseOrdersSummary } from './purchase-orders.js';
 window.openPurchaseOrdersModal = openPurchaseOrdersModal;
 window.fetchPurchaseOrdersSummary = fetchPurchaseOrdersSummary;
 window.refreshPoHeaderBadge = fetchPurchaseOrdersSummary;
 
-import { openCustomerMasterModal } from './customers.js?v=20261119_comm';
-window.openCustomerMasterModal = openCustomerMasterModal;
-
-import { openPriceHistoryModal } from './price-history.js?v=20261119_comm';
-window.openPriceHistoryModal = openPriceHistoryModal;
+window.openCustomerMasterModal = async (...args) => (await import('./customers.js?v=20261119_opt')).openCustomerMasterModal(...args);
+window.openPriceHistoryModal = async (...args) => (await import('./price-history.js?v=20261119_opt')).openPriceHistoryModal(...args);
 
 import { initPaymentModule, updatePaymentPendingBadge, switchPaymentSubTab } from './expense-approval.js';
 window.initPaymentModule = initPaymentModule;

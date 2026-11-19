@@ -424,30 +424,35 @@ def search_customers(q: Optional[str] = None, limit: int = 30):
 # ========================================================
 # 📊 매출 장부 및 실적 분석 (Book & Bill) API
 # ========================================================
+_LOCAL_ANALYTICS_CACHE = None
+
 @app.get("/api/analytics/sales")
 def sales_analytics(year: Optional[str] = "2026", month: Optional[str] = "all"):
+    global _LOCAL_ANALYTICS_CACHE
     y_str = year or "2026"
     m_str = month or "all"
     try:
         data = legacy_mssql.get_sales_analytics(year=y_str, month=m_str)
         return {"status": "success", "analytics": data}
     except Exception as e:
-        # DB 연결 실패 시 실제 캐시 데이터 fallback
+        # DB 연결 실패 시 인메모리 캐시 fallback
         clean_m = str(m_str).replace("월", "").strip().lower()
         if clean_m in ("", "ytd", "전체"):
             clean_m = "all"
-        cache_path = os.path.join(os.path.dirname(__file__), "api", "data", "sales_analytics_cache.json")
-        if os.path.exists(cache_path):
-            try:
-                with open(cache_path, "r", encoding="utf-8") as f:
-                    all_cache = json.load(f)
-                year_cache = all_cache.get(y_str, {})
-                if clean_m in year_cache:
-                    return {"status": "success", "analytics": year_cache[clean_m]}
-                elif "all" in year_cache:
-                    return {"status": "success", "analytics": year_cache["all"]}
-            except Exception:
-                pass
+        if _LOCAL_ANALYTICS_CACHE is None:
+            cache_path = os.path.join(os.path.dirname(__file__), "api", "data", "sales_analytics_cache.json")
+            if os.path.exists(cache_path):
+                try:
+                    with open(cache_path, "r", encoding="utf-8") as f:
+                        _LOCAL_ANALYTICS_CACHE = json.load(f)
+                except Exception:
+                    _LOCAL_ANALYTICS_CACHE = {}
+        if _LOCAL_ANALYTICS_CACHE:
+            year_cache = _LOCAL_ANALYTICS_CACHE.get(y_str, {})
+            if clean_m in year_cache:
+                return {"status": "success", "analytics": year_cache[clean_m]}
+            elif "all" in year_cache:
+                return {"status": "success", "analytics": year_cache["all"]}
         return {"status": "error", "message": str(e), "analytics": {}}
 
 # ========================================================

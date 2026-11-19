@@ -821,29 +821,18 @@ def sales_analytics(year: Optional[str] = "2026", month: Optional[str] = "all"):
         except Exception as e:
             print(f"[WARN] legacy_mssql query failed, falling back to cache: {e}")
 
-    # 2. 클라우드/Vercel 환경: 실제 데이터 기반 실시간 캐시 활용 (월별/연간 완벽 지원)
+    # 2. 클라우드/Vercel 환경: 인메모리 캐시된 sales_analytics_cache.json 활용 (월별/연간 즉시 응답)
     clean_m = str(m_str).replace("월", "").strip().lower()
     if clean_m in ("", "ytd", "전체"):
         clean_m = "all"
 
-    cache_candidates = [
-        os.path.join(os.path.dirname(__file__), "data", "sales_analytics_cache.json"),
-        os.path.join(os.path.dirname(__file__), "..", "data", "sales_analytics_cache.json"),
-        os.path.join(os.getcwd(), "data", "sales_analytics_cache.json"),
-        os.path.join(os.getcwd(), "api", "data", "sales_analytics_cache.json")
-    ]
-    for cp in cache_candidates:
-        if os.path.exists(cp):
-            try:
-                with open(cp, "r", encoding="utf-8") as f:
-                    all_cache = json.load(f)
-                year_cache = all_cache.get(y_str, {})
-                if clean_m in year_cache:
-                    return {"status": "success", "analytics": year_cache[clean_m]}
-                elif "all" in year_cache:
-                    return {"status": "success", "analytics": year_cache["all"]}
-            except Exception as ex:
-                print(f"[CACHE READ ERROR] {ex}")
+    all_cache = get_bundled_analytics_cache()
+    if all_cache:
+        year_cache = all_cache.get(y_str, {})
+        if clean_m in year_cache:
+            return {"status": "success", "analytics": year_cache[clean_m]}
+        elif "all" in year_cache:
+            return {"status": "success", "analytics": year_cache["all"]}
 
     # 클라우드/Vercel 환경 연도별 응답 데이터
     if y_str == "2025":
@@ -1055,6 +1044,29 @@ def get_bundled_shipped_data():
         if _BUNDLED_SHIPPED_DATA is None:
             _BUNDLED_SHIPPED_DATA = []
     return _BUNDLED_SHIPPED_DATA
+
+_BUNDLED_ANALYTICS_CACHE = None
+
+def get_bundled_analytics_cache():
+    global _BUNDLED_ANALYTICS_CACHE
+    if _BUNDLED_ANALYTICS_CACHE is None:
+        cache_candidates = [
+            os.path.join(BASE_DIR, "data", "sales_analytics_cache.json"),
+            os.path.join(os.path.dirname(BASE_DIR), "data", "sales_analytics_cache.json"),
+            os.path.join(os.getcwd(), "data", "sales_analytics_cache.json"),
+            os.path.join(os.getcwd(), "api", "data", "sales_analytics_cache.json")
+        ]
+        for cp in cache_candidates:
+            if os.path.exists(cp):
+                try:
+                    with open(cp, "r", encoding="utf-8") as f:
+                        _BUNDLED_ANALYTICS_CACHE = json.load(f)
+                        break
+                except Exception as ex:
+                    print(f"[CACHE READ ERROR] {ex}")
+        if _BUNDLED_ANALYTICS_CACHE is None:
+            _BUNDLED_ANALYTICS_CACHE = {}
+    return _BUNDLED_ANALYTICS_CACHE
 
 def filter_purchase_orders(
     orders,
