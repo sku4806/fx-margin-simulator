@@ -627,6 +627,19 @@ def sync_bundled_files(conn):
     except Exception as p1e:
         print(f"⚠️ Phase 1 번들 갱신 예외: {p1e}")
 
+    # 6. Phase 2 확장 번들 (수입 통관·부대비용 DchargeFile & 해외 송금 FinanceFile)
+    try:
+        import_charges = legacy_mssql.query_import_charges(limit=1000)
+        remittances = legacy_mssql.query_remittances(limit=1000)
+        for p_dir in ["api/data", "data"]:
+            with open(os.path.join(p_dir, "import_charges.json"), "w", encoding="utf-8") as f:
+                json.dump(import_charges, f, ensure_ascii=False)
+            with open(os.path.join(p_dir, "remittances.json"), "w", encoding="utf-8") as f:
+                json.dump(remittances, f, ensure_ascii=False)
+        print(f"[*] Phase 2 번들 저장 완료: 수입통관/부대비용 {len(import_charges)}건, 해외송금 T/T {len(remittances)}건")
+    except Exception as p2e:
+        print(f"⚠️ Phase 2 번들 갱신 예외: {p2e}")
+
     print(f"✅ 번들 데이터 갱신 완료!")
 
 def main():

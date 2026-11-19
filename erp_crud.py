@@ -1235,4 +1235,18 @@ def register_crud_routes(app):
         items = legacy_mssql.query_losses(query=query, limit=limit)
         return {"status": "success", "total": len(items), "items": items}
 
+    # 8. Phase 2 확장 조회 API (수입 통관·B/L·부대비용 DchargeFile & 해외 송금 FinanceFile)
+    @app.get("/api/import-charges")
+    def api_list_import_charges(query: Optional[str] = None, supp: Optional[str] = None, limit: int = 300):
+        import legacy_mssql
+        items = legacy_mssql.query_import_charges(query=query, supp=supp, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+    @app.get("/api/remittances")
+    def api_list_remittances(query: Optional[str] = None, mfg: Optional[str] = None, limit: int = 300):
+        import legacy_mssql
+        items = legacy_mssql.query_remittances(query=query, mfg=mfg, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+
 

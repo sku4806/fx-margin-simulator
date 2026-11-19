@@ -5,11 +5,14 @@
 
 let cachedPoSummary = null;
 let currentPoList = [];
+let activePoMainTab = 'po'; // 'po' | 'charges' | 'remittances'
 let activePoStatus = 'PO'; // 기본값: 입고대기(PO)
 let activePoSearch = '';
 let activePoSales = 'ALL';
 let currentPoPage = 1;
 const PO_PAGE_SIZE = 50;
+let cachedImportCharges = [];
+let cachedRemittances = [];
 
 export async function fetchPurchaseOrdersSummary() {
   try {
@@ -54,7 +57,13 @@ export async function fetchPurchaseOrders(params = {}) {
 }
 
 export async function openPurchaseOrdersModal(initialStatus = 'PO') {
-  activePoStatus = initialStatus;
+  if (initialStatus === 'charges' || initialStatus === 'remittances') {
+    activePoMainTab = initialStatus;
+    activePoStatus = 'PO';
+  } else {
+    activePoMainTab = 'po';
+    activePoStatus = initialStatus || 'PO';
+  }
   activePoSearch = '';
   currentPoPage = 1;
 
@@ -117,6 +126,19 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
           <span class="text-sm">💡</span>
           <span><strong>[업무 구분 안내]</strong> 본 화면은 매입처(공급사)에 넣은 <strong>구매 발주(PO) 및 전자결재 승인 발주</strong>를 통합 관리합니다. 고객사로부터 받은 수주(주문) 건은 상단 <strong>[Tab 1/2 수주·출하 관리]</strong>에서 확인하실 수 있습니다.</span>
         </div>
+      </div>
+
+      <!-- 3단 메인 업무 탭 (발주/ETA · 수입 통관/B·L·부대비용 · 해외 송금 T/T) -->
+      <div class="px-4 sm:px-6 pt-1.5 bg-white border-b border-slate-200 flex items-center gap-1.5 sm:gap-3 overflow-x-auto scrollbar-none flex-nowrap shrink-0">
+        <button type="button" data-po-main-tab="po" class="po-main-tab-btn px-3 py-2 text-xs font-black border-b-2 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${activePoMainTab === 'po' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'}">
+          <span>🚢</span> 발주 및 입고예정 (DPOFile)
+        </button>
+        <button type="button" data-po-main-tab="charges" class="po-main-tab-btn px-3 py-2 text-xs font-black border-b-2 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${activePoMainTab === 'charges' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'}">
+          <span>🛃</span> 수입 통관 · B/L · 부대비용 (DchargeFile)
+        </button>
+        <button type="button" data-po-main-tab="remittances" class="po-main-tab-btn px-3 py-2 text-xs font-black border-b-2 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${activePoMainTab === 'remittances' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'}">
+          <span>💸</span> 해외 송금 T/T 내역 (FinanceFile)
+        </button>
       </div>
 
       <!-- 요약 KPI 지표 카드 4종 (모바일 콤팩트 2x2 / 데스크톱 4열) -->
@@ -235,8 +257,293 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
   `;
 
   bindPoModalEvents();
-  await loadPoData();
+  await switchPoMainTab(activePoMainTab);
 }
+
+function escPo(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function switchPoMainTab(tab) {
+  activePoMainTab = tab || 'po';
+  document.querySelectorAll('.po-main-tab-btn').forEach((btn) => {
+    const active = btn.dataset.poMainTab === activePoMainTab;
+    btn.classList.toggle('border-blue-600', active);
+    btn.classList.toggle('text-blue-700', active);
+    btn.classList.toggle('border-transparent', !active);
+    btn.classList.toggle('text-slate-500', !active);
+  });
+
+  const kpiBar = document.getElementById('poKpiBar');
+  const statusTabs = document.getElementById('poStatusTabs');
+  const searchInput = document.getElementById('poSearchInput');
+  const wrap = document.getElementById('poListScrollWrap');
+
+  if (activePoMainTab === 'po') {
+    kpiBar?.classList.remove('hidden');
+    statusTabs?.classList.remove('hidden');
+    if (searchInput) searchInput.placeholder = '품번, 발주번호, 공급사, 실수요처 검색...';
+    if (wrap && !document.getElementById('poTableBody')) {
+      wrap.innerHTML = `
+        <div id="poMobileCards" class="block md:hidden p-3 space-y-2.5"></div>
+        <table class="hidden md:table w-full text-left text-xs border-collapse">
+          <thead class="bg-slate-800 text-white sticky top-0 z-10 text-[11px] font-bold">
+            <tr>
+              <th class="py-2.5 px-2 text-center w-10">#</th>
+              <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">상태</th>
+              <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">발주일자</th>
+              <th class="py-2.5 px-3 text-left min-w-[130px]">발주번호 (PO NO)</th>
+              <th class="py-2.5 px-3 text-left min-w-[200px]">품번 (Part#)</th>
+              <th class="py-2.5 px-2.5 text-left min-w-[80px]">제조사</th>
+              <th class="py-2.5 px-2.5 text-right whitespace-nowrap w-20">수량</th>
+              <th class="py-2.5 px-2.5 text-right whitespace-nowrap min-w-[85px]">발주단가</th>
+              <th class="py-2.5 px-2.5 text-right whitespace-nowrap min-w-[95px]">발주금액</th>
+              <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">입고예정(CRD/ETA)</th>
+              <th class="py-2.5 px-3 text-left min-w-[120px]">매입처(공급사)</th>
+              <th class="py-2.5 px-3 text-left min-w-[110px]">실수요처(납품처)</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">영업담당</th>
+              <th class="py-2.5 px-3 text-left min-w-[120px]">비고</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">관리</th>
+            </tr>
+          </thead>
+          <tbody id="poTableBody" class="divide-y divide-slate-200"></tbody>
+        </table>
+      `;
+    }
+    await loadPoData();
+  } else if (activePoMainTab === 'charges') {
+    kpiBar?.classList.add('hidden');
+    statusTabs?.classList.add('hidden');
+    if (searchInput) searchInput.placeholder = 'B/L 번호, 공급사(ISSI/BELFUSE/ESMT), 포워더(DHL), 수입신고번호 검색...';
+    await loadImportChargesData();
+  } else if (activePoMainTab === 'remittances') {
+    kpiBar?.classList.add('hidden');
+    statusTabs?.classList.add('hidden');
+    if (searchInput) searchInput.placeholder = '제조사(MFG), T/T 번호(0455-OTT-...), 담당자, 비고 검색...';
+    await loadRemittancesData();
+  }
+}
+
+async function loadImportChargesData() {
+  const wrap = document.getElementById('poListScrollWrap');
+  const countInfo = document.getElementById('poCountInfo');
+  const pag = document.getElementById('poPagination');
+  if (pag) pag.innerHTML = '';
+  if (wrap) wrap.innerHTML = `<div class="py-12 text-center text-slate-400 text-xs font-bold">⏳ 수입 통관 · B/L · 부대비용 원장(DchargeFile) 조회 중...</div>`;
+
+  try {
+    const params = new URLSearchParams({ limit: '300' });
+    if (activePoSearch) params.set('query', activePoSearch);
+    const res = await fetch(`/api/import-charges?${params.toString()}`);
+    const data = await res.json();
+    cachedImportCharges = data.items || [];
+    window._cachedImportCharges = cachedImportCharges;
+
+    const totalCharge = cachedImportCharges.reduce((s, c) => s + (Number(c.charge) || 0), 0);
+    const totalDuty = cachedImportCharges.reduce((s, c) => s + (Number(c.duty) || 0), 0);
+    const totalVat = cachedImportCharges.reduce((s, c) => s + (Number(c.vat) || 0), 0);
+
+    if (countInfo) {
+      countInfo.innerHTML = `수입 통관 <strong class="text-blue-700">${cachedImportCharges.length.toLocaleString()}건</strong> · 부대비용 합계 <strong class="text-rose-700 font-mono">₩${Math.round(totalCharge).toLocaleString()}</strong> (관세 ₩${Math.round(totalDuty).toLocaleString()} / 수입VAT ₩${Math.round(totalVat).toLocaleString()})`;
+    }
+
+    if (!cachedImportCharges.length) {
+      if (wrap) wrap.innerHTML = `<div class="py-16 text-center text-slate-400 text-xs font-bold">조건에 일치하는 수입 통관 내역이 없습니다.</div>`;
+      return;
+    }
+
+    const mobileHtml = `
+      <div class="block md:hidden p-3 space-y-2.5">
+        ${cachedImportCharges.map((c, idx) => `
+          <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-1.5 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="text-[10px] font-mono text-slate-400">#${idx + 1}</span>
+                <span class="text-[11px] font-mono font-bold text-slate-700">${escPo(c.in_date || '-')}</span>
+                <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 font-black text-[10px]">${escPo(c.supp)}</span>
+                ${c.forwarder ? `<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 font-bold text-[10px]">${escPo(c.forwarder)}</span>` : ''}
+              </div>
+              <button type="button" onclick="window.applyImportChargeToCalculator(${idx})" class="px-2 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-black text-[10px] cursor-pointer shrink-0">🧮 계산기 반영</button>
+            </div>
+            <div class="flex items-center justify-between text-[11px] font-mono">
+              <span class="font-bold text-slate-900">B/L: ${escPo(c.bl_no || '-')}</span>
+              <span class="text-slate-500">${c.weight ? `${c.weight}kg` : ''} · 환율 ₩${(c.rate || 0).toLocaleString()}</span>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px]">
+              <div><span class="text-[9px] text-slate-400 block">총 부대비용</span><span class="font-mono font-black text-rose-700">₩${Math.round(c.charge || 0).toLocaleString()}</span></div>
+              <div><span class="text-[9px] text-slate-400 block">특송/관세</span><span class="font-mono text-slate-700">₩${Math.round((c.awb_fee || 0) + (c.freight || 0)).toLocaleString()} / ₩${Math.round(c.duty || 0).toLocaleString()}</span></div>
+              <div class="text-right"><span class="text-[9px] text-slate-400 block">실비 가산율</span><span class="font-mono font-black text-teal-700">${c.overhead_pct > 0 ? `${c.overhead_pct}%` : '-'}</span></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    const desktopHtml = `
+      <table class="hidden md:table w-full text-left text-xs border-collapse">
+        <thead class="bg-slate-800 text-white sticky top-0 z-10 text-[11px] font-bold">
+          <tr>
+            <th class="py-2.5 px-2 text-center w-10">#</th>
+            <th class="py-2.5 px-2.5 text-center w-24">통관일자</th>
+            <th class="py-2.5 px-2.5 text-left w-28">공급사(Supp)</th>
+            <th class="py-2.5 px-2 text-center w-20">포워더</th>
+            <th class="py-2.5 px-3 text-left min-w-[120px]">B/L · AWB 번호</th>
+            <th class="py-2.5 px-2.5 text-left min-w-[130px]">수입신고번호</th>
+            <th class="py-2.5 px-2 text-center w-16">원산지</th>
+            <th class="py-2.5 px-2 text-right w-16">중량</th>
+            <th class="py-2.5 px-2.5 text-right w-20">적용환율</th>
+            <th class="py-2.5 px-2.5 text-right w-24">특송/운임(₩)</th>
+            <th class="py-2.5 px-2.5 text-right w-24">관세(₩)</th>
+            <th class="py-2.5 px-2.5 text-right w-28">부대비용 합계</th>
+            <th class="py-2.5 px-2.5 text-right w-24">수입VAT(₩)</th>
+            <th class="py-2.5 px-2 text-center w-20">실비가산율</th>
+            <th class="py-2.5 px-2.5 text-center w-24 sticky right-0 bg-slate-800">계산기 연동</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200 bg-white text-[11px]">
+          ${cachedImportCharges.map((c, idx) => `
+            <tr class="hover:bg-teal-50/40">
+              <td class="py-2 px-2 text-center font-mono text-slate-400">${idx + 1}</td>
+              <td class="py-2 px-2.5 text-center font-mono text-slate-700 whitespace-nowrap">${escPo(c.in_date || '-')}</td>
+              <td class="py-2 px-2.5 font-black text-indigo-950 whitespace-nowrap">${escPo(c.supp)}</td>
+              <td class="py-2 px-2 text-center"><span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 font-bold text-[10px]">${escPo(c.forwarder || '-')}</span></td>
+              <td class="py-2 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">${escPo(c.bl_no || '-')}</td>
+              <td class="py-2 px-2.5 font-mono text-slate-500 text-[10px] whitespace-nowrap">${escPo(c.notice_no || c.invoice_no || '-')}</td>
+              <td class="py-2 px-2 text-center text-slate-600 whitespace-nowrap">${escPo(c.origin || '-')}</td>
+              <td class="py-2 px-2 text-right font-mono text-slate-600 whitespace-nowrap">${c.weight ? `${c.weight}kg` : '-'}</td>
+              <td class="py-2 px-2.5 text-right font-mono text-slate-600 whitespace-nowrap">${c.rate ? `₩${c.rate.toLocaleString()}` : '-'}</td>
+              <td class="py-2 px-2.5 text-right font-mono text-blue-700 font-semibold whitespace-nowrap">₩${Math.round((c.awb_fee || 0) + (c.freight || 0)).toLocaleString()}</td>
+              <td class="py-2 px-2.5 text-right font-mono text-slate-700 whitespace-nowrap">${c.duty > 0 ? `₩${Math.round(c.duty).toLocaleString()}` : '-'}</td>
+              <td class="py-2 px-2.5 text-right font-mono font-black text-rose-700 whitespace-nowrap">₩${Math.round(c.charge || 0).toLocaleString()}</td>
+              <td class="py-2 px-2.5 text-right font-mono text-slate-500 whitespace-nowrap">₩${Math.round(c.vat || 0).toLocaleString()}</td>
+              <td class="py-2 px-2 text-center whitespace-nowrap">
+                ${c.overhead_pct > 0 ? `<span class="px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-mono font-black text-[10px]">+${c.overhead_pct}%</span>` : '-'}
+              </td>
+              <td class="py-2 px-2.5 text-center whitespace-nowrap sticky right-0 bg-white">
+                <button type="button" onclick="window.applyImportChargeToCalculator(${idx})" class="px-2 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white font-bold text-[10px] shadow-2xs cursor-pointer" title="이 통관 건의 실비를 부대비용 자동배부 계산기에 즉시 반영">
+                  🧮 계산기 반영
+                </button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    if (wrap) {
+      wrap.innerHTML = mobileHtml + desktopHtml;
+      wrap.scrollTop = 0;
+    }
+  } catch (err) {
+    if (wrap) wrap.innerHTML = `<div class="py-12 text-center text-rose-500 text-xs font-bold">조회 오류: ${escPo(err.message)}</div>`;
+  }
+}
+
+async function loadRemittancesData() {
+  const wrap = document.getElementById('poListScrollWrap');
+  const countInfo = document.getElementById('poCountInfo');
+  const pag = document.getElementById('poPagination');
+  if (pag) pag.innerHTML = '';
+  if (wrap) wrap.innerHTML = `<div class="py-12 text-center text-slate-400 text-xs font-bold">⏳ 해외 송금 T/T 내역(FinanceFile) 조회 중...</div>`;
+
+  try {
+    const params = new URLSearchParams({ limit: '300' });
+    if (activePoSearch) params.set('query', activePoSearch);
+    const res = await fetch(`/api/remittances?${params.toString()}`);
+    const data = await res.json();
+    cachedRemittances = data.items || [];
+
+    const totalUsd = cachedRemittances.reduce((s, r) => s + (Number(r.remittance) || 0), 0);
+    const totalKrw = cachedRemittances.reduce((s, r) => s + (Number(r.krw_amount) || 0), 0);
+
+    if (countInfo) {
+      countInfo.innerHTML = `해외 송금 <strong class="text-blue-700">${cachedRemittances.length.toLocaleString()}건</strong> · 송금액 합계 <strong class="text-emerald-700 font-mono">$${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> (원화환산 <strong class="text-indigo-900 font-mono">₩${Math.round(totalKrw).toLocaleString()}</strong>)`;
+    }
+
+    if (!cachedRemittances.length) {
+      if (wrap) wrap.innerHTML = `<div class="py-16 text-center text-slate-400 text-xs font-bold">조건에 일치하는 해외 송금 내역이 없습니다.</div>`;
+      return;
+    }
+
+    const mobileHtml = `
+      <div class="block md:hidden p-3 space-y-2.5">
+        ${cachedRemittances.map((r, idx) => `
+          <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-1.5 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] font-mono text-slate-400">#${idx + 1}</span>
+                <span class="text-[11px] font-mono font-bold text-slate-700">${escPo(r.remittance_dt || '-')}</span>
+                <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 font-black text-[10px]">${escPo(r.mfg)}</span>
+              </div>
+              <span class="text-[10px] font-semibold text-slate-500">${escPo(r.input_person || '')}</span>
+            </div>
+            <div class="font-mono text-[11px] font-bold text-slate-800">T/T: ${escPo(r.tt_no || '-')}</div>
+            <div class="grid grid-cols-3 gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px]">
+              <div><span class="text-[9px] text-slate-400 block">송금액(${escPo(r.currency)})</span><span class="font-mono font-black text-emerald-700">$${(r.remittance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+              <div><span class="text-[9px] text-slate-400 block">적용환율</span><span class="font-mono text-slate-700">₩${(r.exrate || 0).toLocaleString()}</span></div>
+              <div class="text-right"><span class="text-[9px] text-slate-400 block">원화환산</span><span class="font-mono font-black text-indigo-950">₩${Math.round(r.krw_amount || 0).toLocaleString()}</span></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    const desktopHtml = `
+      <table class="hidden md:table w-full text-left text-xs border-collapse">
+        <thead class="bg-slate-800 text-white sticky top-0 z-10 text-[11px] font-bold">
+          <tr>
+            <th class="py-2.5 px-2.5 text-center w-12">#</th>
+            <th class="py-2.5 px-3 text-center w-28">송금일자</th>
+            <th class="py-2.5 px-3 text-left min-w-[130px]">제조사 / 매입처 (MFG)</th>
+            <th class="py-2.5 px-3 text-left min-w-[160px]">T/T 번호 (TTNO)</th>
+            <th class="py-2.5 px-2 text-center w-16">통화</th>
+            <th class="py-2.5 px-3 text-right min-w-[120px]">실제 송금액</th>
+            <th class="py-2.5 px-3 text-right min-w-[120px]">물품 원가 (Commodity)</th>
+            <th class="py-2.5 px-2.5 text-right w-24">적용 환율</th>
+            <th class="py-2.5 px-3 text-right min-w-[130px]">원화 환산액 (₩)</th>
+            <th class="py-2.5 px-2.5 text-center w-24">입력자</th>
+            <th class="py-2.5 px-3 text-left min-w-[130px]">비고</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200 bg-white text-[11px]">
+          ${cachedRemittances.map((r, idx) => `
+            <tr class="hover:bg-indigo-50/40">
+              <td class="py-2 px-2.5 text-center font-mono text-slate-400">${idx + 1}</td>
+              <td class="py-2 px-3 text-center font-mono text-slate-700 whitespace-nowrap">${escPo(r.remittance_dt || '-')}</td>
+              <td class="py-2 px-3 font-black text-indigo-950">${escPo(r.mfg)}</td>
+              <td class="py-2 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">${escPo(r.tt_no || '-')}</td>
+              <td class="py-2 px-2 text-center font-bold text-slate-600">${escPo(r.currency)}</td>
+              <td class="py-2 px-3 text-right font-mono font-black text-emerald-700 whitespace-nowrap">$${(r.remittance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td class="py-2 px-3 text-right font-mono text-slate-700 whitespace-nowrap">$${(r.commodity_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td class="py-2 px-2.5 text-right font-mono text-slate-600 whitespace-nowrap">₩${(r.exrate || 0).toLocaleString()}</td>
+              <td class="py-2 px-3 text-right font-mono font-black text-indigo-950 whitespace-nowrap">₩${Math.round(r.krw_amount || 0).toLocaleString()}</td>
+              <td class="py-2 px-2.5 text-center font-semibold text-slate-600 whitespace-nowrap">${escPo(r.input_person || '-')}</td>
+              <td class="py-2 px-3 text-slate-500 truncate max-w-[180px]" title="${escPo(r.remark)}">${escPo(r.remark || '-')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    if (wrap) {
+      wrap.innerHTML = mobileHtml + desktopHtml;
+      wrap.scrollTop = 0;
+    }
+  } catch (err) {
+    if (wrap) wrap.innerHTML = `<div class="py-12 text-center text-rose-500 text-xs font-bold">조회 오류: ${escPo(err.message)}</div>`;
+  }
+}
+
+window.applyImportChargeToCalculator = function(idx) {
+  const c = cachedImportCharges[idx];
+  if (!c) return;
+  document.getElementById('purchaseOrdersModal')?.classList.add('hidden');
+  const lcModal = document.getElementById('landedCostModal');
+  if (lcModal) lcModal.classList.remove('hidden');
+  if (typeof window.fillLandedCostFromChargeRecord === 'function') {
+    window.fillLandedCostFromChargeRecord(c);
+  }
+};
 
 async function loadPoData() {
   const tbody = document.getElementById('poTableBody');
@@ -525,6 +832,13 @@ function renderPoPagination(total, totalPages) {
 }
 
 function bindPoModalEvents() {
+  // 상단 3대 업무 탭 전환
+  document.querySelectorAll('.po-main-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      await switchPoMainTab(btn.dataset.poMainTab);
+    });
+  });
+
   // 상태 탭 클릭
   const statusTabs = document.querySelectorAll('.po-status-tab');
   statusTabs.forEach(tab => {
@@ -551,7 +865,9 @@ function bindPoModalEvents() {
       debounceTimer = setTimeout(async () => {
         activePoSearch = e.target.value.trim();
         currentPoPage = 1;
-        await loadPoData();
+        if (activePoMainTab === 'po') await loadPoData();
+        else if (activePoMainTab === 'charges') await loadImportChargesData();
+        else if (activePoMainTab === 'remittances') await loadRemittancesData();
       }, 250);
     });
   }
@@ -560,7 +876,9 @@ function bindPoModalEvents() {
   const refreshBtn = document.getElementById('poRefreshBtn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', async () => {
-      await loadPoData();
+      if (activePoMainTab === 'po') await loadPoData();
+      else if (activePoMainTab === 'charges') await loadImportChargesData();
+      else if (activePoMainTab === 'remittances') await loadRemittancesData();
     });
   }
 

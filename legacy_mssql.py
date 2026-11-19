@@ -1901,6 +1901,152 @@ def query_losses(query: Optional[str] = None, limit: int = 300) -> List[Dict[str
         return items[:limit]
 
 
+# ========================================================
+# 🛃 Phase 2 확장 모듈: 수입 통관·B/L·부대비용 원장(DchargeFile) & 해외 송금 T/T(FinanceFile)
+# ========================================================
+def query_import_charges(query: Optional[str] = None, supp: Optional[str] = None, limit: int = 300) -> List[Dict[str, Any]]:
+    """DchargeFile: 수입 통관 · B/L · 관세/운임 부대비용 원장 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = []
+        params = []
+        if supp and supp.strip() and supp.strip().upper() != "ALL":
+            conditions.append("LTRIM(RTRIM(Supp)) = %s")
+            params.append(supp.strip())
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(BL LIKE %s OR Supp LIKE %s OR FWinfo LIKE %s OR Noticenum LIKE %s OR Origin LIKE %s OR Invoiceno LIKE %s OR INPUT_PERSON LIKE %s)")
+            params.extend([term] * 7)
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT TOP {int(limit)}
+                Idx as idx, Invoiceno as invoice_no, Supp as supp,
+                BL as bl_no, FWinfo as forwarder, Origin as origin,
+                Indate as in_date, Rate as rate, Charge as charge,
+                Weight as weight, VAT as vat, Duty as duty,
+                Warehouse as warehouse, Entry as entry_fee,
+                Freight as freight, Etc as etc_fee, AWB as awb_fee,
+                Noticenum as notice_no, INPUT_PERSON as input_person
+            FROM DchargeFile
+            {where_sql}
+            ORDER BY Indate DESC, Idx DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        results = []
+        for r in rows:
+            rate = float(r.get("rate") or 0.0)
+            vat = float(r.get("vat") or 0.0)
+            duty = int(r.get("duty") or 0)
+            charge = float(r.get("charge") or 0.0)
+            awb_fee = int(r.get("awb_fee") or 0)
+            freight = int(r.get("freight") or 0)
+            warehouse = int(r.get("warehouse") or 0)
+            entry_fee = int(r.get("entry_fee") or 0)
+            etc_fee = int(r.get("etc_fee") or 0)
+
+            # 수입 부가세(10%) 기준 물품 과세가격 역산: (VAT * 10) - 관세
+            est_goods_krw = max(0.0, (vat * 10.0) - duty) if vat > 0 else 0.0
+            est_goods_usd = round(est_goods_krw / rate, 2) if (est_goods_krw > 0 and rate > 500) else 0.0
+            overhead_pct = round((charge / est_goods_krw) * 100.0, 2) if est_goods_krw > 0 else 0.0
+
+            results.append({
+                "idx": r["idx"],
+                "invoice_no": clean_val(r.get("invoice_no")),
+                "supp": clean_val(r.get("supp")) or "-",
+                "bl_no": clean_val(r.get("bl_no")),
+                "forwarder": clean_val(r.get("forwarder")),
+                "origin": clean_val(r.get("origin")),
+                "in_date": _fmt_dt(r.get("in_date")),
+                "rate": rate,
+                "charge": charge,
+                "weight": float(r.get("weight") or 0.0),
+                "vat": vat,
+                "duty": duty,
+                "awb_fee": awb_fee,
+                "freight": freight,
+                "warehouse": warehouse,
+                "entry_fee": entry_fee,
+                "etc_fee": etc_fee,
+                "notice_no": clean_val(r.get("notice_no")),
+                "input_person": clean_val(r.get("input_person")),
+                "est_goods_krw": round(est_goods_krw),
+                "est_goods_usd": est_goods_usd,
+                "overhead_pct": overhead_pct,
+            })
+        return results
+    except Exception:
+        items = _load_phase1_bundle("import_charges.json") or []
+        if supp and supp.strip() and supp.strip().upper() != "ALL":
+            s_up = supp.strip().upper()
+            items = [it for it in items if (it.get("supp") or "").upper() == s_up]
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('bl_no','')} {it.get('supp','')} {it.get('forwarder','')} {it.get('notice_no','')} {it.get('origin','')} {it.get('invoice_no','')} {it.get('input_person','')}".lower()]
+        return items[:limit]
+
+def query_remittances(query: Optional[str] = None, mfg: Optional[str] = None, limit: int = 300) -> List[Dict[str, Any]]:
+    """FinanceFile: 해외 송금(T/T) 및 외환 결제 내역 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = []
+        params = []
+        if mfg and mfg.strip() and mfg.strip().upper() != "ALL":
+            conditions.append("LTRIM(RTRIM(MFG)) = %s")
+            params.append(mfg.strip())
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(MFG LIKE %s OR TTNO LIKE %s OR INPUT_PERSON LIKE %s OR REMARK LIKE %s OR CURRENCY LIKE %s)")
+            params.extend([term] * 5)
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT TOP {int(limit)}
+                IDX as idx, MFG as mfg, REMITTANCE_DT as remittance_dt,
+                CURRENCY as currency, REMITTANCE as remittance,
+                COMMODITY_COST as commodity_cost, EXRATE as exrate,
+                TTNO as tt_no, INPUT_PERSON as input_person,
+                INPUT_DT as input_dt, REMARK as remark
+            FROM FinanceFile
+            {where_sql}
+            ORDER BY REMITTANCE_DT DESC, IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        results = []
+        for r in rows:
+            rem = float(r.get("remittance") or 0.0)
+            ex = float(r.get("exrate") or 0.0)
+            results.append({
+                "idx": r["idx"],
+                "mfg": clean_val(r.get("mfg")) or "-",
+                "remittance_dt": _fmt_dt(r.get("remittance_dt")),
+                "currency": clean_val(r.get("currency")) or "US$",
+                "remittance": rem,
+                "commodity_cost": float(r.get("commodity_cost") or 0.0),
+                "exrate": ex,
+                "krw_amount": round(rem * ex) if ex > 0 else 0,
+                "tt_no": clean_val(r.get("tt_no")),
+                "input_person": clean_val(r.get("input_person")),
+                "input_dt": _fmt_dt(r.get("input_dt")),
+                "remark": clean_val(r.get("remark")),
+            })
+        return results
+    except Exception:
+        items = _load_phase1_bundle("remittances.json") or []
+        if mfg and mfg.strip() and mfg.strip().upper() != "ALL":
+            m_up = mfg.strip().upper()
+            items = [it for it in items if (it.get("mfg") or "").upper() == m_up]
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('mfg','')} {it.get('tt_no','')} {it.get('input_person','')} {it.get('remark','')}".lower()]
+        return items[:limit]
+
+
+
 
 
 

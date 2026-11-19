@@ -1707,6 +1707,20 @@
       </div>
 
       <form id="landedCostForm" class="space-y-2.5 text-xs">
+        <!-- 🛃 수입 통관 원장(DchargeFile) 실비 즉시 불러오기 -->
+        <div class="bg-teal-50/70 p-2.5 rounded-xl border border-teal-200 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="font-black text-teal-900 text-[11px] flex items-center gap-1">
+              <span>🛃</span> 수입 통관 원장(DchargeFile) 실비 불러오기
+            </label>
+            <button type="button" onclick="window.openPurchaseOrdersModal && window.openPurchaseOrdersModal('charges')" class="text-[10px] font-bold text-teal-700 hover:underline cursor-pointer">전체 통관원장 보기 ↗</button>
+          </div>
+          <select id="lcImportChargePicker" class="w-full p-1.5 border border-teal-300 rounded-lg bg-white text-[11px] font-semibold text-slate-800 outline-none cursor-pointer">
+            <option value="">-- 최근 통관 B/L · 인보이스 실비 선택 (자동 입력) --</option>
+          </select>
+          <div id="lcImportChargeSummary" class="hidden text-[10px] font-mono text-teal-800 bg-white/90 px-2 py-1 rounded border border-teal-200/80"></div>
+        </div>
+
         <div class="grid grid-cols-2 gap-2 bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100">
           <div>
             <label class="text-slate-700 block mb-1 font-bold text-[11px]">운송 방식</label>

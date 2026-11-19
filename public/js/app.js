@@ -1960,6 +1960,9 @@ function bindInputs() {
 
   safeAddListener('openLandedCostBtn', 'click', () => {
     document.getElementById('landedCostModal')?.classList.remove('hidden');
+    if (typeof window.populateLandedCostPicker === 'function') {
+      window.populateLandedCostPicker();
+    }
   });
 
   safeAddListener('excelExportBtn', 'click', () => {
@@ -2126,6 +2129,56 @@ function bindCustomSelect(selectId, inputId, customVal) {
 }
 
 function bindModals() {
+  window.fillLandedCostFromChargeRecord = function(c) {
+    if (!c) return;
+    const rate = Number(c.rate) > 500 ? Number(c.rate) : 1350;
+    const freightKrw = (Number(c.awb_fee) || 0) + (Number(c.freight) || 0);
+    const freightUsd = Number((freightKrw / rate).toFixed(2));
+    const customsKrw = Math.round((Number(c.duty) || 0) + (Number(c.warehouse) || 0) + (Number(c.entry_fee) || 0) + (Number(c.etc_fee) || 0));
+    const goodsUsd = Number(c.est_goods_usd) > 0 ? Number(c.est_goods_usd) : 10000;
+
+    const courierEl = document.getElementById('lcCourierType');
+    if (courierEl) courierEl.value = 'none'; // DchargeFile 실비는 이미 유류할증이 포함된 확정 청구액이므로 중복 할증 방지
+    const goodsEl = document.getElementById('lcTotalGoodsUsd');
+    if (goodsEl) goodsEl.value = goodsUsd;
+    const freightEl = document.getElementById('lcFreightUsd');
+    if (freightEl) freightEl.value = freightUsd;
+    const customsEl = document.getElementById('lcCustomsKrw');
+    if (customsEl) customsEl.value = customsKrw;
+    const shipFxEl = document.getElementById('inputShipFx');
+    if (shipFxEl && Number(c.rate) > 500) shipFxEl.value = c.rate;
+
+    const summaryEl = document.getElementById('lcImportChargeSummary');
+    if (summaryEl) {
+      summaryEl.classList.remove('hidden');
+      summaryEl.innerHTML = `[${c.in_date || '-'} · <strong>${c.supp}</strong> · B/L ${c.bl_no || '-'}] 총 부대비용 <strong>₩${Math.round(c.charge || 0).toLocaleString()}</strong> (환율 ₩${rate.toLocaleString()} / 실비 가산율 <strong>+${c.overhead_pct || 0}%</strong>)`;
+    }
+  };
+
+  window.populateLandedCostPicker = async function() {
+    const picker = document.getElementById('lcImportChargePicker');
+    if (!picker) return;
+    if (!picker.dataset.bound) {
+      picker.dataset.bound = '1';
+      picker.addEventListener('change', () => {
+        const idx = parseInt(picker.value, 10);
+        const list = window._lcChargeList || [];
+        if (!isNaN(idx) && list[idx]) {
+          window.fillLandedCostFromChargeRecord(list[idx]);
+        }
+      });
+    }
+    if (window._lcChargeList && window._lcChargeList.length > 0) return;
+    try {
+      const res = await fetch('/api/import-charges?limit=40');
+      const data = await res.json();
+      const items = data.items || [];
+      window._lcChargeList = items;
+      picker.innerHTML = `<option value="">-- 최근 통관 B/L · 인보이스 실비 선택 (${items.length}건) --</option>` +
+        items.map((c, i) => `<option value="${i}">[${c.in_date || '-'}] ${c.supp} | ${c.forwarder || '특송'} B/L:${c.bl_no || '-'} | ₩${Math.round(c.charge || 0).toLocaleString()} (+${c.overhead_pct || 0}%)</option>`).join('');
+    } catch (e) {}
+  };
+
   const landedCostForm = document.getElementById('landedCostForm');
   if (landedCostForm) {
     landedCostForm.onsubmit = (e) => {
