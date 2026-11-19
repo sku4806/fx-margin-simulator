@@ -422,8 +422,9 @@ function generateLegacyMasterRow(item, canEdit) {
   const shipFx = Number(item.shipFx ?? item.ship_fx) || 1350;
   const amountKrw = Math.round(amount * shipFx);
 
-  const isAssigned = (item.orderStatus === '배정완료' || item.orderStatus === '배정요청' || (item.customer && item.customer !== '-'));
-  const arrangedQty = isAssigned ? (Number(item.arrangedQty ?? item.arranged_qty) || stock) : 0;
+  const rawArranged = Number(item.arrangedQty ?? item.arranged_qty) || 0;
+  const isExplicitAlloc = (item.orderStatus === '배정완료' || item.orderStatus === '배정요청');
+  const arrangedQty = rawArranged > 0 ? Math.min(stock, rawArranged) : (isExplicitAlloc ? stock : 0);
   const notArranQty = Math.max(0, stock - arrangedQty);
 
   const kind = item.bizType || item.biz_type || 'DOMESTIC';
@@ -520,8 +521,9 @@ function generateFulfillmentRow(item, canEdit) {
   const soldPrice = Number(item.soldPriceUsd ?? item.sold_price_usd) || 0;
   const amount = stock * unitUsd;
 
-  const isAssigned = (item.orderStatus === '배정완료' || item.orderStatus === '배정요청' || (item.customer && item.customer !== '-'));
-  const arrangedQty = isAssigned ? (Number(item.arrangedQty ?? item.arranged_qty) || stock) : 0;
+  const rawArranged = Number(item.arrangedQty ?? item.arranged_qty) || 0;
+  const isExplicitAlloc = (item.orderStatus === '배정완료' || item.orderStatus === '배정요청');
+  const arrangedQty = rawArranged > 0 ? Math.min(stock, rawArranged) : (isExplicitAlloc ? stock : 0);
   const notArranQty = Math.max(0, stock - arrangedQty);
 
   const kind = item.bizType || item.biz_type || 'DOMESTIC';

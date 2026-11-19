@@ -6,7 +6,7 @@ const initSamplesTab = async (...args) => (await import('./samples.js?v=20261119
 import { toEnglishSalesName } from './modules/utils.js';
 window.toEnglishSalesName = toEnglishSalesName;
 import { supabase, sbClient } from './supabase.js';
-import * as InventoryModule from './inventory.js';
+import * as InventoryModule from './inventory.js?v=20261119_avail';
 import { initAuth, isCsOrAdminUser, isPaymentApprovalAdmin, getCurrentUserEmail, APPROVAL_ADMIN_EMAILS } from './modules/auth.js';
 window.isCsOrAdminUser = isCsOrAdminUser;
 window.isPaymentApprovalAdmin = isPaymentApprovalAdmin;
