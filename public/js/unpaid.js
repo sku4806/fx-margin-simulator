@@ -388,20 +388,20 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
         <table class="w-full text-left text-xs border-collapse">
           <thead class="bg-[#1e293b] text-white border-b border-slate-700 uppercase font-bold sticky top-0 z-10 shadow-xs text-[11px]">
             <tr>
-              <th class="py-2.5 px-2 text-center whitespace-nowrap w-9">#</th>
-              <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-[110px]">미수/결제상태</th>
-              <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-[90px]">결제예정일</th>
-              <th class="py-2.5 px-3 text-left min-w-[150px]">고객사명 (CNAME)</th>
-              <th class="py-2.5 px-2.5 text-left min-w-[70px]">담당자</th>
-              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">영업담당</th>
-              <th class="py-2.5 px-3 text-right whitespace-nowrap min-w-[110px]">미수금액 (VAT포함)</th>
-              <th class="py-2.5 px-3 text-left min-w-[180px]">품번 (Part#)</th>
-              <th class="py-2.5 px-2.5 text-left min-w-[70px]">제조사</th>
-              <th class="py-2.5 px-2.5 text-right whitespace-nowrap min-w-[60px]">수량</th>
-              <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-[90px]">출하일자</th>
-              <th class="py-2.5 px-2.5 text-left min-w-[110px]">PO 번호</th>
-              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">상태</th>
-              <th class="py-2.5 px-2 text-center whitespace-nowrap min-w-[135px]">수금/청구 관리</th>
+              <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-8">#</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-[100px]">미수/결제상태</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-[84px]">결제예정일</th>
+              <th class="py-2.5 px-2 text-left min-w-[130px]">고객사명 (CNAME)</th>
+              <th class="py-2.5 px-2 text-left min-w-[64px]">담당자</th>
+              <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-14">영업담당</th>
+              <th class="py-2.5 px-2 text-right whitespace-nowrap min-w-[100px]">미수금액 (VAT)</th>
+              <th class="py-2.5 px-2 text-left min-w-[155px]">품번 (Part#)</th>
+              <th class="py-2.5 px-2 text-left min-w-[64px]">제조사</th>
+              <th class="py-2.5 px-2 text-right whitespace-nowrap min-w-[56px]">수량</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap w-[84px]">출하일자</th>
+              <th class="py-2.5 px-2 text-left min-w-[96px]">PO 번호</th>
+              <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-14">상태</th>
+              <th class="py-2.5 px-2 text-center whitespace-nowrap sticky right-0 z-20 bg-[#1e293b] shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.25)]">수금/청구 관리</th>
             </tr>
           </thead>
           <tbody id="unpaidTableBody" class="divide-y divide-slate-100 font-medium bg-white text-slate-700">
@@ -590,6 +590,7 @@ function generateUnpaidTableRows(items, offset = 0) {
     // 미수/결제상태 뱃지 (레거시 색상 매핑)
     let badgeHtml = "";
     let rowBg = realIdx % 2 === 0 ? "bg-white" : "bg-slate-50/50";
+    let stickyBg = realIdx % 2 === 0 ? "bg-white" : "bg-[#f8fafc]";
 
     if (ovd <= 0) {
       const dDayText = ovd === 0 ? "D-Day (오늘)" : `D${ovd}`;
@@ -597,40 +598,44 @@ function generateUnpaidTableRows(items, offset = 0) {
     } else if (ovd < 30) {
       badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap">+${ovd}일 연체</span>`;
       rowBg = "bg-amber-50/30";
+      stickyBg = "bg-[#fffdf5]";
     } else if (ovd < 45) {
       badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-950 border border-orange-300 whitespace-nowrap">+${ovd}일 (경고)</span>`;
       rowBg = "bg-orange-50/30";
+      stickyBg = "bg-[#fffaf5]";
     } else if (ovd < 60) {
       badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-950 border border-rose-300 whitespace-nowrap">+${ovd}일 (심각)</span>`;
       rowBg = "bg-rose-50/40";
+      stickyBg = "bg-[#fff7f8]";
     } else {
       badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-200 text-red-950 border border-red-400 whitespace-nowrap">★ +${ovd}일 (고위험)</span>`;
       rowBg = "bg-red-50/50";
+      stickyBg = "bg-[#fef5f5]";
     }
 
     const amtDisplay = Math.round(Number(u.amount_vat) || 0).toLocaleString();
 
     return `
-      <tr class="${rowBg} hover:bg-indigo-50/70 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" 
+      <tr class="group ${rowBg} hover:bg-indigo-50/70 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" 
           data-unpaid-idx="${realIdx}">
-        <td class="py-1.5 px-2 text-center font-mono text-slate-400">${realIdx + 1}</td>
+        <td class="py-1.5 px-1.5 text-center font-mono text-slate-400">${realIdx + 1}</td>
         <td class="py-1.5 px-2 text-center whitespace-nowrap">${badgeHtml}</td>
-        <td class="py-1.5 px-2.5 text-center font-mono font-bold text-slate-700 whitespace-nowrap">${u.due_date || '-'}</td>
-        <td class="py-1.5 px-3 font-bold text-slate-900 truncate max-w-[170px]" title="${u.cname || '-'}">${u.cname || '-'}</td>
-        <td class="py-1.5 px-2.5 text-slate-700 truncate max-w-[90px]" title="${u.contact || '-'}">${u.contact || '-'}</td>
-        <td class="py-1.5 px-2 text-center font-bold text-indigo-950 whitespace-nowrap">${u.sales || '-'}</td>
-        <td class="py-1.5 px-3 text-right font-mono font-black text-slate-950 whitespace-nowrap">₩ ${amtDisplay}</td>
-        <td class="py-1.5 px-3 font-black text-indigo-900 font-mono tracking-tight">${u.part_no || '-'}</td>
-        <td class="py-1.5 px-2.5 text-slate-800 font-semibold truncate max-w-[80px]">${u.mfg || '-'}</td>
-        <td class="py-1.5 px-2.5 text-right font-semibold text-slate-700 whitespace-nowrap">${(u.qty || 0).toLocaleString()}</td>
-        <td class="py-1.5 px-2.5 text-center font-mono text-slate-500 whitespace-nowrap">${u.out_dt || '-'}</td>
-        <td class="py-1.5 px-2.5 text-slate-600 font-mono text-[10px] truncate max-w-[120px]" title="${u.po_no || '-'}">${u.po_no || '-'}</td>
-        <td class="py-1.5 px-2 text-center whitespace-nowrap">
+        <td class="py-1.5 px-2 text-center font-mono font-bold text-slate-700 whitespace-nowrap">${u.due_date || '-'}</td>
+        <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[155px]" title="${u.cname || '-'}">${u.cname || '-'}</td>
+        <td class="py-1.5 px-2 text-slate-700 truncate max-w-[80px]" title="${u.contact || '-'}">${u.contact || '-'}</td>
+        <td class="py-1.5 px-1.5 text-center font-bold text-indigo-950 whitespace-nowrap">${u.sales || '-'}</td>
+        <td class="py-1.5 px-2 text-right font-mono font-black text-slate-950 whitespace-nowrap">₩ ${amtDisplay}</td>
+        <td class="py-1.5 px-2 font-black text-indigo-900 font-mono tracking-tight truncate max-w-[175px]" title="${u.part_no || '-'}">${u.part_no || '-'}</td>
+        <td class="py-1.5 px-2 text-slate-800 font-semibold truncate max-w-[72px]">${u.mfg || '-'}</td>
+        <td class="py-1.5 px-2 text-right font-semibold text-slate-700 whitespace-nowrap">${(u.qty || 0).toLocaleString()}</td>
+        <td class="py-1.5 px-2 text-center font-mono text-slate-500 whitespace-nowrap">${u.out_dt || '-'}</td>
+        <td class="py-1.5 px-2 text-slate-600 font-mono text-[10px] truncate max-w-[105px]" title="${u.po_no || '-'}">${u.po_no || '-'}</td>
+        <td class="py-1.5 px-1.5 text-center whitespace-nowrap">
           <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${u.pay_status === '수금완료' ? 'bg-emerald-100 text-emerald-800' : (u.pay_status === '부분입금' ? 'bg-blue-100 text-blue-800' : (u.pay_status === '결제약속' ? 'bg-amber-100 text-amber-900' : 'bg-rose-50 text-rose-700'))}">
             ${u.pay_status || '미결제'}
           </span>
         </td>
-        <td class="py-1.5 px-2 text-center whitespace-nowrap" onclick="event.stopPropagation()">
+        <td class="py-1.5 px-2 text-center whitespace-nowrap sticky right-0 z-[5] ${stickyBg} group-hover:bg-[#eef2ff] shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)]" onclick="event.stopPropagation()">
           <div class="flex items-center justify-center gap-1">
             <button type="button" onclick="event.stopPropagation(); window.openPaymentSettlementModal && window.openPaymentSettlementModal(${realIdx})" 
                     class="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[10px] rounded shadow-2xs transition-colors cursor-pointer flex items-center gap-0.5" 

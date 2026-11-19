@@ -516,7 +516,7 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
         </div>
 
         <div class="w-full overflow-x-auto pt-1 scroll-smooth" style="-webkit-overflow-scrolling: touch;">
-          <svg viewBox="0 0 ${chartWidth} ${chartHeight}" class="w-full h-52 select-none min-w-[700px]">
+          <svg viewBox="0 0 ${chartWidth} ${chartHeight}" class="w-full max-w-5xl mx-auto h-52 sm:h-60 select-none min-w-[680px]">
             <defs>
               <linearGradient id="billingBarGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#6366f1" />

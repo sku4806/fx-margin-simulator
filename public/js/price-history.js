@@ -21,30 +21,31 @@ export async function openPriceHistoryModal(partNo) {
 
   modal.classList.remove('hidden');
   modal.innerHTML = `
-    <div class="bg-white w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+    <div class="bg-white w-full max-w-6xl h-[92vh] sm:h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
       
       <!-- 상단 헤더 -->
-      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-6 py-4 flex items-center justify-between shadow-md">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-xl shadow-inner">
+      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-start sm:items-center justify-between gap-2 shadow-md shrink-0">
+        <div class="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+          <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-lg sm:text-xl shadow-inner shrink-0">
             📈
           </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <h2 class="text-base font-black tracking-wide">품목별 과거 단가 & 마진 이력 추적</h2>
-              <span class="text-xs bg-indigo-600 text-white px-2.5 py-0.5 rounded-full font-mono font-black shadow-xs">${cleanPartNo}</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <h2 class="text-sm sm:text-base font-black tracking-wide leading-tight">품목별 과거 단가 &amp; 마진 이력</h2>
+              <span class="text-[11px] sm:text-xs bg-indigo-600 text-white px-2.5 py-0.5 rounded-full font-mono font-black shadow-xs break-all">${cleanPartNo}</span>
             </div>
-            <p class="text-xs text-slate-300 mt-0.5">MS-SQL DincomeFile, DReportFile, QuotationFile, DPOFile 4대 원장의 매입·판매·견적·발주 단가를 일괄 대조합니다.</p>
+            <p class="hidden sm:block text-xs text-slate-300 mt-0.5">MS-SQL DincomeFile, DReportFile, QuotationFile, DPOFile 4대 원장의 매입·판매·견적·발주 단가를 일괄 대조합니다.</p>
+            <p class="sm:hidden text-[10px] text-slate-300 mt-0.5">매입·판매·견적·발주 4대 원장 단가 대조</p>
           </div>
         </div>
-        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center cursor-pointer transition-colors">
+        <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center cursor-pointer transition-colors shrink-0">
           ✕
         </button>
       </div>
 
       <!-- 로딩 인디케이터 / 본문 영역 -->
       <div id="priceHistoryContent" class="flex-1 flex flex-col overflow-hidden">
-        <div class="flex-1 flex items-center justify-center text-slate-500 font-bold">
+        <div class="flex-1 flex items-center justify-center text-slate-500 font-bold p-4">
           <div class="text-center">
             <div class="text-3xl mb-3 animate-spin">⏳</div>
             <div class="text-sm text-slate-700">${cleanPartNo}의 과거 단가 및 마진 데이터를 조회하고 있습니다...</div>
@@ -97,81 +98,81 @@ function renderPriceHistoryContent(payload) {
 
   container.innerHTML = `
     <!-- 핵심 단가 KPI 지표 카드 4종 -->
-    <div class="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="p-3 sm:p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 shrink-0">
       <!-- 1. 최근 매입 단가 -->
-      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-        <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
-          <span>🛒 최근 매입 단가</span>
-          <span class="text-[10px] text-slate-400 font-mono">${summary.latest_purchase_date || '-'}</span>
+      <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5">
+          <span class="text-[11px] font-bold text-slate-500 whitespace-nowrap">🛒 최근 매입 단가</span>
+          <span class="text-[10px] text-slate-400 font-mono whitespace-nowrap">${summary.latest_purchase_date || '-'}</span>
         </div>
-        <div class="text-lg font-black text-slate-900 mt-1">
+        <div class="text-base sm:text-lg font-black text-slate-900 mt-1 font-mono truncate">
           $${(summary.latest_purchase_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
         </div>
-        <div class="text-xs text-indigo-700 font-bold mt-0.5">
-          ₩${Math.round(summary.latest_purchase_krw || 0).toLocaleString()} (원화 환산)
+        <div class="text-[11px] sm:text-xs text-indigo-700 font-bold mt-0.5 truncate">
+          ₩${Math.round(summary.latest_purchase_krw || 0).toLocaleString()} <span class="hidden sm:inline">(원화 환산)</span>
         </div>
       </div>
 
       <!-- 2. 최근 판매 단가 -->
-      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-        <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
-          <span>💰 최근 판매 단가</span>
-          <span class="text-[10px] text-slate-400 font-mono">${summary.latest_sale_date || '-'}</span>
+      <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5">
+          <span class="text-[11px] font-bold text-slate-500 whitespace-nowrap">💰 최근 판매 단가</span>
+          <span class="text-[10px] text-slate-400 font-mono whitespace-nowrap">${summary.latest_sale_date || '-'}</span>
         </div>
-        <div class="text-lg font-black text-blue-700 mt-1">
+        <div class="text-base sm:text-lg font-black text-blue-700 mt-1 font-mono truncate">
           ₩${Math.round(summary.latest_sale_price || 0).toLocaleString()}
         </div>
-        <div class="text-xs text-slate-500 mt-0.5">
+        <div class="text-[11px] sm:text-xs text-slate-500 mt-0.5 whitespace-nowrap">
           최근 마진: <strong class="text-emerald-600">${summary.latest_margin_rate || 0}%</strong>
         </div>
       </div>
 
       <!-- 3. 평균 마진율 -->
-      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-        <div class="text-[11px] font-bold text-slate-500">📈 평균 수익 마진율</div>
-        <div class="text-lg font-black mt-1">
-          <span class="px-2 py-0.5 rounded-lg border text-sm font-black ${marginColor}">
+      <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div class="text-[11px] font-bold text-slate-500 whitespace-nowrap">📈 평균 수익 마진율</div>
+        <div class="text-base sm:text-lg font-black mt-1">
+          <span class="px-2 py-0.5 rounded-lg border text-xs sm:text-sm font-black ${marginColor}">
             ${avgMargin}%
           </span>
         </div>
-        <div class="text-xs text-slate-500 mt-1">누적 판매 ${summary.sale_count || 0}건 기준</div>
+        <div class="text-[11px] sm:text-xs text-slate-500 mt-1 whitespace-nowrap">누적 판매 ${summary.sale_count || 0}건 기준</div>
       </div>
 
       <!-- 4. 누적 거래량 & 입고예정 -->
-      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-        <div class="text-[11px] font-bold text-slate-500">📦 누적 거래량 / 발주예정</div>
-        <div class="text-xs font-semibold text-slate-700 mt-1">
-          총 매입: <strong class="text-slate-900">${(summary.total_purchased_qty || 0).toLocaleString()}</strong> EA
+      <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div class="text-[11px] font-bold text-slate-500 whitespace-nowrap">📦 누적 거래량 / 발주</div>
+        <div class="text-[11px] sm:text-xs font-semibold text-slate-700 mt-1 whitespace-nowrap">
+          매입: <strong class="text-slate-900 font-mono">${(summary.total_purchased_qty || 0).toLocaleString()}</strong> EA
         </div>
-        <div class="text-xs font-semibold text-slate-700 mt-0.5">
-          총 출하: <strong class="text-indigo-700">${(summary.total_sold_qty || 0).toLocaleString()}</strong> EA
+        <div class="text-[11px] sm:text-xs font-semibold text-slate-700 mt-0.5 whitespace-nowrap">
+          출하: <strong class="text-indigo-700 font-mono">${(summary.total_sold_qty || 0).toLocaleString()}</strong> EA
         </div>
         ${summary.pending_po_qty > 0 ? `
-          <div class="text-[11px] text-blue-700 font-black mt-1 flex items-center gap-1">
-            <span>🚢 입고예정 발주:</span> <span>${summary.pending_po_qty.toLocaleString()} EA</span>
+          <div class="text-[10px] sm:text-[11px] text-blue-700 font-black mt-0.5 flex items-center gap-1 whitespace-nowrap">
+            <span>🚢 입고대기:</span> <span class="font-mono">${summary.pending_po_qty.toLocaleString()} EA</span>
           </div>
         ` : ''}
       </div>
     </div>
 
-    <!-- 탭 네비게이션 버튼 -->
-    <div class="px-4 pt-2 bg-white border-b border-slate-200 flex items-center gap-2">
-      <button type="button" data-tab="purchases" class="ph-tab-btn px-3 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-700 cursor-pointer flex items-center gap-1.5">
-        <span>🛒</span> 과거 매입 이력 (${purchases.length}건)
+    <!-- 탭 네비게이션 버튼 (단일 행 가로 스와이프 지원) -->
+    <div class="px-3 sm:px-4 pt-1.5 bg-white border-b border-slate-200 flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-none flex-nowrap shrink-0">
+      <button type="button" data-tab="purchases" class="ph-tab-btn px-2.5 sm:px-3 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-700 cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0">
+        <span>🛒</span> 매입 이력 <span class="text-[10px] opacity-80">(${purchases.length})</span>
       </button>
-      <button type="button" data-tab="sales" class="ph-tab-btn px-3 py-2 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 cursor-pointer flex items-center gap-1.5">
-        <span>💰</span> 과거 판매·출하 & 마진 (${sales.length}건)
+      <button type="button" data-tab="sales" class="ph-tab-btn px-2.5 sm:px-3 py-2 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0">
+        <span>💰</span> 판매·마진 <span class="text-[10px] opacity-80">(${sales.length})</span>
       </button>
-      <button type="button" data-tab="quotations" class="ph-tab-btn px-3 py-2 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 cursor-pointer flex items-center gap-1.5">
-        <span>📋</span> 과거 견적 이력 (${quotations.length}건)
+      <button type="button" data-tab="quotations" class="ph-tab-btn px-2.5 sm:px-3 py-2 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0">
+        <span>📋</span> 견적 이력 <span class="text-[10px] opacity-80">(${quotations.length})</span>
       </button>
-      <button type="button" data-tab="pos" class="ph-tab-btn px-3 py-2 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 cursor-pointer flex items-center gap-1.5">
-        <span>🚢</span> 발주·입고예정 이력 (${purchase_orders.length}건)
+      <button type="button" data-tab="pos" class="ph-tab-btn px-2.5 sm:px-3 py-2 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0">
+        <span>🚢</span> 발주·입고예정 <span class="text-[10px] opacity-80">(${purchase_orders.length})</span>
       </button>
     </div>
 
     <!-- 탭 콘텐츠 본문 (스크롤) -->
-    <div class="flex-1 overflow-x-auto overflow-y-auto p-4 bg-slate-50/50">
+    <div class="flex-1 overflow-x-auto overflow-y-auto p-3 sm:p-4 bg-slate-50/50">
       
       <!-- 1. 매입 이력 탭 -->
       <div id="phTabPurchases" class="ph-tab-content">
@@ -221,8 +222,47 @@ function renderPurchasesTable(purchases) {
     return `<div class="py-12 text-center text-slate-400 font-bold">기록된 매입(입고) 이력이 없습니다.</div>`;
   }
 
+  const mobileCards = `
+    <div class="block md:hidden space-y-2">
+      ${purchases.map((p, idx) => `
+        <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-xs space-y-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="text-[10px] font-mono text-slate-400">#${idx + 1}</span>
+              <span class="text-[11px] font-mono font-bold text-slate-700">${p.in_date || '-'}</span>
+              ${p.maker ? `<span class="text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">${p.maker}</span>` : ''}
+            </div>
+            <span class="text-xs font-black text-slate-900 font-mono whitespace-nowrap">${p.qty.toLocaleString()} EA</span>
+          </div>
+          <div class="text-[11px] font-mono font-bold text-slate-800 truncate" title="${p.invoice_no || ''}">INV: ${p.invoice_no || '-'}</div>
+          <div class="grid grid-cols-3 gap-1.5 bg-slate-50 rounded-lg p-2 text-[11px] border border-slate-100">
+            <div>
+              <span class="text-[9px] text-slate-400 block">외화단가</span>
+              <span class="font-mono font-bold text-blue-700">$${p.sl_up.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+            </div>
+            <div>
+              <span class="text-[9px] text-slate-400 block">원화단가</span>
+              <span class="font-mono font-bold text-indigo-900">${p.w_up > 0 ? `₩${Math.round(p.w_up).toLocaleString()}` : '-'}</span>
+            </div>
+            <div class="text-right">
+              <span class="text-[9px] text-slate-400 block">원화총액</span>
+              <span class="font-mono font-bold text-slate-800">${p.w_amt > 0 ? `₩${Math.round(p.w_amt).toLocaleString()}` : '-'}</span>
+            </div>
+          </div>
+          ${(p.in_rate > 0 || p.remark) ? `
+            <div class="flex items-center justify-between text-[10px] text-slate-500 pt-0.5 gap-2">
+              <span class="truncate">${p.remark || ''}</span>
+              ${p.in_rate > 0 ? `<span class="font-mono shrink-0">환율 ₩${p.in_rate.toLocaleString()}</span>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+
   return `
-    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+    ${mobileCards}
+    <div class="hidden md:block bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-xs">
       <table class="w-full text-left text-xs border-collapse">
         <thead class="bg-slate-100 text-slate-700 font-bold text-[11px] border-b border-slate-200">
           <tr>
@@ -264,8 +304,52 @@ function renderSalesTable(sales) {
     return `<div class="py-12 text-center text-slate-400 font-bold">기록된 판매(출하) 이력이 없습니다.</div>`;
   }
 
+  const mobileCards = `
+    <div class="block md:hidden space-y-2">
+      ${sales.map((s, idx) => {
+        const mRate = s.mgn_rate || 0;
+        let mBadge = 'text-emerald-700 bg-emerald-50 border-emerald-300';
+        if (mRate < 10) mBadge = 'text-rose-700 bg-rose-50 border-rose-300';
+        else if (mRate < 20) mBadge = 'text-amber-700 bg-amber-50 border-amber-300';
+        return `
+          <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-xs space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-[10px] font-mono text-slate-400">#${idx + 1}</span>
+                <span class="text-[11px] font-mono font-bold text-slate-700">${s.out_date || '-'}</span>
+                <span class="px-1.5 py-0.5 rounded border text-[10px] font-black ${mBadge}">${mRate}%</span>
+              </div>
+              <span class="text-[11px] font-bold text-indigo-900 shrink-0">${s.sales_rep || '-'}</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs font-black text-slate-900 truncate">${s.customer_name || '-'}</div>
+              <span class="text-xs font-black text-slate-900 font-mono shrink-0">${s.qty.toLocaleString()} EA</span>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5 bg-slate-50 rounded-lg p-2 text-[11px] border border-slate-100">
+              <div>
+                <span class="text-[9px] text-slate-400 block">매입/판매단가</span>
+                <span class="font-mono font-bold text-blue-700">₩${Math.round(s.out_up).toLocaleString()}</span>
+                <span class="block text-[9px] font-mono text-slate-400">원가 ₩${Math.round(s.in_up).toLocaleString()}</span>
+              </div>
+              <div>
+                <span class="text-[9px] text-slate-400 block">판매금액</span>
+                <span class="font-mono font-black text-slate-900">₩${Math.round(s.out_amt).toLocaleString()}</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[9px] text-slate-400 block">마진금액</span>
+                <span class="font-mono font-bold text-emerald-700">₩${Math.round(s.mgn).toLocaleString()}</span>
+              </div>
+            </div>
+            ${s.remark ? `<div class="text-[10px] text-slate-500 truncate">${s.remark}</div>` : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
   return `
-    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+    ${mobileCards}
+    <div class="hidden md:block bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-xs">
       <table class="w-full text-left text-xs border-collapse">
         <thead class="bg-slate-100 text-slate-700 font-bold text-[11px] border-b border-slate-200">
           <tr>
@@ -318,8 +402,50 @@ function renderQuotationsTable(quotations) {
     return `<div class="py-12 text-center text-slate-400 font-bold">기록된 견적 이력이 없습니다.</div>`;
   }
 
+  const mobileCards = `
+    <div class="block md:hidden space-y-2">
+      ${quotations.map((q, idx) => {
+        const isUsd = (q.qunit || '').includes('$') || (q.qunit || '').toUpperCase().includes('US');
+        const qpStr = isUsd
+          ? `$${q.qp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+          : `₩${Math.round(q.qp).toLocaleString()}`;
+        const amtStr = isUsd
+          ? `$${q.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : `₩${Math.round(q.amount).toLocaleString()}`;
+        return `
+          <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-xs space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-[10px] font-mono text-slate-400">#${idx + 1}</span>
+                <span class="text-[11px] font-mono font-bold text-slate-700">${q.quote_date || '-'}</span>
+                <span class="text-[10px] font-mono text-slate-500 truncate">${q.quote_no || ''}</span>
+              </div>
+              <span class="text-[11px] font-bold text-indigo-900 shrink-0">${q.sales_rep || '-'}</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs font-black text-slate-900 truncate">${q.customer_name || '-'}</div>
+              <span class="text-xs font-black text-slate-900 font-mono shrink-0">${q.qty.toLocaleString()} EA</span>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5 bg-slate-50 rounded-lg p-2 text-[11px] border border-slate-100">
+              <div>
+                <span class="text-[9px] text-slate-400 block">견적단가 (${q.qunit || 'KRW'})</span>
+                <span class="font-mono font-bold text-blue-700">${qpStr}</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[9px] text-slate-400 block">견적총액</span>
+                <span class="font-mono font-black text-slate-900">${amtStr}</span>
+              </div>
+            </div>
+            ${q.remark ? `<div class="text-[10px] text-slate-500 truncate">${q.remark}</div>` : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
   return `
-    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+    ${mobileCards}
+    <div class="hidden md:block bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-xs">
       <table class="w-full text-left text-xs border-collapse">
         <thead class="bg-slate-100 text-slate-700 font-bold text-[11px] border-b border-slate-200">
           <tr>
@@ -371,8 +497,54 @@ function renderPosTable(pos) {
     return `<div class="py-12 text-center text-slate-400 font-bold">기록된 발주(PO) 이력이 없습니다.</div>`;
   }
 
+  const mobileCards = `
+    <div class="block md:hidden space-y-2">
+      ${pos.map((p, idx) => {
+        const isPending = p.status === 'PO';
+        const statusBadge = isPending
+          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300">🚢 입고대기</span>`
+          : `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-300">${p.status_label || p.status}</span>`;
+        return `
+          <div class="bg-white rounded-xl border ${isPending ? 'border-blue-200 bg-blue-50/20' : 'border-slate-200'} p-3 shadow-xs space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-[10px] font-mono text-slate-400">#${idx + 1}</span>
+                ${statusBadge}
+                <span class="text-[11px] font-mono text-slate-600">${p.po_date || '-'}</span>
+              </div>
+              <span class="text-[11px] font-bold text-slate-700 shrink-0">${p.sales_rep || '-'}</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs font-mono font-bold text-slate-900 truncate">${p.po_no || '-'}</div>
+              <span class="text-xs font-black text-slate-900 font-mono shrink-0">${p.qty.toLocaleString()} EA</span>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5 bg-slate-50 rounded-lg p-2 text-[11px] border border-slate-100">
+              <div>
+                <span class="text-[9px] text-slate-400 block">발주단가</span>
+                <span class="font-mono font-bold text-blue-700">₩${Math.round(p.unit_price).toLocaleString()}</span>
+              </div>
+              <div>
+                <span class="text-[9px] text-slate-400 block">발주금액</span>
+                <span class="font-mono font-black text-slate-900">₩${Math.round(p.amount).toLocaleString()}</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[9px] text-slate-400 block">입고예정</span>
+                <span class="font-mono font-bold text-indigo-900">${p.eta_date || '-'}</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-600 gap-2">
+              <span class="truncate">공급: <strong>${p.supplier_name || '-'}</strong></span>
+              <span class="truncate text-indigo-900 font-bold">수요: ${p.real_cust || '-'}</span>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
   return `
-    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+    ${mobileCards}
+    <div class="hidden md:block bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-xs">
       <table class="w-full text-left text-xs border-collapse">
         <thead class="bg-slate-100 text-slate-700 font-bold text-[11px] border-b border-slate-200">
           <tr>

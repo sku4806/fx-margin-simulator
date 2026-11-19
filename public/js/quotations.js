@@ -541,24 +541,24 @@ export function renderQuotationsView(containerId = 'quotationsSection') {
         <table class="w-full text-left text-xs border-collapse">
           <thead class="bg-[#f2f4ec] text-[#33401e] border-b border-slate-200 uppercase font-bold sticky top-0 z-10 shadow-xs text-[11px]">
             <tr>
-              <th class="py-2 px-2 text-center w-8">
+              <th class="py-2 px-1.5 text-center w-8">
                 <input type="checkbox" id="chkQuoteSelectAll" class="rounded text-[#5b6f3c] focus:ring-0">
               </th>
-              <th class="py-2 px-2 text-center whitespace-nowrap w-9">#</th>
-              <th class="py-2 px-2.5 text-center whitespace-nowrap w-[90px]">QUOTE DT</th>
-              <th class="py-2 px-3 text-left min-w-[150px]">CNAME</th>
-              <th class="py-2 px-2.5 text-left min-w-[80px]">CONTACT</th>
-              <th class="py-2 px-2.5 text-left min-w-[70px]">MFG</th>
-              <th class="py-2 px-1 text-center w-12">Line#</th>
-              <th class="py-2 px-3 text-left min-w-[180px]">PartNo</th>
-              <th class="py-2 px-2.5 text-right whitespace-nowrap min-w-[70px]">Qty</th>
-              <th class="py-2 px-2.5 text-right whitespace-nowrap min-w-[80px]">QP</th>
-              <th class="py-2 px-3 text-right whitespace-nowrap min-w-[100px]">AMOUNT</th>
-              <th class="py-2 px-3 text-left min-w-[140px]">Payment</th>
-              <th class="py-2 px-2 text-center whitespace-nowrap w-16">Sales</th>
-              <th class="py-2 px-2 text-center whitespace-nowrap min-w-[80px]">Delivery</th>
-              <th class="py-2 px-2 text-left min-w-[70px]">Application</th>
-              <th class="py-2 px-2 text-center whitespace-nowrap min-w-[105px]">수주 / 출력</th>
+              <th class="py-2 px-1.5 text-center whitespace-nowrap w-8">#</th>
+              <th class="py-2 px-2 text-center whitespace-nowrap w-[84px]">QUOTE DT</th>
+              <th class="py-2 px-2 text-left min-w-[130px]">CNAME</th>
+              <th class="py-2 px-2 text-left min-w-[68px]">CONTACT</th>
+              <th class="py-2 px-2 text-left min-w-[64px]">MFG</th>
+              <th class="py-2 px-1 text-center w-10">Line</th>
+              <th class="py-2 px-2 text-left min-w-[155px]">PartNo</th>
+              <th class="py-2 px-2 text-right whitespace-nowrap min-w-[60px]">Qty</th>
+              <th class="py-2 px-2 text-right whitespace-nowrap min-w-[74px]">QP</th>
+              <th class="py-2 px-2 text-right whitespace-nowrap min-w-[88px]">AMOUNT</th>
+              <th class="py-2 px-2 text-left min-w-[115px]">Payment</th>
+              <th class="py-2 px-1.5 text-center whitespace-nowrap w-14">Sales</th>
+              <th class="py-2 px-1.5 text-center whitespace-nowrap min-w-[72px]">Delivery</th>
+              <th class="hidden 2xl:table-cell py-2 px-2 text-left min-w-[70px]">Application</th>
+              <th class="py-2 px-2 text-center whitespace-nowrap sticky right-0 z-20 bg-[#f2f4ec] shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)]">수주 / 출력</th>
             </tr>
           </thead>
           <tbody id="quotationTableBody" class="divide-y divide-slate-100 font-medium bg-white text-slate-700">
@@ -748,31 +748,32 @@ function generateTableRows(items, offset = 0) {
     const amountDisplay = amountVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const bgClass = realIdx % 2 === 0 ? "bg-white" : "bg-amber-50/30";
+    const stickyBg = realIdx % 2 === 0 ? "bg-white" : "bg-[#fffdf5]";
 
     return `
-      <tr class="${bgClass} hover:bg-lime-50/80 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" 
+      <tr class="group ${bgClass} hover:bg-lime-50/80 transition-colors border-b border-slate-100 text-[11px] cursor-pointer" 
           data-quote-idx="${realIdx}" data-quote-no="${q.quote_no || ''}">
-        <td class="py-1.5 px-2 text-center" onclick="event.stopPropagation()">
+        <td class="py-1.5 px-1.5 text-center" onclick="event.stopPropagation()">
           <input type="checkbox" class="quote-row-chk rounded text-[#5b6f3c] focus:ring-0" data-idx="${realIdx}" ${isSelected ? 'checked' : ''}>
         </td>
-        <td class="py-1.5 px-2 text-center font-mono text-slate-400">${realIdx + 1}</td>
-        <td class="py-1.5 px-2.5 text-center font-mono text-slate-600 whitespace-nowrap">${q.quote_dt || '-'}</td>
-        <td class="py-1.5 px-3 font-bold text-slate-900 truncate max-w-[180px]" title="${q.cname || '-'}">${q.cname || '-'}</td>
-        <td class="py-1.5 px-2.5 text-slate-700 truncate max-w-[100px]" title="${q.contact || '-'}">${q.contact || '-'}</td>
-        <td class="py-1.5 px-2.5 text-slate-800 font-semibold truncate max-w-[80px]">${q.mfg || '-'}</td>
+        <td class="py-1.5 px-1.5 text-center font-mono text-slate-400">${realIdx + 1}</td>
+        <td class="py-1.5 px-2 text-center font-mono text-slate-600 whitespace-nowrap">${q.quote_dt || '-'}</td>
+        <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[155px]" title="${q.cname || '-'}">${q.cname || '-'}</td>
+        <td class="py-1.5 px-2 text-slate-700 truncate max-w-[85px]" title="${q.contact || '-'}">${q.contact || '-'}</td>
+        <td class="py-1.5 px-2 text-slate-800 font-semibold truncate max-w-[72px]">${q.mfg || '-'}</td>
         <td class="py-1.5 px-1 text-center font-mono text-slate-500">${lineStr}</td>
-        <td class="py-1.5 px-3 font-black text-indigo-950 font-mono tracking-tight">${q.part_no || '-'}</td>
-        <td class="py-1.5 px-2.5 text-right font-semibold text-slate-700 whitespace-nowrap">${q.qty_str || (q.qty_int ? q.qty_int.toLocaleString() : '-')}</td>
-        <td class="py-1.5 px-2.5 text-right font-mono whitespace-nowrap">${qpDisplay}</td>
-        <td class="py-1.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">${amountDisplay}</td>
-        <td class="py-1.5 px-3 text-slate-600 text-[10px] truncate max-w-[160px]" title="${q.payment || '-'}">${q.payment || '-'}</td>
-        <td class="py-1.5 px-2 text-center font-medium text-slate-700 whitespace-nowrap">${q.sales || '-'}</td>
-        <td class="py-1.5 px-2 text-center font-mono text-slate-500 text-[10px] whitespace-nowrap">${q.delivery || '-'}</td>
-        <td class="py-1.5 px-2 text-slate-500 text-[10px] truncate max-w-[80px]" title="${q.application || '-'}">${q.application || '-'}</td>
-        <td class="py-1.5 px-2 text-center whitespace-nowrap" onclick="event.stopPropagation()">
+        <td class="py-1.5 px-2 font-black text-indigo-950 font-mono tracking-tight truncate max-w-[180px]" title="${q.part_no || '-'}">${q.part_no || '-'}</td>
+        <td class="py-1.5 px-2 text-right font-semibold text-slate-700 whitespace-nowrap">${q.qty_str || (q.qty_int ? q.qty_int.toLocaleString() : '-')}</td>
+        <td class="py-1.5 px-2 text-right font-mono whitespace-nowrap">${qpDisplay}</td>
+        <td class="py-1.5 px-2 text-right font-mono font-bold text-slate-900 whitespace-nowrap">${amountDisplay}</td>
+        <td class="py-1.5 px-2 text-slate-600 text-[10px] truncate max-w-[130px]" title="${q.payment || '-'}">${q.payment || '-'}</td>
+        <td class="py-1.5 px-1.5 text-center font-medium text-slate-700 whitespace-nowrap">${q.sales || '-'}</td>
+        <td class="py-1.5 px-1.5 text-center font-mono text-slate-500 text-[10px] whitespace-nowrap">${q.delivery || '-'}</td>
+        <td class="hidden 2xl:table-cell py-1.5 px-2 text-slate-500 text-[10px] truncate max-w-[80px]" title="${q.application || '-'}">${q.application || '-'}</td>
+        <td class="py-1.5 px-2 text-center whitespace-nowrap sticky right-0 z-[5] ${stickyBg} group-hover:bg-[#f4fbe6] shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)]" onclick="event.stopPropagation()">
           <div class="flex items-center justify-center gap-1">
             ${isCsAdmin ? `
-              <button type="button" class="btn-quote-to-order px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[10px] font-bold transition-colors shadow-2xs flex items-center gap-0.5 cursor-pointer"
+              <button type="button" class="btn-quote-to-order px-1.5 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[10px] font-bold transition-colors shadow-2xs flex items-center gap-0.5 cursor-pointer"
                       data-idx="${realIdx}" title="해당 견적건을 수주 및 출하 등록으로 전환 (CS 및 관리자 전용)">
                 <span>📦</span> 수주
               </button>
