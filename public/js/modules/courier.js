@@ -15,8 +15,8 @@ export const COURIER_CARRIERS = [
     id: 'kr.logen', 
     name: '로젠택배', 
     regex: /^(\d{11})$/, 
-    iframeUrl: 'https://www.ilogen.com/m/personal/trace/',
-    officialUrl: 'https://www.ilogen.com/m/personal/trace/'
+    iframeUrl: 'https://www.ilogen.com/web/personal/trace.pop/',
+    officialUrl: 'https://www.ilogen.com/web/personal/trace.pop/'
   },
   { 
     id: 'kr.cjlogistics', 
@@ -143,8 +143,10 @@ export function loadCarrierTracking(carrierId, cleanNo) {
     embedUrl = `https://t.17track.net/ko?_t=${cacheBust}#nums=${encodeURIComponent(cleanNo)}`;
     officialUrl = `https://t.17track.net/ko#nums=${encodeURIComponent(cleanNo)}`;
   } else if (carrier.id === 'kr.logen') {
-    embedUrl = `https://www.ilogen.com/m/personal/trace/${encodeURIComponent(cleanNo)}?_t=${cacheBust}`;
-    officialUrl = `https://www.ilogen.com/m/personal/trace/${encodeURIComponent(cleanNo)}`;
+    // 로젠택배 공식 팝업 전용(trace.pop) 경로: QUICK SERVICE 메뉴 오버레이 없이 운송장 결과가 즉시 출력됨
+    const logenMode = (typeof window !== 'undefined' && window.innerWidth < 768) ? 'm' : 'web';
+    embedUrl = `https://www.ilogen.com/${logenMode}/personal/trace.pop/${encodeURIComponent(cleanNo)}?_t=${cacheBust}`;
+    officialUrl = `https://www.ilogen.com/${logenMode}/personal/trace.pop/${encodeURIComponent(cleanNo)}`;
   } else if (carrier.id === 'kr.cjlogistics') {
     embedUrl = `https://trace.cjlogistics.com/next/tracking.html?wblNo=${encodeURIComponent(cleanNo)}&_t=${cacheBust}`;
     officialUrl = `https://trace.cjlogistics.com/next/tracking.html?wblNo=${encodeURIComponent(cleanNo)}`;

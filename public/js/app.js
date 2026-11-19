@@ -20,7 +20,7 @@ import {
   getAllStandards,
   savePackagingStandard
 } from './modules/packaging.js';
-import { openTrackingModal } from './modules/courier.js';
+import { openTrackingModal } from './modules/courier.js?v=20261119_logen';
 import { exportToExcel, handleExcelFileSelect, executeBatchUpload } from './modules/excel.js';
 import { recordAuditLog, renderAuditHistory, fetchAuditLogs } from './modules/audit.js';
 window.recordAuditLog = recordAuditLog;
