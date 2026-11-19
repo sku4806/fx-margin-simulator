@@ -1,14 +1,20 @@
 /**
  * customers.js
- * 거래처 및 담당자 마스터 통합 관리 모달 (Supabase legacy_customers CRUD)
+ * 거래처·담당자(복수)·매입처(CustomerBFile)·지정 포워더(CustForwarder) 통합 마스터 모달
  */
 
+let activeMasterTab = 'customers'; // 'customers' | 'suppliers' | 'forwarders'
 let custPage = 1;
 const custLimit = 30;
 let custQuery = '';
 let custTotal = 0;
 let custCache = [];
 let editingCustId = null;
+
+let contactCountMap = null;
+const contactsCacheByCid = {};
+let supplierCache = [];
+let forwarderCache = [];
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -18,7 +24,8 @@ function canModifyMaster() {
   return (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
 }
 
-export async function openCustomerMasterModal() {
+export async function openCustomerMasterModal(initialTab = 'customers') {
+  activeMasterTab = initialTab || 'customers';
   const modalId = 'customerMasterModal';
   let modal = document.getElementById(modalId);
 
@@ -36,14 +43,14 @@ export async function openCustomerMasterModal() {
 
   modal.innerHTML = `
     <div class="bg-white w-full max-w-6xl max-h-[93dvh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden my-auto" onclick="event.stopPropagation()">
-      <!-- 헤더 (모바일 2단 깔끔 정렬 / 데스크톱 1단) -->
+      <!-- 헤더 -->
       <div class="bg-gradient-to-r from-teal-700 to-emerald-700 text-white px-4 sm:px-5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
         <div class="flex items-start sm:items-center justify-between gap-2 w-full sm:w-auto">
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-xl shrink-0">🏢</span>
             <div class="min-w-0">
-              <h3 class="text-sm sm:text-base font-black tracking-tight truncate">거래처·담당자 마스터 관리</h3>
-              <p class="text-[10px] sm:text-[11px] text-teal-100 leading-snug">거래처 조회·등록·수정·삭제 (자동완성 실시간 반영)</p>
+              <h3 class="text-sm sm:text-base font-black tracking-tight truncate">거래처 · 담당자 · 매입처 · 포워더 통합 마스터</h3>
+              <p class="text-[10px] sm:text-[11px] text-teal-100 leading-snug">매출 고객사(복수 담당자 포함) · 해외/국내 매입처 · 지정 포워더 통합 조회</p>
             </div>
           </div>
           <button type="button" onclick="document.getElementById('${modalId}').classList.add('hidden')" class="sm:hidden w-8 h-8 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold flex items-center justify-center cursor-pointer shrink-0">✕</button>
@@ -58,7 +65,20 @@ export async function openCustomerMasterModal() {
         </div>
       </div>
 
-      <!-- 신규/수정 입력 패널 (기본 접힘) -->
+      <!-- 3단 하위 탭 네비게이션 -->
+      <div class="px-3 sm:px-4 pt-1.5 bg-white border-b border-slate-200 flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-none flex-nowrap shrink-0">
+        <button type="button" data-master-tab="customers" class="cm-tab-btn px-3 py-2 text-xs font-bold border-b-2 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5">
+          <span>🏢</span> 매출 고객사 &amp; 복수 담당자
+        </button>
+        <button type="button" data-master-tab="suppliers" class="cm-tab-btn px-3 py-2 text-xs font-bold border-b-2 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5">
+          <span>🌐</span> 매입처 / 해외공급사
+        </button>
+        <button type="button" data-master-tab="forwarders" class="cm-tab-btn px-3 py-2 text-xs font-bold border-b-2 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5">
+          <span>🚚</span> 고객사 지정 포워더
+        </button>
+      </div>
+
+      <!-- 신규/수정 입력 패널 (매출 고객사 전용, 기본 접힘) -->
       <div id="customerEditorPanel" class="hidden bg-teal-50/70 border-b border-teal-200 p-4 shrink-0">
         <div class="flex items-center justify-between mb-2.5">
           <h4 id="customerEditorTitle" class="text-xs font-black text-teal-900">➕ 신규 거래처 등록</h4>
@@ -116,35 +136,13 @@ export async function openCustomerMasterModal() {
       <div class="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div class="flex items-center gap-2 flex-1 min-w-[240px]">
           <input type="text" id="custMasterSearchInput" value="${escHtml(custQuery)}" placeholder="거래처명(국문/영문), 담당자, 영업사원, 연락처 검색..." class="flex-1 px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg outline-none focus:border-teal-500">
-          <button type="button" id="btnSearchCustMaster" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg cursor-pointer">🔍 검색</button>
+          <button type="button" id="btnSearchCustMaster" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg cursor-pointer whitespace-nowrap">🔍 검색</button>
         </div>
         <div id="custMasterCountBadge" class="text-xs font-bold text-slate-600">로딩 중...</div>
       </div>
 
-      <!-- 목록 영역 (모바일 카드 뷰 + 데스크톱 테이블 뷰) -->
-      <div id="custMasterTableWrap" class="flex-1 overflow-y-auto bg-slate-50/60 md:bg-white">
-        <!-- 모바일 전용 카드 뷰 -->
-        <div id="custMasterMobileCards" class="block md:hidden p-3 space-y-2.5">
-          <div class="py-10 text-center text-slate-400 text-xs">⏳ 거래처 마스터를 불러오는 중...</div>
-        </div>
-        <!-- 데스크톱 전용 테이블 뷰 -->
-        <table class="hidden md:table w-full text-left text-xs border-collapse">
-          <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10 text-[11px]">
-            <tr>
-              <th class="py-2.5 px-3 w-16 text-center">CID</th>
-              <th class="py-2.5 px-3 min-w-[180px]">거래처명 (국문 / 영문)</th>
-              <th class="py-2.5 px-3 w-24 text-center">영업담당</th>
-              <th class="py-2.5 px-3 min-w-[130px]">담당자</th>
-              <th class="py-2.5 px-3 min-w-[140px]">연락처 / 이메일</th>
-              <th class="py-2.5 px-3 min-w-[180px]">주소</th>
-              <th class="py-2.5 px-3 w-28 text-center">관리</th>
-            </tr>
-          </thead>
-          <tbody id="custMasterTbody" class="divide-y divide-slate-100 bg-white">
-            <tr><td colspan="7" class="py-10 text-center text-slate-400">⏳ 거래처 마스터를 불러오는 중...</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <!-- 목록 영역 (탭별 동적 렌더링) -->
+      <div id="custMasterTableWrap" class="flex-1 overflow-y-auto bg-slate-50/60 md:bg-white"></div>
 
       <!-- 페이지네이션 -->
       <div id="custMasterPagination" class="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs shrink-0"></div>
@@ -153,7 +151,7 @@ export async function openCustomerMasterModal() {
 
   modal.classList.remove('hidden');
   bindCustomerModalEvents();
-  await loadCustomersPage(1);
+  await switchMasterTab(activeMasterTab);
 }
 
 function bindCustomerModalEvents() {
@@ -164,18 +162,28 @@ function bindCustomerModalEvents() {
   const btnCancel2 = document.getElementById('btnCancelCustomerEdit2');
   const btnSave = document.getElementById('btnSaveCustomerMaster');
 
-  btnSearch?.addEventListener('click', () => {
+  const triggerSearch = () => {
     custQuery = inp?.value.trim() || '';
-    loadCustomersPage(1);
-  });
+    if (activeMasterTab === 'customers') loadCustomersPage(1);
+    else if (activeMasterTab === 'suppliers') loadSuppliersTab(custQuery);
+    else if (activeMasterTab === 'forwarders') loadForwardersTab(custQuery);
+  };
+
+  btnSearch?.addEventListener('click', triggerSearch);
   inp?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      custQuery = inp.value.trim();
-      loadCustomersPage(1);
-    }
+    if (e.key === 'Enter') triggerSearch();
   });
 
-  btnNew?.addEventListener('click', () => openCustomerEditor(null));
+  document.querySelectorAll('.cm-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      switchMasterTab(btn.dataset.masterTab);
+    });
+  });
+
+  btnNew?.addEventListener('click', () => {
+    if (activeMasterTab !== 'customers') switchMasterTab('customers');
+    openCustomerEditor(null);
+  });
   const closeEditor = () => {
     editingCustId = null;
     document.getElementById('customerEditorPanel')?.classList.add('hidden');
@@ -185,6 +193,55 @@ function bindCustomerModalEvents() {
   btnSave?.addEventListener('click', saveCustomerForm);
 }
 
+async function switchMasterTab(tab) {
+  activeMasterTab = tab;
+  document.querySelectorAll('.cm-tab-btn').forEach((btn) => {
+    const active = btn.dataset.masterTab === tab;
+    btn.classList.toggle('border-teal-600', active);
+    btn.classList.toggle('text-teal-800', active);
+    btn.classList.toggle('border-transparent', !active);
+    btn.classList.toggle('text-slate-500', !active);
+  });
+
+  const inp = document.getElementById('custMasterSearchInput');
+  const btnNew = document.getElementById('btnOpenNewCustomerForm');
+  const editor = document.getElementById('customerEditorPanel');
+  const pag = document.getElementById('custMasterPagination');
+
+  if (tab === 'customers') {
+    if (inp) inp.placeholder = '거래처명(국문/영문), 담당자, 영업사원, 연락처 검색...';
+    btnNew?.classList.remove('hidden');
+    pag?.classList.remove('hidden');
+    if (!contactCountMap) {
+      fetch('/api/customers/contact-counts')
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.status === 'success') {
+            contactCountMap = d.counts || {};
+            if (activeMasterTab === 'customers' && custCache.length) renderCustomersTable();
+          }
+        })
+        .catch(() => {});
+    }
+    await loadCustomersPage(1);
+  } else if (tab === 'suppliers') {
+    if (inp) inp.placeholder = '매입처명, 국가(Korea/China/Taiwan/USA), 취급품목, 이메일 검색...';
+    btnNew?.classList.add('hidden');
+    editor?.classList.add('hidden');
+    pag?.classList.add('hidden');
+    await loadSuppliersTab(inp?.value.trim() || '');
+  } else if (tab === 'forwarders') {
+    if (inp) inp.placeholder = '고객사명, 포워더명(DHL/FedEx/UPS), 계정번호(Account), 지역 검색...';
+    btnNew?.classList.add('hidden');
+    editor?.classList.add('hidden');
+    pag?.classList.add('hidden');
+    await loadForwardersTab(inp?.value.trim() || '');
+  }
+}
+
+// ========================================================
+// 1. 매출 고객사 + 복수 담당자 (ContactFile)
+// ========================================================
 function openCustomerEditor(cust) {
   if (!canModifyMaster()) {
     alert('거래처 등록·수정은 CS 및 관리자 권한만 가능합니다.');
@@ -287,9 +344,29 @@ async function deleteCustomerMaster(recordId, kname) {
 
 async function loadCustomersPage(page = 1) {
   custPage = page;
-  const tbody = document.getElementById('custMasterTbody');
-  if (tbody) {
-    tbody.innerHTML = `<tr><td colspan="7" class="py-10 text-center text-slate-400">⏳ 조회 중...</td></tr>`;
+  const wrap = document.getElementById('custMasterTableWrap');
+  if (wrap) {
+    wrap.innerHTML = `
+      <div id="custMasterMobileCards" class="block md:hidden p-3 space-y-2.5">
+        <div class="py-10 text-center text-slate-400 text-xs">⏳ 거래처 마스터를 불러오는 중...</div>
+      </div>
+      <table class="hidden md:table w-full text-left text-xs border-collapse">
+        <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10 text-[11px]">
+          <tr>
+            <th class="py-2.5 px-3 w-16 text-center">CID</th>
+            <th class="py-2.5 px-3 min-w-[180px]">거래처명 (국문 / 영문)</th>
+            <th class="py-2.5 px-3 w-24 text-center">영업담당</th>
+            <th class="py-2.5 px-3 min-w-[140px]">대표 / 전체 담당자</th>
+            <th class="py-2.5 px-3 min-w-[140px]">연락처 / 이메일</th>
+            <th class="py-2.5 px-3 min-w-[170px]">주소</th>
+            <th class="py-2.5 px-3 w-28 text-center">관리</th>
+          </tr>
+        </thead>
+        <tbody id="custMasterTbody" class="divide-y divide-slate-100 bg-white">
+          <tr><td colspan="7" class="py-10 text-center text-slate-400">⏳ 조회 중...</td></tr>
+        </tbody>
+      </table>
+    `;
   }
 
   try {
@@ -303,16 +380,64 @@ async function loadCustomersPage(page = 1) {
     custCache = data.customers || [];
 
     const badge = document.getElementById('custMasterCountBadge');
-    if (badge) badge.innerText = `총 ${custTotal.toLocaleString()}개 거래처`;
+    if (badge) badge.innerText = `총 ${custTotal.toLocaleString()}개 매출 고객사`;
 
     renderCustomersTable();
     renderCustomersPagination();
-
-    const wrap = document.getElementById('custMasterTableWrap');
     if (wrap) wrap.scrollTop = 0;
   } catch (err) {
+    const tbody = document.getElementById('custMasterTbody');
     if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="py-10 text-center text-rose-500 font-bold">조회 오류: ${escHtml(err.message)}</td></tr>`;
   }
+}
+
+async function toggleCustomerContacts(cid, targetId) {
+  const box = document.getElementById(targetId);
+  if (!box) return;
+  const isHidden = box.classList.contains('hidden');
+  if (!isHidden) {
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+
+  if (!contactsCacheByCid[cid]) {
+    const inner = box.querySelector('.contacts-slot') || box;
+    inner.innerHTML = `<div class="py-3 text-center text-[11px] text-slate-400">⏳ 전체 담당자 목록을 불러오는 중...</div>`;
+    try {
+      const res = await fetch(`/api/customers/contacts?cid=${encodeURIComponent(cid)}`);
+      const data = await res.json();
+      contactsCacheByCid[cid] = data.items || [];
+    } catch (e) {
+      contactsCacheByCid[cid] = [];
+    }
+  }
+
+  const list = contactsCacheByCid[cid];
+  const inner = box.querySelector('.contacts-slot') || box;
+  if (!list.length) {
+    inner.innerHTML = `<div class="py-2 text-center text-[11px] text-slate-400">추가 등록된 담당자 정보가 없습니다.</div>`;
+    return;
+  }
+
+  inner.innerHTML = `
+    <div class="text-[10px] font-black text-teal-800 mb-1.5 flex items-center justify-between">
+      <span>👥 전체 등록 담당자 (${list.length}명 — ContactFile 연동)</span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+      ${list.map((ct) => `
+        <div class="bg-white rounded-lg border border-teal-200/80 p-2 text-[11px] space-y-0.5 shadow-2xs">
+          <div class="flex items-center justify-between gap-1">
+            <span class="font-black text-slate-900">${escHtml(ct.name)}${ct.title ? ` <span class="font-medium text-slate-500">${escHtml(ct.title)}</span>` : ''}</span>
+            ${ct.remark ? `<span class="text-[9px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-bold">${escHtml(ct.remark)}</span>` : ''}
+          </div>
+          ${ct.tel ? `<div class="font-mono text-[10px] text-slate-600">📞 ${escHtml(ct.tel)}</div>` : ''}
+          ${ct.mobile ? `<div class="font-mono text-[10px] text-indigo-700 font-semibold">📱 ${escHtml(ct.mobile)}</div>` : ''}
+          ${ct.email ? `<div class="font-mono text-[10px] text-slate-500 truncate" title="${escHtml(ct.email)}">✉️ ${escHtml(ct.email)}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 function renderCustomersTable() {
@@ -331,6 +456,8 @@ function renderCustomersTable() {
     mobileWrap.innerHTML = custCache.map((c, idx) => {
       const isWeb = Number(c.cid) >= 900000;
       const contactStr = [c.contact_name, c.contact_title].filter(Boolean).join(' ');
+      const cnt = (contactCountMap && c.cid) ? (contactCountMap[String(c.cid)] || 0) : 0;
+      const panelId = `mobContacts_${c.cid}_${idx}`;
       return `
         <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-2 text-xs">
           <div class="flex items-start justify-between gap-2">
@@ -339,6 +466,7 @@ function renderCustomersTable() {
                 <span class="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">#${c.cid || '-'}</span>
                 ${isWeb ? '<span class="text-[9px] font-black text-teal-700 bg-teal-100 rounded px-1.5 py-0.5">WEB</span>' : ''}
                 ${c.sales_rep ? `<span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">${escHtml(c.sales_rep)}</span>` : ''}
+                ${cnt > 0 ? `<button type="button" onclick="window.toggleCustomerContacts(${c.cid}, '${panelId}')" class="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-teal-50 text-teal-700 border border-teal-200 cursor-pointer">👥 담당자 ${cnt}명 ▾</button>` : ''}
               </div>
               <div class="font-black text-sm text-slate-900 mt-1 break-words">${escHtml(c.kname || c.cname || '-')}</div>
               ${c.cname && c.cname !== c.kname ? `<div class="text-[11px] text-slate-400 break-words">${escHtml(c.cname)}</div>` : ''}
@@ -351,11 +479,12 @@ function renderCustomersTable() {
             ` : ''}
           </div>
           <div class="grid grid-cols-2 gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px]">
-            <div><span class="text-[9px] text-slate-400 block font-semibold">담당자</span><span class="font-bold text-slate-800">${escHtml(contactStr || '-')}</span></div>
+            <div><span class="text-[9px] text-slate-400 block font-semibold">대표 담당자</span><span class="font-bold text-slate-800">${escHtml(contactStr || '-')}</span></div>
             <div><span class="text-[9px] text-slate-400 block font-semibold">연락처</span><span class="font-mono text-slate-700">${escHtml(c.tel || c.contact_mobile || '-')}</span></div>
             ${c.email || c.contact_email ? `<div class="col-span-2 truncate"><span class="text-[9px] text-slate-400 mr-1 font-semibold">이메일:</span><span class="font-mono text-slate-600">${escHtml(c.email || c.contact_email)}</span></div>` : ''}
             ${c.address ? `<div class="col-span-2 text-[10px] text-slate-500 leading-snug">📍 ${escHtml(c.address)}</div>` : ''}
           </div>
+          <div id="${panelId}" class="hidden bg-teal-50/60 border border-teal-200 rounded-lg p-2.5"><div class="contacts-slot"></div></div>
         </div>
       `;
     }).join('');
@@ -365,6 +494,8 @@ function renderCustomersTable() {
   tbody.innerHTML = custCache.map((c, idx) => {
     const isWeb = Number(c.cid) >= 900000;
     const contactStr = [c.contact_name, c.contact_title].filter(Boolean).join(' ');
+    const cnt = (contactCountMap && c.cid) ? (contactCountMap[String(c.cid)] || 0) : 0;
+    const rowPanelId = `deskContacts_${c.cid}_${idx}`;
     return `
       <tr class="hover:bg-teal-50/50 transition-colors">
         <td class="py-2 px-3 text-center font-mono text-[11px] text-slate-500">
@@ -378,7 +509,12 @@ function renderCustomersTable() {
         <td class="py-2 px-3 text-center">
           ${c.sales_rep ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">${escHtml(c.sales_rep)}</span>` : '<span class="text-slate-300">-</span>'}
         </td>
-        <td class="py-2 px-3 text-slate-800 font-medium">${escHtml(contactStr || '-')}</td>
+        <td class="py-2 px-3 text-slate-800 font-medium">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span>${escHtml(contactStr || '-')}</span>
+            ${cnt > 0 ? `<button type="button" onclick="window.toggleCustomerContacts(${c.cid}, '${rowPanelId}')" class="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 cursor-pointer whitespace-nowrap" title="ContactFile 전체 담당자 보기">👥 ${cnt}명 ▾</button>` : ''}
+          </div>
+        </td>
         <td class="py-2 px-3 text-[11px] font-mono text-slate-600">
           ${c.tel ? `<div>📞 ${escHtml(c.tel)}</div>` : ''}
           ${c.contact_mobile ? `<div>📱 ${escHtml(c.contact_mobile)}</div>` : ''}
@@ -391,6 +527,9 @@ function renderCustomersTable() {
             <button type="button" onclick="window.deleteCustomerMasterByIdx(${idx})" class="px-2 py-1 text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded cursor-pointer">🗑️ 삭제</button>
           ` : '<span class="text-[10px] text-slate-300">조회전용</span>'}
         </td>
+      </tr>
+      <tr id="${rowPanelId}" class="hidden bg-teal-50/40">
+        <td colspan="7" class="p-3 border-b border-teal-200/70"><div class="contacts-slot"></div></td>
       </tr>
     `;
   }).join('');
@@ -409,8 +548,182 @@ function renderCustomersPagination() {
   `;
 }
 
+// ========================================================
+// 2. 매입처 / 해외공급사 마스터 (CustomerBFile)
+// ========================================================
+async function loadSuppliersTab(query = '') {
+  const wrap = document.getElementById('custMasterTableWrap');
+  const badge = document.getElementById('custMasterCountBadge');
+  if (wrap) wrap.innerHTML = `<div class="py-12 text-center text-slate-400 text-xs font-bold">⏳ 매입처 / 해외공급사 마스터를 불러오는 중...</div>`;
+
+  try {
+    const params = new URLSearchParams({ limit: '500' });
+    if (query) params.set('query', query);
+    const res = await fetch(`/api/customers/suppliers?${params.toString()}`);
+    const data = await res.json();
+    supplierCache = data.items || [];
+    if (badge) badge.innerText = `총 ${supplierCache.length.toLocaleString()}개 매입처 (CustomerBFile)`;
+    renderSuppliersView();
+  } catch (err) {
+    if (wrap) wrap.innerHTML = `<div class="py-12 text-center text-rose-500 text-xs font-bold">조회 오류: ${escHtml(err.message)}</div>`;
+  }
+}
+
+function renderSuppliersView() {
+  const wrap = document.getElementById('custMasterTableWrap');
+  if (!wrap) return;
+  if (!supplierCache.length) {
+    wrap.innerHTML = `<div class="py-12 text-center text-slate-400 text-xs font-bold">검색 조건에 맞는 매입처가 없습니다.</div>`;
+    return;
+  }
+
+  const mobileHtml = `
+    <div class="block md:hidden p-3 space-y-2.5">
+      ${supplierCache.map((s) => `
+        <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-1.5 text-xs">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">#${s.cid}</span>
+              ${s.nation ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">🌐 ${escHtml(s.nation)}</span>` : ''}
+              ${s.sales ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700">${escHtml(s.sales)}</span>` : ''}
+            </div>
+            <span class="text-[10px] font-mono text-slate-400">${escHtml(s.update_dt || '')}</span>
+          </div>
+          <div class="font-black text-sm text-slate-900 break-words">${escHtml(s.cname)}</div>
+          ${s.product ? `<div class="text-[11px] font-semibold text-teal-800 bg-teal-50/70 px-2 py-1 rounded border border-teal-100">취급품목: ${escHtml(s.product)}</div>` : ''}
+          <div class="text-[11px] font-mono text-slate-600 space-y-0.5">
+            ${s.tel ? `<div>📞 ${escHtml(s.tel)} ${s.fax ? `/ FAX ${escHtml(s.fax)}` : ''}</div>` : ''}
+            ${s.email ? `<div class="truncate">✉️ ${escHtml(s.email)}</div>` : ''}
+            ${s.address ? `<div class="font-sans text-[10px] text-slate-500">📍 ${escHtml(s.address)}</div>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  const desktopHtml = `
+    <table class="hidden md:table w-full text-left text-xs border-collapse">
+      <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10 text-[11px]">
+        <tr>
+          <th class="py-2.5 px-3 w-16 text-center">CID</th>
+          <th class="py-2.5 px-3 min-w-[200px]">매입처 / 공급사명</th>
+          <th class="py-2.5 px-2.5 w-24 text-center">국가</th>
+          <th class="py-2.5 px-3 min-w-[140px]">취급 품목 (Product)</th>
+          <th class="py-2.5 px-3 min-w-[150px]">연락처 / 이메일</th>
+          <th class="py-2.5 px-3 min-w-[180px]">주소 / 비고</th>
+          <th class="py-2.5 px-2.5 w-24 text-center">갱신일</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
+        ${supplierCache.map((s) => `
+          <tr class="hover:bg-sky-50/40">
+            <td class="py-2 px-3 text-center font-mono text-slate-400">${s.cid}</td>
+            <td class="py-2 px-3 font-black text-slate-900">${escHtml(s.cname)}</td>
+            <td class="py-2 px-2.5 text-center">${s.nation ? `<span class="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 font-bold text-[10px]">${escHtml(s.nation)}</span>` : '-'}</td>
+            <td class="py-2 px-3 text-teal-800 font-semibold truncate max-w-[160px]" title="${escHtml(s.product)}">${escHtml(s.product || '-')}</td>
+            <td class="py-2 px-3 font-mono text-slate-600">
+              ${s.tel ? `<div>📞 ${escHtml(s.tel)}</div>` : ''}
+              ${s.email ? `<div class="text-[10px] text-slate-400 truncate max-w-[160px]">✉️ ${escHtml(s.email)}</div>` : ''}
+            </td>
+            <td class="py-2 px-3 text-slate-500 truncate max-w-[200px]" title="${escHtml(s.address || s.remark)}">${escHtml(s.address || s.remark || '-')}</td>
+            <td class="py-2 px-2.5 text-center font-mono text-slate-400 whitespace-nowrap">${escHtml(s.update_dt || '-')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  wrap.innerHTML = mobileHtml + desktopHtml;
+  wrap.scrollTop = 0;
+}
+
+// ========================================================
+// 3. 고객사 지정 포워더 (CustForwarder)
+// ========================================================
+async function loadForwardersTab(query = '') {
+  const wrap = document.getElementById('custMasterTableWrap');
+  const badge = document.getElementById('custMasterCountBadge');
+  if (wrap) wrap.innerHTML = `<div class="py-12 text-center text-slate-400 text-xs font-bold">⏳ 고객사 지정 포워더 정보를 불러오는 중...</div>`;
+
+  try {
+    const params = new URLSearchParams({ limit: '500' });
+    if (query) params.set('query', query);
+    const res = await fetch(`/api/customers/forwarders?${params.toString()}`);
+    const data = await res.json();
+    forwarderCache = data.items || [];
+    if (badge) badge.innerText = `총 ${forwarderCache.length.toLocaleString()}건 지정 포워더 (CustForwarder)`;
+    renderForwardersView();
+  } catch (err) {
+    if (wrap) wrap.innerHTML = `<div class="py-12 text-center text-rose-500 text-xs font-bold">조회 오류: ${escHtml(err.message)}</div>`;
+  }
+}
+
+function renderForwardersView() {
+  const wrap = document.getElementById('custMasterTableWrap');
+  if (!wrap) return;
+  if (!forwarderCache.length) {
+    wrap.innerHTML = `<div class="py-12 text-center text-slate-400 text-xs font-bold">검색 조건에 맞는 지정 포워더가 없습니다.</div>`;
+    return;
+  }
+
+  const mobileHtml = `
+    <div class="block md:hidden p-3 space-y-2.5">
+      ${forwarderCache.map((f) => `
+        <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-1.5 text-xs">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-black text-slate-900 truncate">${escHtml(f.customer_name || `CID #${f.cid}`)}</span>
+            ${f.chk === 'Y' ? '<span class="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 shrink-0">기본지정</span>' : ''}
+          </div>
+          <div class="text-xs font-bold text-indigo-900">🚚 ${escHtml(f.fname)}</div>
+          <div class="grid grid-cols-2 gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px]">
+            <div><span class="text-[9px] text-slate-400 block">Account 번호</span><span class="font-mono font-bold text-slate-800">${escHtml(f.account || '-')}</span></div>
+            <div><span class="text-[9px] text-slate-400 block">지역 / 구분</span><span class="font-semibold text-slate-700">${escHtml([f.region, f.kinds].filter(Boolean).join(' / ') || '-')}</span></div>
+          </div>
+          ${f.comment ? `<div class="text-[10px] text-slate-500 leading-snug">💬 ${escHtml(f.comment)}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  const desktopHtml = `
+    <table class="hidden md:table w-full text-left text-xs border-collapse">
+      <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10 text-[11px]">
+        <tr>
+          <th class="py-2.5 px-3 w-16 text-center">CID</th>
+          <th class="py-2.5 px-3 min-w-[180px]">고객사명</th>
+          <th class="py-2.5 px-3 min-w-[200px]">지정 포워더 (FName)</th>
+          <th class="py-2.5 px-3 min-w-[130px]">Account 번호</th>
+          <th class="py-2.5 px-2.5 w-24 text-center">지역</th>
+          <th class="py-2.5 px-2.5 w-28 text-center">적용 라인</th>
+          <th class="py-2.5 px-3 min-w-[160px]">코멘트</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
+        ${forwarderCache.map((f) => `
+          <tr class="hover:bg-indigo-50/40">
+            <td class="py-2 px-3 text-center font-mono text-slate-400">${f.cid || '-'}</td>
+            <td class="py-2 px-3 font-black text-slate-900">
+              ${escHtml(f.customer_name || '-')}
+              ${f.chk === 'Y' ? '<span class="ml-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800">기본</span>' : ''}
+            </td>
+            <td class="py-2 px-3 font-bold text-indigo-900">${escHtml(f.fname)}</td>
+            <td class="py-2 px-3 font-mono font-bold text-slate-800">${escHtml(f.account || '-')}</td>
+            <td class="py-2 px-2.5 text-center text-slate-600">${escHtml(f.region || '-')}</td>
+            <td class="py-2 px-2.5 text-center font-mono text-[10px] text-teal-700">${escHtml(f.kinds || '-')}</td>
+            <td class="py-2 px-3 text-slate-500 truncate max-w-[180px]" title="${escHtml(f.comment)}">${escHtml(f.comment || '-')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  wrap.innerHTML = mobileHtml + desktopHtml;
+  wrap.scrollTop = 0;
+}
+
 window.openCustomerMasterModal = openCustomerMasterModal;
 window.goToCustomerPage = loadCustomersPage;
+window.toggleCustomerContacts = toggleCustomerContacts;
 window.editCustomerMasterByIdx = (idx) => {
   if (custCache[idx]) openCustomerEditor(custCache[idx]);
 };

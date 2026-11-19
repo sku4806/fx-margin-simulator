@@ -12,10 +12,14 @@ import { sbClient } from './supabase.js';
 import { openInvoiceModal, openPackingListModal } from './trade-documents.js';
 
 // 상태 관리
-let activeShipmentMode = 'ledger'; // 'ledger' (MS-SQL 공식 출하 원장) | 'web' (웹 수주 출하내역)
+let activeShipmentMode = 'ledger'; // 'ledger' | 'web' | 'borrow' | 'rma' | 'loss'
 let cachedLedgerShipments = [];     // MS-SQL Shipped Info 데이터
 let cachedWebShipments = [];        // Supabase 출하완료건 데이터
 let lastFilteredShipments = [];     // 현재 화면에 표시되는 필터링 결과
+let cachedBorrows = null;           // DBRWFile 대여/반납
+let cachedRmas = null;              // DRMAFile 반품 RMA
+let cachedLosses = null;            // LossFile 손실/폐기
+let subLedgerQuery = '';            // 서브탭 검색어
 
 // 필터 옵션
 let availableMakers = [];
@@ -279,23 +283,34 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
           <p class="text-[11px] text-slate-400 mt-1">세일즈 마스터 FrmShippedInfo 규격과 100% 동일한 출하 원장, 실수요처, 외화단가 및 용도(APP) 통합 장부입니다.</p>
         </div>
 
-        <!-- 모드 전환 탭 (MS-SQL 공식 원장 vs 웹 수주 출하내역) + 신규 등록 -->
-        <div class="flex items-center gap-2 flex-wrap shrink-0 self-start lg:self-center">
+        <!-- 모드 전환 탭 (출하 원장 / 웹 출하 / 대여·반납 / 반품 RMA / 손실·폐기) + 신규 등록 -->
+        <div class="flex items-center gap-2 flex-wrap shrink-0 self-start lg:self-center max-w-full">
           ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
-            <button type="button" onclick="window.openShipmentCrudModal && window.openShipmentCrudModal(null)" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-xs cursor-pointer transition-colors">
+            <button type="button" onclick="window.openShipmentCrudModal && window.openShipmentCrudModal(null)" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-xs cursor-pointer transition-colors whitespace-nowrap">
               + 신규 출하 등록
             </button>
           ` : ''}
-          <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
-            <button type="button" id="btnModeLedger" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeShipmentMode === 'ledger' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
-              🚚 MS-SQL 출하 원장
+          <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto scrollbar-none max-w-full">
+            <button type="button" id="btnModeLedger" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${activeShipmentMode === 'ledger' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+              🚚 출하 원장
             </button>
-            <button type="button" id="btnModeWeb" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeShipmentMode === 'web' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
-              📦 웹 수주 출하완료건
+            <button type="button" id="btnModeWeb" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${activeShipmentMode === 'web' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+              📦 웹 출하
+            </button>
+            <button type="button" id="btnModeBorrow" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${activeShipmentMode === 'borrow' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+              🔄 대여/반납
+            </button>
+            <button type="button" id="btnModeRma" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${activeShipmentMode === 'rma' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+              ↩️ 반품 RMA
+            </button>
+            <button type="button" id="btnModeLoss" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${activeShipmentMode === 'loss' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+              ⚠️ 손실/폐기
             </button>
           </div>
         </div>
       </div>
+
+      ${(activeShipmentMode === 'borrow' || activeShipmentMode === 'rma' || activeShipmentMode === 'loss') ? renderSubLedgerSection() : `
 
       <!-- 세일즈 마스터 규격 툴바 (기간, MFG, SUPPLY, 검색, Excel — 모바일 완전 최적화) -->
       <div class="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 space-y-2.5 sm:space-y-3">
@@ -403,11 +418,248 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
 
       <!-- 📄 출하 페이지네이션 컨트롤러 -->
       <div id="shipmentPagination" class="flex flex-wrap items-center justify-between gap-2 pt-2 px-1 text-xs select-none"></div>
+      `}
     </div>
   `;
 
   bindShipmentToolbarEvents();
-  renderShipmentPaginationUI();
+  if (activeShipmentMode === 'ledger' || activeShipmentMode === 'web') {
+    renderShipmentPaginationUI();
+  }
+}
+
+async function fetchSubLedgerData(mode, query = '') {
+  const endpointMap = {
+    borrow: '/api/shipped-info/borrows',
+    rma: '/api/shipped-info/rmas',
+    loss: '/api/shipped-info/losses'
+  };
+  const url = endpointMap[mode];
+  if (!url) return [];
+  try {
+    const params = new URLSearchParams({ limit: '300' });
+    if (query) params.set('query', query);
+    const res = await fetch(`${url}?${params.toString()}`);
+    const data = await res.json();
+    const items = data.items || [];
+    if (mode === 'borrow') cachedBorrows = items;
+    else if (mode === 'rma') cachedRmas = items;
+    else if (mode === 'loss') cachedLosses = items;
+    return items;
+  } catch (err) {
+    console.error(`[SubLedger:${mode}] 조회 오류:`, err);
+    return [];
+  }
+}
+
+function escSub(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderSubLedgerSection() {
+  const metaMap = {
+    borrow: { title: '대여 / 반납 원장 (DBRWFile)', badge: 'bg-teal-100 text-teal-800 border-teal-200', items: cachedBorrows },
+    rma: { title: '반품(RMA) 원장 (DRMAFile)', badge: 'bg-amber-100 text-amber-800 border-amber-200', items: cachedRmas },
+    loss: { title: '재고 손실 / 불량·폐기 원장 (LossFile)', badge: 'bg-rose-100 text-rose-800 border-rose-200', items: cachedLosses }
+  };
+  const meta = metaMap[activeShipmentMode] || metaMap.borrow;
+  const items = meta.items || [];
+  const totalQty = items.reduce((s, it) => s + (Number(it.qty) || 0), 0);
+  const totalAmt = items.reduce((s, it) => s + (Number(it.out_amt || it.np_amt) || 0), 0);
+
+  let bodyHtml = '';
+  if (meta.items === null) {
+    bodyHtml = `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ 데이터를 불러오는 중입니다...</div>`;
+  } else if (items.length === 0) {
+    bodyHtml = `<div class="py-12 text-center text-slate-400 font-bold text-xs">조회 조건에 일치하는 내역이 없습니다.</div>`;
+  } else if (activeShipmentMode === 'borrow') {
+    bodyHtml = `
+      <div class="block md:hidden space-y-2 max-h-[62vh] overflow-y-auto">
+        ${items.map((b, i) => `
+          <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-1.5 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="text-[10px] font-mono text-slate-400">#${i + 1}</span>
+                <span class="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">${escSub(b.date || '-')}</span>
+                ${b.gubun ? `<span class="text-[10px] font-bold bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-200">${escSub(b.gubun)}</span>` : ''}
+                ${b.result ? `<span class="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">${escSub(b.result)}</span>` : ''}
+              </div>
+              <span class="font-mono font-black text-slate-900 shrink-0">${(b.qty || 0).toLocaleString()} EA</span>
+            </div>
+            <div class="font-black text-indigo-950 font-mono truncate">${escSub(b.part_no || '-')}</div>
+            <div class="flex items-center justify-between text-[11px] text-slate-600">
+              <span class="font-bold text-slate-800 truncate">${escSub(b.customer_name)}</span>
+              <span class="shrink-0 font-semibold">${escSub(b.maker)} · ${escSub(b.sales || '-')}</span>
+            </div>
+            ${(b.rtn_date || b.remark) ? `<div class="text-[10px] text-slate-500 flex items-center justify-between gap-2 pt-1 border-t border-slate-100"><span class="truncate">${escSub(b.remark || '')}</span>${b.rtn_date ? `<span class="font-mono text-teal-700 font-bold shrink-0">반납: ${escSub(b.rtn_date)}</span>` : ''}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div class="hidden md:block overflow-x-auto max-h-[62vh] overflow-y-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-teal-50 text-teal-950 font-bold text-[11px] border-b border-teal-200 sticky top-0 z-10">
+            <tr>
+              <th class="py-2 px-2.5 text-center w-10">#</th>
+              <th class="py-2 px-2.5 text-center w-24">출고/대여일</th>
+              <th class="py-2 px-2.5 text-left min-w-[150px]">고객사명</th>
+              <th class="py-2 px-2.5 text-left min-w-[160px]">품번 (Part#)</th>
+              <th class="py-2 px-2 text-center w-20">제조사</th>
+              <th class="py-2 px-2.5 text-right w-20">수량</th>
+              <th class="py-2 px-2 text-center w-20">구분/상태</th>
+              <th class="py-2 px-2.5 text-center w-24">반납일</th>
+              <th class="py-2 px-2 text-center w-20">영업담당</th>
+              <th class="py-2 px-2.5 text-left min-w-[140px]">비고 / 송장</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
+            ${items.map((b, i) => `
+              <tr class="hover:bg-teal-50/40">
+                <td class="py-1.5 px-2.5 text-center font-mono text-slate-400">${i + 1}</td>
+                <td class="py-1.5 px-2.5 text-center font-mono text-slate-700 whitespace-nowrap">${escSub(b.date || '-')}</td>
+                <td class="py-1.5 px-2.5 font-bold text-slate-900 truncate max-w-[180px]" title="${escSub(b.customer_name)}">${escSub(b.customer_name)}</td>
+                <td class="py-1.5 px-2.5 font-mono font-black text-indigo-950">${escSub(b.part_no || '-')}</td>
+                <td class="py-1.5 px-2 text-center font-bold text-slate-600">${escSub(b.maker)}</td>
+                <td class="py-1.5 px-2.5 text-right font-mono font-black text-slate-900 whitespace-nowrap">${(b.qty || 0).toLocaleString()}</td>
+                <td class="py-1.5 px-2 text-center whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">${escSub([b.gubun, b.result].filter(Boolean).join('/')) || '-'}</span></td>
+                <td class="py-1.5 px-2.5 text-center font-mono text-teal-700 whitespace-nowrap">${escSub(b.rtn_date || b.rdt || '-')}</td>
+                <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escSub(b.sales || '-')}</td>
+                <td class="py-1.5 px-2.5 text-slate-500 truncate max-w-[180px]" title="${escSub(b.remark)}">${escSub(b.remark || '-')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else if (activeShipmentMode === 'rma') {
+    bodyHtml = `
+      <div class="block md:hidden space-y-2 max-h-[62vh] overflow-y-auto">
+        ${items.map((r, i) => `
+          <div class="bg-white rounded-xl border border-amber-200 p-3 shadow-2xs space-y-1.5 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] font-mono text-slate-400">#${i + 1}</span>
+                <span class="text-[10px] font-mono font-bold bg-amber-50 text-amber-900 px-1.5 py-0.5 rounded">${escSub(r.date || '-')}</span>
+                <span class="text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">${escSub(r.maker)}</span>
+              </div>
+              <span class="font-mono font-black text-amber-800">${(r.qty || 0).toLocaleString()} EA</span>
+            </div>
+            <div class="font-black text-indigo-950 font-mono truncate">${escSub(r.part_no || '-')}</div>
+            <div class="flex items-center justify-between text-[11px]">
+              <span class="font-bold text-slate-800 truncate">${escSub(r.customer_name)}</span>
+              <span class="font-mono font-bold text-slate-900">₩${Math.round(r.out_amt || 0).toLocaleString()}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="hidden md:block overflow-x-auto max-h-[62vh] overflow-y-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-amber-50 text-amber-950 font-bold text-[11px] border-b border-amber-200 sticky top-0 z-10">
+            <tr>
+              <th class="py-2 px-2.5 text-center w-10">#</th>
+              <th class="py-2 px-2.5 text-center w-24">반품일자</th>
+              <th class="py-2 px-2.5 text-left min-w-[150px]">고객사명</th>
+              <th class="py-2 px-2.5 text-left min-w-[160px]">품번 (Part#)</th>
+              <th class="py-2 px-2 text-center w-20">제조사</th>
+              <th class="py-2 px-2.5 text-left w-28">PO 번호</th>
+              <th class="py-2 px-2.5 text-right w-20">수량</th>
+              <th class="py-2 px-2.5 text-right w-24">판매단가</th>
+              <th class="py-2 px-2.5 text-right w-28">반품금액</th>
+              <th class="py-2 px-2 text-center w-20">영업담당</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
+            ${items.map((r, i) => `
+              <tr class="hover:bg-amber-50/40">
+                <td class="py-1.5 px-2.5 text-center font-mono text-slate-400">${i + 1}</td>
+                <td class="py-1.5 px-2.5 text-center font-mono text-slate-700 whitespace-nowrap">${escSub(r.date || '-')}</td>
+                <td class="py-1.5 px-2.5 font-bold text-slate-900 truncate max-w-[180px]">${escSub(r.customer_name)}</td>
+                <td class="py-1.5 px-2.5 font-mono font-black text-indigo-950">${escSub(r.part_no || '-')}</td>
+                <td class="py-1.5 px-2 text-center font-bold text-slate-600">${escSub(r.maker)}</td>
+                <td class="py-1.5 px-2.5 font-mono text-slate-600">${escSub(r.po_no || '-')}</td>
+                <td class="py-1.5 px-2.5 text-right font-mono font-black text-amber-800 whitespace-nowrap">${(r.qty || 0).toLocaleString()}</td>
+                <td class="py-1.5 px-2.5 text-right font-mono text-slate-700 whitespace-nowrap">₩${Math.round(r.out_up || 0).toLocaleString()}</td>
+                <td class="py-1.5 px-2.5 text-right font-mono font-black text-slate-900 whitespace-nowrap">₩${Math.round(r.out_amt || 0).toLocaleString()}</td>
+                <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escSub(r.sales || '-')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else {
+    bodyHtml = `
+      <div class="block md:hidden space-y-2 max-h-[62vh] overflow-y-auto">
+        ${items.map((l, i) => `
+          <div class="bg-white rounded-xl border border-rose-200 p-3 shadow-2xs space-y-1.5 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] font-mono text-slate-400">#${i + 1}</span>
+                <span class="text-[10px] font-mono font-bold bg-rose-50 text-rose-800 px-1.5 py-0.5 rounded">${escSub(l.date || '-')}</span>
+                <span class="text-[10px] font-mono text-slate-500">${escSub(l.loss_no || '')}</span>
+              </div>
+              <span class="font-mono font-black text-rose-700">${(l.qty || 0).toLocaleString()} EA</span>
+            </div>
+            <div class="font-black text-indigo-950 font-mono truncate">${escSub(l.part_no || '-')}</div>
+            <div class="flex items-center justify-between text-[11px]">
+              <span class="font-semibold text-slate-600">${escSub(l.maker)} · ${escSub(l.result)}</span>
+              <span class="font-mono font-black text-rose-700">₩${Math.round(l.np_amt || 0).toLocaleString()}</span>
+            </div>
+            ${l.remark ? `<div class="text-[10px] text-slate-500 pt-1 border-t border-slate-100">${escSub(l.remark)}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div class="hidden md:block overflow-x-auto max-h-[62vh] overflow-y-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-rose-50 text-rose-950 font-bold text-[11px] border-b border-rose-200 sticky top-0 z-10">
+            <tr>
+              <th class="py-2 px-2.5 text-center w-10">#</th>
+              <th class="py-2 px-2.5 text-center w-24">처리일자</th>
+              <th class="py-2 px-2.5 text-left w-28">손실번호</th>
+              <th class="py-2 px-2.5 text-left min-w-[160px]">품번 (Part#)</th>
+              <th class="py-2 px-2 text-center w-20">제조사</th>
+              <th class="py-2 px-2.5 text-right w-20">수량</th>
+              <th class="py-2 px-2.5 text-right w-24">단가</th>
+              <th class="py-2 px-2.5 text-right w-28">손실금액</th>
+              <th class="py-2 px-2 text-center w-20">구분</th>
+              <th class="py-2 px-2.5 text-left min-w-[150px]">비고 / 사유</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
+            ${items.map((l, i) => `
+              <tr class="hover:bg-rose-50/40">
+                <td class="py-1.5 px-2.5 text-center font-mono text-slate-400">${i + 1}</td>
+                <td class="py-1.5 px-2.5 text-center font-mono text-slate-700 whitespace-nowrap">${escSub(l.date || '-')}</td>
+                <td class="py-1.5 px-2.5 font-mono font-bold text-slate-700 whitespace-nowrap">${escSub(l.loss_no || '-')}</td>
+                <td class="py-1.5 px-2.5 font-mono font-black text-indigo-950">${escSub(l.part_no || '-')}</td>
+                <td class="py-1.5 px-2 text-center font-bold text-slate-600">${escSub(l.maker)}</td>
+                <td class="py-1.5 px-2.5 text-right font-mono font-black text-rose-700 whitespace-nowrap">${(l.qty || 0).toLocaleString()}</td>
+                <td class="py-1.5 px-2.5 text-right font-mono text-slate-600 whitespace-nowrap">₩${Math.round(l.np || 0).toLocaleString()}</td>
+                <td class="py-1.5 px-2.5 text-right font-mono font-black text-rose-700 whitespace-nowrap">₩${Math.round(l.np_amt || 0).toLocaleString()}</td>
+                <td class="py-1.5 px-2 text-center whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">${escSub(l.result)}</span></td>
+                <td class="py-1.5 px-2.5 text-slate-500 truncate max-w-[200px]" title="${escSub(l.remark)}">${escSub(l.remark || '-')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="space-y-3">
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="px-2.5 py-1 rounded-lg border font-black text-[11px] ${meta.badge}">${meta.title}</span>
+          <span class="text-slate-600 font-bold">총 <strong class="text-slate-900 font-mono">${items.length.toLocaleString()}</strong>건 · 합계 수량 <strong class="text-indigo-700 font-mono">${totalQty.toLocaleString()}</strong> EA${totalAmt > 0 ? ` · 합계 금액 <strong class="text-rose-700 font-mono">₩${Math.round(totalAmt).toLocaleString()}</strong>` : ''}</span>
+        </div>
+        <div class="flex items-center gap-1.5 w-full sm:w-auto">
+          <input type="text" id="subLedgerSearchInput" value="${escSub(subLedgerQuery)}" placeholder="품번, 고객사, 제조사, 비고 검색..." class="flex-1 sm:w-64 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs outline-none focus:border-indigo-500">
+          <button type="button" id="btnSubLedgerSearch" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg cursor-pointer whitespace-nowrap">🔍 검색</button>
+        </div>
+      </div>
+      ${bodyHtml}
+    </div>
+  `;
 }
 
 /**
@@ -437,6 +689,30 @@ function bindShipmentToolbarEvents() {
     activeShipmentMode = 'web';
     await fetchWebShipments();
     renderShipmentsView('shipmentsSection');
+  });
+
+  const switchSubMode = async (mode) => {
+    if (activeShipmentMode === mode) return;
+    activeShipmentMode = mode;
+    subLedgerQuery = '';
+    renderShipmentsView('shipmentsSection');
+    await fetchSubLedgerData(mode, '');
+    renderShipmentsView('shipmentsSection');
+  };
+  document.getElementById("btnModeBorrow")?.addEventListener("click", () => switchSubMode('borrow'));
+  document.getElementById("btnModeRma")?.addEventListener("click", () => switchSubMode('rma'));
+  document.getElementById("btnModeLoss")?.addEventListener("click", () => switchSubMode('loss'));
+
+  const subInput = document.getElementById("subLedgerSearchInput");
+  const subBtn = document.getElementById("btnSubLedgerSearch");
+  const runSubSearch = async () => {
+    subLedgerQuery = subInput?.value.trim() || '';
+    await fetchSubLedgerData(activeShipmentMode, subLedgerQuery);
+    renderShipmentsView('shipmentsSection');
+  };
+  subBtn?.addEventListener("click", runSubSearch);
+  subInput?.addEventListener("keydown", (e) => {
+    if (e.key === 'Enter') runSubSearch();
   });
 
   // 검색 버튼 클릭

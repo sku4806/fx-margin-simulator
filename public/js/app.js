@@ -2894,6 +2894,112 @@ window.openItemDrawer = function(item) {
 
   drawer.classList.remove('translate-x-full');
   drawer.style.transform = 'translateX(0)';
+
+  // 📦 세일즈 마스터 확장 상세(최초입고량·출하스케줄·패킹/Lot) 지연 로딩
+  if (typeof window.loadDrawerLegacyDetail === 'function') {
+    window.loadDrawerLegacyDetail(item.part_name || item.partName || '', item.invoice_no || item.invoiceNo || '');
+  }
+};
+
+window.loadDrawerLegacyDetail = async function(partNo, invoiceNo) {
+  const body = document.getElementById('drawerLegacyDetailBody');
+  const badge = document.getElementById('drawerLegacyDetailBadge');
+  if (!body || !partNo) return;
+
+  if (badge) badge.innerText = '조회 중...';
+  body.innerHTML = `<div class="text-center py-2 text-slate-400">⏳ 원장 입고량·스케줄·패킹 정보 조회 중...</div>`;
+
+  try {
+    const params = new URLSearchParams({ part_no: partNo });
+    if (invoiceNo) params.set('invoice_no', invoiceNo);
+    const res = await fetch(`/api/inventory/detail?${params.toString()}`);
+    const json = await res.json();
+    const d = json.data || {};
+    const incomes = d.incomes || [];
+    const schedules = d.schedules || [];
+    const packings = d.packings || [];
+
+    const totalCount = incomes.length + schedules.length + packings.length;
+    if (badge) badge.innerText = totalCount > 0 ? `입고 ${incomes.length} · 스케줄 ${schedules.length} · 패킹 ${packings.length}` : '원장 데이터 없음';
+
+    if (totalCount === 0) {
+      body.innerHTML = `<div class="text-center py-2 text-slate-400">해당 품목의 추가 원장(입고량/스케줄/패킹) 기록이 없습니다.</div>`;
+      return;
+    }
+
+    let html = '';
+
+    // 1. 최초 입고량 vs 잔여재고 소진율
+    if (incomes.length > 0) {
+      const inc = incomes[0];
+      const inQty = Number(inc.in_qty) || 0;
+      const remQty = Number(inc.remain_qty) || 0;
+      const usedQty = Math.max(0, inQty - remQty);
+      const usedPct = inQty > 0 ? Math.min(100, Math.round((usedQty / inQty) * 100)) : 0;
+      html += `
+        <div class="bg-white rounded-lg border border-slate-200 p-2 space-y-1">
+          <div class="flex items-center justify-between text-[10px] font-bold text-slate-600">
+            <span>📥 최초 입고량 vs 잔여재고 (${inc.in_date || '-'})</span>
+            <span class="font-mono text-indigo-700">소진율 ${usedPct}%</span>
+          </div>
+          <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full" style="width:${usedPct}%"></div>
+          </div>
+          <div class="flex items-center justify-between text-[10px] font-mono">
+            <span>최초입고: <strong class="text-slate-900">${inQty.toLocaleString()}</strong></span>
+            <span>출하소진: <strong class="text-emerald-700">${usedQty.toLocaleString()}</strong></span>
+            <span>현재잔여: <strong class="text-indigo-700">${remQty.toLocaleString()}</strong></span>
+          </div>
+        </div>
+      `;
+    }
+
+    // 2. 배정 & 월별 출하 스케줄 (DincomeScheduleFile)
+    if (schedules.length > 0) {
+      html += `
+        <div class="bg-white rounded-lg border border-slate-200 p-2 space-y-1">
+          <div class="text-[10px] font-bold text-slate-600">📅 입고 배정 / 출하 스케줄 (${schedules.length}건)</div>
+          <div class="space-y-1 max-h-24 overflow-y-auto">
+            ${schedules.slice(0, 6).map(s => `
+              <div class="flex items-center justify-between gap-1 text-[10px] bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                <span class="font-bold text-slate-800 truncate">${s.actual_customer || '-'}</span>
+                <div class="flex items-center gap-1.5 shrink-0 font-mono">
+                  <span class="text-indigo-700 font-bold">${Number(s.qty || 0).toLocaleString()}EA</span>
+                  <span class="px-1 py-0.2 bg-amber-100 text-amber-900 rounded font-bold">${s.schedule_dt || '-'}</span>
+                  ${s.sales ? `<span class="text-slate-500">${s.sales}</span>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // 3. 패킹 / D/C Lot / Fab Lot 상세 (PackingFile)
+    if (packings.length > 0) {
+      html += `
+        <div class="bg-white rounded-lg border border-slate-200 p-2 space-y-1">
+          <div class="text-[10px] font-bold text-slate-600">🏷️ 패킹 · D/C Lot · Fab Lot 상세 (${packings.length}건)</div>
+          <div class="space-y-1 max-h-28 overflow-y-auto">
+            ${packings.slice(0, 6).map(p => `
+              <div class="flex flex-wrap items-center justify-between gap-1 text-[10px] bg-slate-50 px-2 py-1 rounded border border-slate-100 font-mono">
+                <span class="font-bold text-slate-800">${Number(p.pack_qty || 0).toLocaleString()}EA</span>
+                ${p.dc_lot ? `<span class="text-indigo-700">D/C:${p.dc_lot}</span>` : ''}
+                ${p.fab_lot ? `<span class="text-teal-700">FAB:${p.fab_lot}</span>` : ''}
+                ${p.carton_no ? `<span class="text-slate-500">CTN#${p.carton_no}</span>` : ''}
+                ${p.weight ? `<span class="text-slate-500">${p.weight}kg</span>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    body.innerHTML = html;
+  } catch (err) {
+    if (badge) badge.innerText = '오류';
+    body.innerHTML = `<div class="text-center py-2 text-rose-500">원장 상세 조회 실패</div>`;
+  }
 };
 
 window.closeItemDrawer = function() {

@@ -1186,3 +1186,53 @@ def register_crud_routes(app):
     def api_delete_sales_memo(memo_id: str):
         return delete_cloud_sales_memo(memo_id)
 
+    # 7. Phase 1 확장 조회 API (복수 담당자 · 매입처 · 지정 포워더 · 재고상세 · 대여/RMA/손실)
+    @app.get("/api/customers/contacts")
+    def api_list_customer_contacts(cid: Optional[int] = None, query: Optional[str] = None, limit: int = 500):
+        import legacy_mssql
+        items = legacy_mssql.query_customer_contacts(cid=cid, query=query, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+    @app.get("/api/customers/contact-counts")
+    def api_customer_contact_counts():
+        import legacy_mssql
+        counts = legacy_mssql.query_contact_counts()
+        return {"status": "success", "counts": counts}
+
+    @app.get("/api/customers/suppliers")
+    def api_list_suppliers(query: Optional[str] = None, limit: int = 500):
+        import legacy_mssql
+        items = legacy_mssql.query_suppliers(query=query, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+    @app.get("/api/customers/forwarders")
+    def api_list_forwarders(cid: Optional[int] = None, query: Optional[str] = None, limit: int = 500):
+        import legacy_mssql
+        items = legacy_mssql.query_forwarders(cid=cid, query=query, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+    @app.get("/api/inventory/detail")
+    def api_inventory_detail(part_no: str, invoice_no: Optional[str] = None):
+        import legacy_mssql
+        detail = legacy_mssql.query_inventory_detail(part_no=part_no, invoice_no=invoice_no)
+        return {"status": "success", "data": detail}
+
+    @app.get("/api/shipped-info/borrows")
+    def api_list_borrows(query: Optional[str] = None, limit: int = 300):
+        import legacy_mssql
+        items = legacy_mssql.query_borrows(query=query, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+    @app.get("/api/shipped-info/rmas")
+    def api_list_rmas(query: Optional[str] = None, limit: int = 300):
+        import legacy_mssql
+        items = legacy_mssql.query_rmas(query=query, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+    @app.get("/api/shipped-info/losses")
+    def api_list_losses(query: Optional[str] = None, limit: int = 300):
+        import legacy_mssql
+        items = legacy_mssql.query_losses(query=query, limit=limit)
+        return {"status": "success", "total": len(items), "items": items}
+
+

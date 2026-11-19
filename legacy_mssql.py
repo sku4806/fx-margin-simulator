@@ -1442,6 +1442,466 @@ def query_shipped_info(
         return []
 
 
+# ========================================================
+# 🏢 Phase 1 확장 모듈: 복수 담당자 · 매입처 · 지정 포워더 · 재고상세(입고/스케줄/패킹) · 대여/RMA/손실
+# ========================================================
+_PHASE1_BUNDLE_CACHE: Dict[str, Any] = {}
+
+def _load_phase1_bundle(filename: str) -> Any:
+    """Vercel 클라우드/오프라인 환경용 번들 JSON 로더 (메모리 캐시)"""
+    if filename in _PHASE1_BUNDLE_CACHE:
+        return _PHASE1_BUNDLE_CACHE[filename]
+    import json
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base_dir, "data", filename),
+        os.path.join(base_dir, "api", "data", filename),
+        os.path.join(os.getcwd(), "data", filename),
+        os.path.join(os.getcwd(), "api", "data", filename),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                _PHASE1_BUNDLE_CACHE[filename] = data
+                return data
+            except Exception:
+                pass
+    return None
+
+def _fmt_dt(val: Any) -> str:
+    if not val:
+        return ""
+    s = str(val)[:10]
+    if s.startswith("1900-01-01") or s.startswith("1899-"):
+        return ""
+    return s
+
+def query_customer_contacts(cid: Optional[int] = None, query: Optional[str] = None, limit: int = 500) -> List[Dict[str, Any]]:
+    """ContactFile: 거래처별 전체 복수 담당자 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = []
+        params = []
+        if cid is not None:
+            conditions.append("ct.CID = %s")
+            params.append(int(cid))
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(ct.KCONTACT LIKE %s OR ct.CCONTACT LIKE %s OR ct.CTEL LIKE %s OR ct.CHP LIKE %s OR ct.CEMAIL LIKE %s OR c.Kname LIKE %s OR c.Cname LIKE %s)")
+            params.extend([term] * 7)
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT TOP {int(limit)}
+                ct.IDX as idx, ct.CID as cid,
+                COALESCE(c.Kname, c.Cname, '') as customer_name,
+                ct.KCONTACT as kcontact, ct.CCONTACT as ccontact,
+                ct.CTITLE as title, ct.CTEL as tel, ct.CDTEL as dtel,
+                ct.CFAX as fax, ct.CHP as mobile, ct.CEMAIL as email,
+                ct.CREMARK as remark
+            FROM ContactFile ct
+            LEFT JOIN CustomerFile c ON ct.CID = c.CID
+            {where_sql}
+            ORDER BY ct.CID ASC, ct.IDX ASC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "idx": r["idx"],
+            "cid": r["cid"],
+            "customer_name": clean_val(r["customer_name"]),
+            "name": clean_val(r["kcontact"]) or clean_val(r["ccontact"]),
+            "title": clean_val(r["title"]),
+            "tel": clean_val(r["tel"]) or clean_val(r["dtel"]),
+            "fax": clean_val(r["fax"]),
+            "mobile": clean_val(r["mobile"]),
+            "email": clean_val(r["email"]),
+            "remark": clean_val(r["remark"]),
+        } for r in rows if (clean_val(r["kcontact"]) or clean_val(r["ccontact"]))]
+    except Exception:
+        bundle = _load_phase1_bundle("contacts_by_cid.json") or {}
+        if cid is not None:
+            items = bundle.get(str(cid), [])
+        else:
+            items = [it for lst in bundle.values() for it in lst]
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in (it.get("name", "").lower() + " " + it.get("tel", "").lower() + " " + it.get("mobile", "").lower() + " " + it.get("email", "").lower() + " " + it.get("customer_name", "").lower())]
+        return items[:limit]
+
+def query_contact_counts() -> Dict[str, int]:
+    """거래처(CID)별 담당자 수 카운트 맵"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        cur.execute("SELECT CID as cid, COUNT(*) as cnt FROM ContactFile WHERE (KCONTACT IS NOT NULL AND LTRIM(RTRIM(KCONTACT)) <> '') OR (CCONTACT IS NOT NULL AND LTRIM(RTRIM(CCONTACT)) <> '') GROUP BY CID")
+        rows = cur.fetchall()
+        conn.close()
+        return {str(r["cid"]): int(r["cnt"]) for r in rows if r.get("cid") is not None}
+    except Exception:
+        bundle = _load_phase1_bundle("contacts_by_cid.json") or {}
+        return {str(k): len(v) for k, v in bundle.items()}
+
+def query_suppliers(query: Optional[str] = None, limit: int = 500) -> List[Dict[str, Any]]:
+    """CustomerBFile: 해외/국내 매입처(공급사) 마스터 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = []
+        params = []
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(Cname LIKE %s OR NATION LIKE %s OR Product LIKE %s OR Email LIKE %s OR TEL LIKE %s OR Remark LIKE %s OR SALES LIKE %s)")
+            params.extend([term] * 7)
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT TOP {int(limit)}
+                CID as cid, Cname as cname, TEL as tel, FAX as fax,
+                NATION as nation, Email as email, Product as product,
+                Address as address, Remark as remark, SALES as sales,
+                CS as cs, GUBUN as gubun, UPDATE_DT as update_dt
+            FROM CustomerBFile
+            {where_sql}
+            ORDER BY UPDATE_DT DESC, CID DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "cid": r["cid"],
+            "cname": clean_val(r["cname"]),
+            "tel": clean_val(r["tel"]),
+            "fax": clean_val(r["fax"]),
+            "nation": clean_val(r["nation"]),
+            "email": clean_val(r["email"]),
+            "product": clean_val(r["product"]),
+            "address": clean_val(r["address"]),
+            "remark": clean_val(r["remark"]),
+            "sales": clean_val(r["sales"]),
+            "cs": clean_val(r["cs"]),
+            "gubun": clean_val(r["gubun"]),
+            "update_dt": _fmt_dt(r.get("update_dt")),
+        } for r in rows if clean_val(r["cname"])]
+    except Exception:
+        items = _load_phase1_bundle("suppliers.json") or []
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('cname','')} {it.get('nation','')} {it.get('product','')} {it.get('email','')} {it.get('tel','')} {it.get('remark','')}".lower()]
+        return items[:limit]
+
+def query_forwarders(cid: Optional[int] = None, query: Optional[str] = None, limit: int = 500) -> List[Dict[str, Any]]:
+    """CustForwarder: 고객사별 지정 포워더 및 Account 정보 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = []
+        params = []
+        if cid is not None:
+            conditions.append("f.CID = %s")
+            params.append(int(cid))
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(f.FName LIKE %s OR f.FACCOUNT LIKE %s OR f.FRegion LIKE %s OR f.Fkinds LIKE %s OR c.Kname LIKE %s OR c.Cname LIKE %s)")
+            params.extend([term] * 6)
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT TOP {int(limit)}
+                f.IDX as idx, f.CID as cid, f.FID as fid,
+                COALESCE(c.Kname, c.Cname, '') as customer_name,
+                f.FName as fname, f.FACCOUNT as account, f.FRegion as region,
+                f.Fkinds as kinds, f.Chk as chk,
+                CAST(f.Comment AS NVARCHAR(MAX)) as comment
+            FROM CustForwarder f
+            LEFT JOIN CustomerFile c ON f.CID = c.CID
+            {where_sql}
+            ORDER BY f.IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "idx": r["idx"],
+            "cid": r["cid"],
+            "customer_name": clean_val(r["customer_name"]),
+            "fname": clean_val(r["fname"]),
+            "account": clean_val(r["account"]),
+            "region": clean_val(r["region"]),
+            "kinds": clean_val(r["kinds"]),
+            "chk": clean_val(r["chk"]),
+            "comment": clean_val(r["comment"]),
+        } for r in rows if clean_val(r["fname"])]
+    except Exception:
+        items = _load_phase1_bundle("forwarders.json") or []
+        if cid is not None:
+            items = [it for it in items if str(it.get("cid")) == str(cid)]
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('customer_name','')} {it.get('fname','')} {it.get('account','')} {it.get('region','')} {it.get('kinds','')} {it.get('comment','')}".lower()]
+        return items[:limit]
+
+def query_inventory_detail(part_no: str, invoice_no: Optional[str] = None) -> Dict[str, Any]:
+    """재고 품목 클릭 시 상세 드로어 확장 정보: 최초입고량(INQTY), 출하스케줄(DincomeScheduleFile), 패킹/Lot(PackingFile)"""
+    p_clean = (part_no or "").strip()
+    inv_clean = (invoice_no or "").strip()
+    if not p_clean:
+        return {"incomes": [], "schedules": [], "packings": []}
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+
+        # 1. DincomeFile (최초 입고량 vs 잔여재고)
+        if inv_clean:
+            cur.execute("""
+                SELECT TOP 5 IDX as idx, INVOICENO as invoice_no, INDT as in_date,
+                       INQTY as in_qty, NOTOUTQTY as remain_qty, DATACODE as date_code,
+                       InRate as in_rate, Slup as sl_up, Wup as w_up, Remark as remark
+                FROM DincomeFile
+                WHERE LTRIM(RTRIM(PARTNO)) = %s AND LTRIM(RTRIM(INVOICENO)) = %s
+                ORDER BY INDT DESC, IDX DESC
+            """, (p_clean, inv_clean))
+        else:
+            cur.execute("""
+                SELECT TOP 5 IDX as idx, INVOICENO as invoice_no, INDT as in_date,
+                       INQTY as in_qty, NOTOUTQTY as remain_qty, DATACODE as date_code,
+                       InRate as in_rate, Slup as sl_up, Wup as w_up, Remark as remark
+                FROM DincomeFile
+                WHERE LTRIM(RTRIM(PARTNO)) = %s
+                ORDER BY INDT DESC, IDX DESC
+            """, (p_clean,))
+        incomes = [{
+            "idx": r["idx"],
+            "invoice_no": clean_val(r["invoice_no"]),
+            "in_date": _fmt_dt(r.get("in_date")),
+            "in_qty": int(r["in_qty"] or 0),
+            "remain_qty": int(r["remain_qty"] or 0),
+            "date_code": clean_val(r["date_code"]),
+            "in_rate": float(r["in_rate"] or 0.0),
+            "sl_up": float(r["sl_up"] or 0.0),
+            "w_up": float(r["w_up"] or 0.0),
+            "remark": clean_val(r["remark"]),
+        } for r in cur.fetchall()]
+
+        # 2. DincomeScheduleFile (배정 및 월별 출하 스케줄)
+        cur.execute("""
+            SELECT TOP 15 s.IDX as idx, s.IDX_IN as idx_in, s.QTY as qty,
+                   s.SALES as sales, s.ACTUALCUSTOMER as actual_customer,
+                   s.SCHEDULE_DT as schedule_dt, d.INVOICENO as invoice_no
+            FROM DincomeScheduleFile s
+            INNER JOIN DincomeFile d ON s.IDX_IN = d.IDX
+            WHERE LTRIM(RTRIM(d.PARTNO)) = %s
+            ORDER BY s.SCHEDULE_DT DESC, s.IDX DESC
+        """, (p_clean,))
+        schedules = [{
+            "idx": r["idx"],
+            "qty": int(r["qty"] or 0),
+            "sales": clean_val(r["sales"]),
+            "actual_customer": clean_val(r["actual_customer"]),
+            "schedule_dt": clean_val(r["schedule_dt"]),
+            "invoice_no": clean_val(r["invoice_no"]),
+        } for r in cur.fetchall()]
+
+        # 3. PackingFile JOIN ShippingFile (패킹 & D/C Lot / Fab Lot 상세)
+        if inv_clean:
+            cur.execute("""
+                SELECT TOP 15 p.PIDX as pidx, p.PACKQTY as pack_qty, p.DCLOT as dc_lot,
+                       p.FABLOTNO as fab_lot, p.Weight as weight, p.CartonNo as carton_no,
+                       p.Dimension as dimension, s.INVOICENO as invoice_no, s.SHIPDT as ship_date
+                FROM PackingFile p
+                INNER JOIN ShippingFile s ON p.IDX = s.IDX
+                WHERE LTRIM(RTRIM(s.PartNo)) = %s AND LTRIM(RTRIM(s.INVOICENO)) = %s
+                ORDER BY p.PIDX DESC
+            """, (p_clean, inv_clean))
+        else:
+            cur.execute("""
+                SELECT TOP 15 p.PIDX as pidx, p.PACKQTY as pack_qty, p.DCLOT as dc_lot,
+                       p.FABLOTNO as fab_lot, p.Weight as weight, p.CartonNo as carton_no,
+                       p.Dimension as dimension, s.INVOICENO as invoice_no, s.SHIPDT as ship_date
+                FROM PackingFile p
+                INNER JOIN ShippingFile s ON p.IDX = s.IDX
+                WHERE LTRIM(RTRIM(s.PartNo)) = %s
+                ORDER BY p.PIDX DESC
+            """, (p_clean,))
+        packings = [{
+            "pidx": r["pidx"],
+            "pack_qty": int(r["pack_qty"] or 0),
+            "dc_lot": clean_val(r["dc_lot"]),
+            "fab_lot": clean_val(r["fab_lot"]),
+            "weight": float(r["weight"] or 0.0),
+            "carton_no": r["carton_no"],
+            "dimension": clean_val(r["dimension"]),
+            "invoice_no": clean_val(r["invoice_no"]),
+            "ship_date": _fmt_dt(r.get("ship_date")),
+        } for r in cur.fetchall()]
+
+        conn.close()
+        return {"incomes": incomes, "schedules": schedules, "packings": packings}
+    except Exception:
+        bundle = _load_phase1_bundle("inventory_details.json") or {}
+        key_exact = f"{p_clean}||{inv_clean}" if inv_clean else ""
+        if key_exact and key_exact in bundle:
+            return bundle[key_exact]
+        if p_clean in bundle:
+            return bundle[p_clean]
+        return {"incomes": [], "schedules": [], "packings": []}
+
+def query_borrows(query: Optional[str] = None, limit: int = 300) -> List[Dict[str, Any]]:
+    """DBRWFile: 대여/반납 원장 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = []
+        params = []
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(b.Partno LIKE %s OR b.Mfg LIKE %s OR b.PONO LIKE %s OR b.Sales LIKE %s OR b.Remark LIKE %s OR c.Kname LIKE %s OR c.Cname LIKE %s)")
+            params.extend([term] * 7)
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT TOP {int(limit)}
+                b.IDX as idx, COALESCE(c.Kname, c.Cname, '') as customer_name,
+                b.SDT as sdt, b.OUTDT as out_dt, b.RTNDT as rtn_dt, b.RDT as rdt,
+                b.PONO as po_no, b.Partno as part_no, b.Mfg as maker,
+                b.Qty as qty, b.Sales as sales, b.Gubun as gubun,
+                b.Result as result, b.Remark as remark
+            FROM DBRWFile b
+            LEFT JOIN CustomerFile c ON b.Custid = c.CID
+            {where_sql}
+            ORDER BY b.SDT DESC, b.IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "idx": r["idx"],
+            "customer_name": clean_val(r["customer_name"]) or "-",
+            "date": _fmt_dt(r.get("out_dt")) or _fmt_dt(r.get("sdt")),
+            "rtn_date": _fmt_dt(r.get("rtn_dt")),
+            "rdt": clean_val(r["rdt"]),
+            "po_no": clean_val(r["po_no"]),
+            "part_no": clean_val(r["part_no"]),
+            "maker": clean_val(r["maker"]) or "OTHERS",
+            "qty": int(r["qty"] or 0),
+            "sales": clean_val(r["sales"]),
+            "gubun": clean_val(r["gubun"]),
+            "result": clean_val(r["result"]),
+            "remark": clean_val(r["remark"]),
+        } for r in rows]
+    except Exception:
+        bundle = _load_phase1_bundle("borrows_rma_loss.json") or {}
+        items = bundle.get("borrows", [])
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('customer_name','')} {it.get('part_no','')} {it.get('maker','')} {it.get('po_no','')} {it.get('sales','')} {it.get('remark','')}".lower()]
+        return items[:limit]
+
+def query_rmas(query: Optional[str] = None, limit: int = 300) -> List[Dict[str, Any]]:
+    """DRMAFile: 반품(RMA) 원장 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = []
+        params = []
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(r.Partno LIKE %s OR r.Mfg LIKE %s OR r.PONO LIKE %s OR r.Sales LIKE %s OR c.Kname LIKE %s OR c.Cname LIKE %s)")
+            params.extend([term] * 6)
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT TOP {int(limit)}
+                r.IDX as idx, COALESCE(c.Kname, c.Cname, '') as customer_name,
+                r.SDT as sdt, r.PONO as po_no, r.Partno as part_no, r.Mfg as maker,
+                r.Qty as qty, r.InUP as in_up, r.OutUP as out_up, r.OutAmt as out_amt,
+                r.MGN as mgn, r.Sales as sales, r.Gubun as gubun, r.Result as result
+            FROM DRMAFile r
+            LEFT JOIN CustomerFile c ON r.Custid = c.CID
+            {where_sql}
+            ORDER BY r.SDT DESC, r.IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "idx": r["idx"],
+            "customer_name": clean_val(r["customer_name"]) or "-",
+            "date": _fmt_dt(r.get("sdt")),
+            "po_no": clean_val(r["po_no"]),
+            "part_no": clean_val(r["part_no"]),
+            "maker": clean_val(r["maker"]) or "OTHERS",
+            "qty": int(r["qty"] or 0),
+            "in_up": float(r["in_up"] or 0.0),
+            "out_up": float(r["out_up"] or 0.0),
+            "out_amt": float(r["out_amt"] or 0.0),
+            "mgn": float(r["mgn"] or 0.0),
+            "sales": clean_val(r["sales"]),
+            "gubun": clean_val(r["gubun"]),
+            "result": clean_val(r["result"]) or "RMA",
+        } for r in rows]
+    except Exception:
+        bundle = _load_phase1_bundle("borrows_rma_loss.json") or {}
+        items = bundle.get("rmas", [])
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('customer_name','')} {it.get('part_no','')} {it.get('maker','')} {it.get('po_no','')} {it.get('sales','')}".lower()]
+        return items[:limit]
+
+def query_losses(query: Optional[str] = None, limit: int = 300) -> List[Dict[str, Any]]:
+    """LossFile: 손실/불량/폐기 원장 조회"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        conditions = []
+        params = []
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            conditions.append("(PARTNO LIKE %s OR MFG LIKE %s OR Lossno LIKE %s OR Remark LIKE %s OR RESULT LIKE %s)")
+            params.extend([term] * 5)
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT TOP {int(limit)}
+                IDX as idx, SDT as sdt, PARTNO as part_no, MFG as maker,
+                QTY as qty, RESULT as result, Lossno as loss_no,
+                Remark as remark, NP as np, NPAMT as np_amt
+            FROM LossFile
+            {where_sql}
+            ORDER BY SDT DESC, IDX DESC
+        """
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        conn.close()
+        results = []
+        for r in rows:
+            raw_qty = clean_val(r["qty"])
+            try:
+                qty_int = int(float(raw_qty.replace(",", ""))) if raw_qty else 0
+            except Exception:
+                qty_int = 0
+            results.append({
+                "idx": r["idx"],
+                "date": _fmt_dt(r.get("sdt")),
+                "part_no": clean_val(r["part_no"]),
+                "maker": clean_val(r["maker"]) or "OTHERS",
+                "qty": qty_int,
+                "result": clean_val(r["result"]) or "LOSS",
+                "loss_no": clean_val(r["loss_no"]),
+                "remark": clean_val(r["remark"]),
+                "np": float(r["np"] or 0.0),
+                "np_amt": float(r["np_amt"] or 0.0),
+            })
+        return results
+    except Exception:
+        bundle = _load_phase1_bundle("borrows_rma_loss.json") or {}
+        items = bundle.get("losses", [])
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [it for it in items if q in f"{it.get('part_no','')} {it.get('maker','')} {it.get('loss_no','')} {it.get('remark','')} {it.get('result','')}".lower()]
+        return items[:limit]
+
+
+
 
 
 

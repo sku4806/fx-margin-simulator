@@ -6,7 +6,10 @@ import sys
 import datetime
 import argparse
 import pymssql
-from supabase import create_client
+try:
+    from supabase import create_client
+except ImportError:
+    create_client = None
 
 os.environ["TDSVER"] = "7.0"
 
@@ -517,6 +520,113 @@ def sync_bundled_files(conn):
     except Exception as ae:
         print(f"⚠️ sales_analytics_cache.json 갱신 예외: {ae}")
 
+    # 5. Phase 1 확장 번들 (복수 담당자, 매입처, 지정 포워더, 재고상세, 대여/RMA/손실)
+    try:
+        all_contacts = legacy_mssql.query_customer_contacts(limit=10000)
+        contacts_by_cid = {}
+        for c in all_contacts:
+            cid_key = str(c.get("cid", ""))
+            if cid_key:
+                contacts_by_cid.setdefault(cid_key, []).append(c)
+        suppliers = legacy_mssql.query_suppliers(limit=3000)
+        forwarders = legacy_mssql.query_forwarders(limit=2000)
+        borrows = legacy_mssql.query_borrows(limit=1000)
+        rmas = legacy_mssql.query_rmas(limit=500)
+        losses = legacy_mssql.query_losses(limit=1000)
+
+        # 보유재고 품목들의 입고량/스케줄/패킹 번들
+        cur.execute("""
+            SELECT TOP 2000 IDX as idx, PARTNO as part_no, INVOICENO as invoice_no, INDT as in_date,
+                   INQTY as in_qty, NOTOUTQTY as remain_qty, DATACODE as date_code,
+                   InRate as in_rate, Slup as sl_up, Wup as w_up, Remark as remark
+            FROM DincomeFile
+            WHERE NOTOUTQTY > 0
+            ORDER BY INDT DESC, IDX DESC
+        """)
+        active_incomes = cur.fetchall()
+        inv_details = {}
+        active_parts = set()
+        for r in active_incomes:
+            p = clean_val(r["part_no"])
+            inv = clean_val(r["invoice_no"])
+            if not p:
+                continue
+            active_parts.add(p)
+            inc_obj = {
+                "idx": r["idx"], "invoice_no": inv,
+                "in_date": r["in_date"].strftime('%Y-%m-%d') if r.get("in_date") else "",
+                "in_qty": int(r["in_qty"] or 0), "remain_qty": int(r["remain_qty"] or 0),
+                "date_code": clean_val(r["date_code"]),
+                "in_rate": float(r["in_rate"] or 0.0), "sl_up": float(r["sl_up"] or 0.0),
+                "w_up": float(r["w_up"] or 0.0), "remark": clean_val(r["remark"]),
+            }
+            for k in (p, f"{p}||{inv}"):
+                slot = inv_details.setdefault(k, {"incomes": [], "schedules": [], "packings": []})
+                if len(slot["incomes"]) < 5:
+                    slot["incomes"].append(inc_obj)
+
+        cur.execute("""
+            SELECT s.IDX as idx, d.PARTNO as part_no, d.INVOICENO as invoice_no,
+                   s.QTY as qty, s.SALES as sales, s.ACTUALCUSTOMER as actual_customer,
+                   s.SCHEDULE_DT as schedule_dt
+            FROM DincomeScheduleFile s
+            INNER JOIN DincomeFile d ON s.IDX_IN = d.IDX
+            ORDER BY s.SCHEDULE_DT DESC, s.IDX DESC
+        """)
+        for r in cur.fetchall():
+            p = clean_val(r["part_no"])
+            if p not in active_parts:
+                continue
+            inv = clean_val(r["invoice_no"])
+            sch_obj = {
+                "idx": r["idx"], "qty": int(r["qty"] or 0),
+                "sales": clean_val(r["sales"]), "actual_customer": clean_val(r["actual_customer"]),
+                "schedule_dt": clean_val(r["schedule_dt"]), "invoice_no": inv,
+            }
+            for k in (p, f"{p}||{inv}"):
+                if k in inv_details and len(inv_details[k]["schedules"]) < 15:
+                    inv_details[k]["schedules"].append(sch_obj)
+
+        cur.execute("""
+            SELECT TOP 5000 p.PIDX as pidx, s.PartNo as part_no, s.INVOICENO as invoice_no,
+                   p.PACKQTY as pack_qty, p.DCLOT as dc_lot, p.FABLOTNO as fab_lot,
+                   p.Weight as weight, p.CartonNo as carton_no, p.Dimension as dimension,
+                   s.SHIPDT as ship_date
+            FROM PackingFile p
+            INNER JOIN ShippingFile s ON p.IDX = s.IDX
+            ORDER BY p.PIDX DESC
+        """)
+        for r in cur.fetchall():
+            p = clean_val(r["part_no"])
+            if p not in active_parts:
+                continue
+            inv = clean_val(r["invoice_no"])
+            pk_obj = {
+                "pidx": r["pidx"], "pack_qty": int(r["pack_qty"] or 0),
+                "dc_lot": clean_val(r["dc_lot"]), "fab_lot": clean_val(r["fab_lot"]),
+                "weight": float(r["weight"] or 0.0), "carton_no": r["carton_no"],
+                "dimension": clean_val(r["dimension"]), "invoice_no": inv,
+                "ship_date": r["ship_date"].strftime('%Y-%m-%d') if r.get("ship_date") else "",
+            }
+            for k in (p, f"{p}||{inv}"):
+                if k in inv_details and len(inv_details[k]["packings"]) < 15:
+                    inv_details[k]["packings"].append(pk_obj)
+
+        for p_dir in ["api/data", "data"]:
+            with open(os.path.join(p_dir, "contacts_by_cid.json"), "w", encoding="utf-8") as f:
+                json.dump(contacts_by_cid, f, ensure_ascii=False)
+            with open(os.path.join(p_dir, "suppliers.json"), "w", encoding="utf-8") as f:
+                json.dump(suppliers, f, ensure_ascii=False)
+            with open(os.path.join(p_dir, "forwarders.json"), "w", encoding="utf-8") as f:
+                json.dump(forwarders, f, ensure_ascii=False)
+            with open(os.path.join(p_dir, "borrows_rma_loss.json"), "w", encoding="utf-8") as f:
+                json.dump({"borrows": borrows, "rmas": rmas, "losses": losses}, f, ensure_ascii=False)
+            with open(os.path.join(p_dir, "inventory_details.json"), "w", encoding="utf-8") as f:
+                json.dump(inv_details, f, ensure_ascii=False)
+        print(f"[*] Phase 1 번들 저장 완료: 담당자 {len(all_contacts)}명, 매입처 {len(suppliers)}건, 포워더 {len(forwarders)}건, 대여/RMA/손실 {len(borrows)}/{len(rmas)}/{len(losses)}건")
+    except Exception as p1e:
+        print(f"⚠️ Phase 1 번들 갱신 예외: {p1e}")
+
     print(f"✅ 번들 데이터 갱신 완료!")
 
 def main():
@@ -532,11 +642,13 @@ def main():
 
     print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 사내 MS-SQL -> Supabase 데이터 동기화 시작...")
     
-    try:
-        sb = create_client(URL, KEY)
-    except Exception as e:
-        print(f"❌ Supabase 클라이언트 연결 실패: {e}")
-        return
+    sb = None
+    if not args.only_bundle:
+        try:
+            sb = create_client(URL, KEY)
+        except Exception as e:
+            print(f"❌ Supabase 클라이언트 연결 실패: {e}")
+            return
 
     try:
         conn = pymssql.connect(**LEGACY_DB_CONFIG)
