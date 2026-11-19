@@ -202,12 +202,13 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
   // 기준 매출액 (비율 계산용: 안전 분모 설정)
   const baseBilling = (isMonthly ? (periodBilling && periodBilling > 0 ? periodBilling : billingYtd) : billingYtd) || 1;
 
-  // 1. 월별 차트 스케일 계산 (통합 총수익 모드: 마진+커미션 vs 매출액 모드)
+  // 1. 월별 차트 스케일 계산 (국내마진 vs 커미션 2막대 병렬 비교 모드 vs 매출액 모드)
   const isProfitChart = analyticsChartMode === 'profit';
   const maxChartVal = isProfitChart
     ? Math.max(...monthly.map(m => {
         const cm = commMonthlyMap[m.month];
-        return (m.margin || 0) + Math.round((cm ? (Number(cm.comm_amt) || 0) : 0) * fxRate);
+        const cKrw = Math.round((cm ? (Number(cm.comm_amt) || 0) : 0) * fxRate);
+        return Math.max(m.margin || 0, cKrw);
       }), 50000000)
     : Math.max(...monthly.map(m => m.billing || 0), 100000000);
 
@@ -275,35 +276,49 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     const monthLabel = isOtherYear ? `${m.month.slice(2, 4)}.${m.month.slice(5)}` : `${m.month.slice(5)}월`;
 
     if (isProfitChart) {
-      const mgnH = mgn > 0 ? Math.max(3, Math.round((mgn / yCeiling) * plotHeight)) : 0;
-      const commH = cKrw > 0 ? Math.max(3, Math.round((cKrw / yCeiling) * plotHeight)) : 0;
-      const totalH = Math.max(mgnH + commH, totalProfit > 0 ? 4 : 2);
-      const topY = plotBottom - totalH;
+      const pairGap = 3;
+      const subBarW = Math.min(20, Math.max(10, Math.floor((slotWidth * 0.72 - pairGap) / 2)));
+      const leftBarX = Math.round(slotCenter - subBarW - pairGap / 2);
+      const rightBarX = Math.round(slotCenter + pairGap / 2);
+      const mgnH = mgn > 0 ? Math.max(4, Math.round((mgn / yCeiling) * plotHeight)) : 2;
+      const commH = cKrw > 0 ? Math.max(4, Math.round((cKrw / yCeiling) * plotHeight)) : 2;
       const mgnY = plotBottom - mgnH;
-      const commY = mgnY - commH;
-      const commShare = totalProfit > 0 && cKrw > 0 ? Math.round((cKrw / totalProfit) * 100) : 0;
+      const commY = plotBottom - commH;
+      const leftCenter = leftBarX + subBarW / 2;
+      const rightCenter = rightBarX + subBarW / 2;
 
       return `
         <g class="chart-group cursor-pointer group" data-idx="${idx}" onclick="window.switchAnalyticsMonth('${mNum}')">
-          <rect x="${Math.round(slotCenter - slotWidth / 2 + 2)}" y="${plotTop - 15}" width="${Math.round(slotWidth - 4)}" height="${plotHeight + 25}" fill="${isSelected ? '#f5f3ff' : '#f8fafc'}" rx="8" class="${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity" pointer-events="none"></rect>
+          <rect x="${Math.round(slotCenter - slotWidth / 2 + 2)}" y="${plotTop - 15}" width="${Math.round(slotWidth - 4)}" height="${plotHeight + 25}" fill="${isSelected ? '#f5f3ff' : '#f8fafc'}" rx="8" stroke="${isSelected ? '#c4b5fd' : 'none'}" stroke-width="${isSelected ? '1.5' : '0'}" class="${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity" pointer-events="none"></rect>
 
-          <!-- 상단 1: 통합 총수익 (국내마진 + 커미션) -->
-          <text x="${slotCenter}" y="${topY - 14}" text-anchor="middle" font-size="${isSelected ? '11.5' : '10.5'}" font-weight="900" fill="${isSelected ? '#5b21b6' : '#0f172a'}" class="font-mono tracking-tight select-none">
-            ${fmtCompactKrw(totalProfit)}
-          </text>
-          <!-- 상단 2: 커미션 비중 또는 마진율 -->
-          <text x="${slotCenter}" y="${topY - 3}" text-anchor="middle" font-size="9" font-weight="bold" fill="${commShare > 0 ? '#7c3aed' : '#059669'}" class="font-mono select-none">
-            ${commShare > 0 ? `💎${commShare}%` : (bill > 0 ? `${mgnRate}%` : '')}
+          <!-- 왼쪽 막대 상단: 국내마진 금액 -->
+          <text x="${leftCenter}" y="${mgnY - 5}" text-anchor="middle" font-size="9" font-weight="900" fill="#047857" class="font-mono tracking-tighter select-none">
+            ${mgn > 0 ? fmtCompactKrw(mgn) : ''}
           </text>
 
-          <!-- 하단 막대: Domestic 마진 (에메랄드) -->
-          ${mgnH > 0 ? `<rect x="${barX}" y="${mgnY}" width="${barWidth}" height="${mgnH}" rx="${commH > 0 ? '2' : '4'}" fill="url(#marginBarGradient)" class="transition-all duration-150 group-hover:brightness-110"></rect>` : ''}
-          <!-- 상단 스택 막대: 💎 커미션 원화환산 (바이올렛) -->
-          ${commH > 0 ? `<rect x="${barX}" y="${commY}" width="${barWidth}" height="${commH}" rx="4" fill="url(#commBarGradient)" class="transition-all duration-150 group-hover:brightness-110"></rect>` : ''}
-          <!-- 선택 테두리 + 툴팁 히트박스 -->
-          <rect x="${barX}" y="${topY}" width="${barWidth}" height="${totalH}" rx="4" fill="transparent"
-                stroke="${isSelected ? '#f59e0b' : 'none'}" stroke-width="${isSelected ? '2.5' : '0'}">
-            <title>${m.month} 통합 총수익 (클릭 시 ${mNum}월 상세 조회)
+          <!-- 오른쪽 막대 상단: 💎 커미션 원화환산 금액 -->
+          <text x="${rightCenter}" y="${commY - 5}" text-anchor="middle" font-size="9" font-weight="900" fill="#6d28d9" class="font-mono tracking-tighter select-none">
+            ${cKrw > 0 ? fmtCompactKrw(cKrw) : ''}
+          </text>
+
+          <!-- 막대 1 (왼쪽): Domestic 마진 (에메랄드) -->
+          <rect x="${leftBarX}" y="${mgnY}" width="${subBarW}" height="${mgnH}" rx="3"
+                fill="url(#marginBarGradient)"
+                stroke="${isSelected ? '#f59e0b' : 'none'}" stroke-width="${isSelected ? '1.5' : '0'}"
+                class="filter drop-shadow-xs transition-all duration-150 group-hover:brightness-110">
+            <title>${m.month} 국내마진 · 💎 커미션 비교 (클릭 시 ${mNum}월 상세 조회)
+• 🏆 통합 총수익: ₩${Math.round(totalProfit).toLocaleString()}
+• 국내 마진: ₩${Math.round(mgn).toLocaleString()} (마진율 ${mgnRate}%)
+• 💎 커미션: $${cUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (≈₩${cKrw.toLocaleString()})
+• 국내 매출: ₩${Math.round(bill).toLocaleString()} (${billCount}건)</title>
+          </rect>
+
+          <!-- 막대 2 (오른쪽): 💎 커미션 원화환산 (바이올렛) -->
+          <rect x="${rightBarX}" y="${commY}" width="${subBarW}" height="${commH}" rx="3"
+                fill="${cKrw > 0 ? 'url(#commBarGradient)' : '#e2e8f0'}"
+                stroke="${isSelected && cKrw > 0 ? '#f59e0b' : 'none'}" stroke-width="${isSelected && cKrw > 0 ? '1.5' : '0'}"
+                class="filter drop-shadow-xs transition-all duration-150 group-hover:brightness-110">
+            <title>${m.month} 국내마진 · 💎 커미션 비교 (클릭 시 ${mNum}월 상세 조회)
 • 🏆 통합 총수익: ₩${Math.round(totalProfit).toLocaleString()}
 • 국내 마진: ₩${Math.round(mgn).toLocaleString()} (마진율 ${mgnRate}%)
 • 💎 커미션: $${cUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (≈₩${cKrw.toLocaleString()})
