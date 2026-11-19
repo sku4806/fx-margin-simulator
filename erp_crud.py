@@ -888,6 +888,175 @@ class SampleTrackingCrudInput(BaseModel):
     remark: Optional[str] = ""
 
 
+class SubLedgerCrudInput(BaseModel):
+    date: Optional[str] = ""
+    customer_name: Optional[str] = ""
+    part_no: str
+    maker: Optional[str] = ""
+    qty: int = 0
+    gubun: Optional[str] = ""       # borrow: 대여/반납/샘플대여
+    result: Optional[str] = ""      # borrow: 대여중/반납완료, loss: 폐기/불량/분실/재고조정
+    rtn_date: Optional[str] = ""    # borrow: 반납일
+    po_no: Optional[str] = ""       # rma: PO번호
+    out_up: Optional[float] = 0.0   # rma: 판매단가
+    out_amt: Optional[float] = 0.0  # rma: 반품금액
+    loss_no: Optional[str] = ""     # loss: 손실번호
+    np: Optional[float] = 0.0       # loss: 단가
+    np_amt: Optional[float] = 0.0   # loss: 손실금액
+    sales: Optional[str] = ""
+    remark: Optional[str] = ""
+
+
+_SUB_LEDGER_ACTION = {
+    "borrow": "WEB_BORROW",
+    "rma": "WEB_RMA",
+    "loss": "WEB_LOSS",
+}
+
+
+def list_cloud_sub_ledgers(kind: str, query: Optional[str] = None, limit: int = 200) -> List[Dict[str, Any]]:
+    action_type = _SUB_LEDGER_ACTION.get(kind)
+    if not action_type:
+        return []
+    params = [
+        ("select", "id,part_name,user_email,details,created_at"),
+        ("action_type", f"eq.{action_type}"),
+        ("order", "created_at.desc"),
+        ("limit", str(limit)),
+    ]
+    try:
+        res = requests.get(_sb_url("inventory_audit_logs"), headers=_sb_headers(prefer=""), params=params, timeout=6)
+        if res.status_code != 200:
+            return []
+        rows = res.json() or []
+        q_lower = (query or "").strip().lower()
+        out = []
+        for r in rows:
+            try:
+                rec = json.loads(r.get("details") or "{}")
+            except Exception:
+                rec = {}
+            rec["id"] = f"CLOUD-{r['id']}"
+            rec["cloud_id"] = r["id"]
+            rec["source"] = "CLOUD"
+            rec["is_web"] = True
+            if not rec.get("part_no"):
+                rec["part_no"] = r.get("part_name") or ""
+            if q_lower:
+                hay = " ".join(str(rec.get(k, "")) for k in ("part_no", "customer_name", "maker", "po_no", "loss_no", "sales", "remark", "gubun", "result")).lower()
+                if q_lower not in hay:
+                    continue
+            out.append(rec)
+        return out
+    except Exception as e:
+        print(f"[WARN] 클라우드 {kind} 원장 조회 실패: {e}")
+        return []
+
+
+def _build_sub_ledger_record(kind: str, data: SubLedgerCrudInput) -> Dict[str, Any]:
+    dt = (data.date or "").strip() or datetime.date.today().isoformat()
+    qty = int(data.qty or 0)
+    sales_en = (data.sales or "").strip().upper()
+    if kind == "borrow":
+        return {
+            "date": dt,
+            "customer_name": (data.customer_name or "").strip() or "-",
+            "part_no": (data.part_no or "").strip(),
+            "maker": (data.maker or "").strip() or "-",
+            "qty": qty,
+            "gubun": (data.gubun or "대여").strip(),
+            "result": (data.result or "대여중").strip(),
+            "rtn_date": (data.rtn_date or "").strip(),
+            "sales": sales_en,
+            "remark": (data.remark or "").strip(),
+        }
+    elif kind == "rma":
+        out_up = float(data.out_up or 0.0)
+        out_amt = float(data.out_amt or 0.0) or (out_up * qty)
+        return {
+            "date": dt,
+            "customer_name": (data.customer_name or "").strip() or "-",
+            "part_no": (data.part_no or "").strip(),
+            "maker": (data.maker or "").strip() or "-",
+            "po_no": (data.po_no or "").strip(),
+            "qty": qty,
+            "out_up": round(out_up, 2),
+            "out_amt": round(out_amt, 2),
+            "sales": sales_en,
+            "remark": (data.remark or "").strip(),
+        }
+    else:
+        np_val = float(data.np or 0.0)
+        np_amt = float(data.np_amt or 0.0) or (np_val * qty)
+        loss_no = (data.loss_no or "").strip() or f"LOSS-{dt.replace('-', '')}"
+        return {
+            "date": dt,
+            "loss_no": loss_no,
+            "part_no": (data.part_no or "").strip(),
+            "maker": (data.maker or "").strip() or "-",
+            "qty": qty,
+            "np": round(np_val, 2),
+            "np_amt": round(np_amt, 2),
+            "result": (data.result or "폐기").strip(),
+            "remark": (data.remark or "").strip(),
+        }
+
+
+def create_cloud_sub_ledger(kind: str, data: SubLedgerCrudInput) -> Dict[str, Any]:
+    action_type = _SUB_LEDGER_ACTION.get(kind)
+    if not action_type:
+        raise HTTPException(status_code=400, detail="지원하지 않는 원장 구분입니다.")
+    if not (data.part_no or "").strip():
+        raise HTTPException(status_code=400, detail="품번(Part#)은 필수 입력 항목입니다.")
+    rec = _build_sub_ledger_record(kind, data)
+    payload = {
+        "item_id": action_type,
+        "part_name": rec["part_no"],
+        "action_type": action_type,
+        "user_email": rec["date"],
+        "details": json.dumps(rec, ensure_ascii=False),
+    }
+    res = requests.post(_sb_url("inventory_audit_logs"), headers=_sb_headers(), json=[payload], timeout=8)
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"원장 등록 실패: {res.text[:200]}")
+    created = res.json()[0] if res.json() else {}
+    rec["id"] = f"CLOUD-{created.get('id', '')}"
+    rec["cloud_id"] = created.get("id")
+    rec["source"] = "CLOUD"
+    rec["is_web"] = True
+    return {"status": "success", "item": rec}
+
+
+def update_cloud_sub_ledger(kind: str, record_id: str, data: SubLedgerCrudInput) -> Dict[str, Any]:
+    raw_id = str(record_id).replace("CLOUD-", "").strip()
+    if not raw_id:
+        raise HTTPException(status_code=400, detail="수정할 레코드 ID가 필요합니다.")
+    rec = _build_sub_ledger_record(kind, data)
+    payload = {
+        "part_name": rec["part_no"],
+        "user_email": rec["date"],
+        "details": json.dumps(rec, ensure_ascii=False),
+    }
+    res = requests.patch(f"{_sb_url('inventory_audit_logs')}?id=eq.{raw_id}", headers=_sb_headers(), json=payload, timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"원장 수정 실패: {res.text[:200]}")
+    rec["id"] = f"CLOUD-{raw_id}"
+    rec["cloud_id"] = raw_id
+    rec["source"] = "CLOUD"
+    rec["is_web"] = True
+    return {"status": "success", "item": rec}
+
+
+def delete_cloud_sub_ledger(record_id: str) -> Dict[str, Any]:
+    raw_id = str(record_id).replace("CLOUD-", "").strip()
+    if not raw_id:
+        raise HTTPException(status_code=400, detail="삭제할 레코드 ID가 필요합니다.")
+    res = requests.delete(f"{_sb_url('inventory_audit_logs')}?id=eq.{raw_id}", headers=_sb_headers(), timeout=8)
+    if res.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"원장 삭제 실패: {res.text[:200]}")
+    return {"status": "success", "deleted_id": record_id}
+
+
 def list_cloud_sales_memos(sales_rep: Optional[str] = None, limit: int = 40) -> List[Dict[str, Any]]:
     params = [
         ("select", "id,item_id,part_name,user_email,details,created_at"),
@@ -1240,20 +1409,62 @@ def register_crud_routes(app):
     @app.get("/api/shipped-info/borrows")
     def api_list_borrows(query: Optional[str] = None, limit: int = 300):
         import legacy_mssql
-        items = legacy_mssql.query_borrows(query=query, limit=limit)
+        cloud_items = list_cloud_sub_ledgers("borrow", query=query, limit=limit)
+        legacy_items = legacy_mssql.query_borrows(query=query, limit=limit)
+        items = cloud_items + legacy_items
         return {"status": "success", "total": len(items), "items": items}
+
+    @app.post("/api/shipped-info/borrows")
+    def api_create_borrow(payload: SubLedgerCrudInput):
+        return create_cloud_sub_ledger("borrow", payload)
+
+    @app.put("/api/shipped-info/borrows/{record_id}")
+    def api_update_borrow(record_id: str, payload: SubLedgerCrudInput):
+        return update_cloud_sub_ledger("borrow", record_id, payload)
+
+    @app.delete("/api/shipped-info/borrows/{record_id}")
+    def api_delete_borrow(record_id: str):
+        return delete_cloud_sub_ledger(record_id)
 
     @app.get("/api/shipped-info/rmas")
     def api_list_rmas(query: Optional[str] = None, limit: int = 300):
         import legacy_mssql
-        items = legacy_mssql.query_rmas(query=query, limit=limit)
+        cloud_items = list_cloud_sub_ledgers("rma", query=query, limit=limit)
+        legacy_items = legacy_mssql.query_rmas(query=query, limit=limit)
+        items = cloud_items + legacy_items
         return {"status": "success", "total": len(items), "items": items}
+
+    @app.post("/api/shipped-info/rmas")
+    def api_create_rma(payload: SubLedgerCrudInput):
+        return create_cloud_sub_ledger("rma", payload)
+
+    @app.put("/api/shipped-info/rmas/{record_id}")
+    def api_update_rma(record_id: str, payload: SubLedgerCrudInput):
+        return update_cloud_sub_ledger("rma", record_id, payload)
+
+    @app.delete("/api/shipped-info/rmas/{record_id}")
+    def api_delete_rma(record_id: str):
+        return delete_cloud_sub_ledger(record_id)
 
     @app.get("/api/shipped-info/losses")
     def api_list_losses(query: Optional[str] = None, limit: int = 300):
         import legacy_mssql
-        items = legacy_mssql.query_losses(query=query, limit=limit)
+        cloud_items = list_cloud_sub_ledgers("loss", query=query, limit=limit)
+        legacy_items = legacy_mssql.query_losses(query=query, limit=limit)
+        items = cloud_items + legacy_items
         return {"status": "success", "total": len(items), "items": items}
+
+    @app.post("/api/shipped-info/losses")
+    def api_create_loss(payload: SubLedgerCrudInput):
+        return create_cloud_sub_ledger("loss", payload)
+
+    @app.put("/api/shipped-info/losses/{record_id}")
+    def api_update_loss(record_id: str, payload: SubLedgerCrudInput):
+        return update_cloud_sub_ledger("loss", record_id, payload)
+
+    @app.delete("/api/shipped-info/losses/{record_id}")
+    def api_delete_loss(record_id: str):
+        return delete_cloud_sub_ledger(record_id)
 
     # 8. Phase 2 확장 조회 API (수입 통관·B/L·부대비용 DchargeFile & 해외 송금 FinanceFile)
     @app.get("/api/import-charges")

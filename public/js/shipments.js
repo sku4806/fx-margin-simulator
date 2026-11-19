@@ -299,13 +299,25 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
           <p class="text-[11px] text-slate-400 mt-1">세일즈 마스터 FrmShippedInfo 규격과 100% 동일한 출하 원장, 실수요처, 외화단가 및 용도(APP) 통합 장부입니다.</p>
         </div>
 
-        <!-- 모드 전환 탭 (출하 원장 / 웹 출하 / 대여·반납 / 반품 RMA / 손실·폐기) + 신규 등록 -->
+        <!-- 모드 전환 탭 (출하 원장 / 웹 출하 / 대여·반납 / 반품 RMA / 손실·폐기) + 상황별 신규 등록 -->
         <div class="flex items-center gap-2 flex-wrap shrink-0 self-start lg:self-center max-w-full">
-          ${(typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
+          ${activeShipmentMode === 'borrow' ? `
+            <button type="button" onclick="window.openSubLedgerCrudModal && window.openSubLedgerCrudModal('borrow', null)" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white font-black text-xs rounded-lg shadow-xs cursor-pointer transition-colors whitespace-nowrap">
+              + 대여/반납 등록
+            </button>
+          ` : activeShipmentMode === 'rma' ? `
+            <button type="button" onclick="window.openSubLedgerCrudModal && window.openSubLedgerCrudModal('rma', null)" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-lg shadow-xs cursor-pointer transition-colors whitespace-nowrap">
+              + 반품(RMA) 등록
+            </button>
+          ` : activeShipmentMode === 'loss' ? `
+            <button type="button" onclick="window.openSubLedgerCrudModal && window.openSubLedgerCrudModal('loss', null)" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-lg shadow-xs cursor-pointer transition-colors whitespace-nowrap">
+              + 손실/폐기 등록
+            </button>
+          ` : ((typeof window.isCsOrAdminUser === 'function' && window.isCsOrAdminUser()) ? `
             <button type="button" onclick="window.openShipmentCrudModal && window.openShipmentCrudModal(null)" class="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-lg shadow-xs cursor-pointer transition-colors whitespace-nowrap">
               + 신규 출하 등록
             </button>
-          ` : ''}
+          ` : '')}
           <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto scrollbar-none max-w-full">
             <button type="button" id="btnModeLedger" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${activeShipmentMode === 'ledger' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
               🚚 출하 원장
@@ -558,8 +570,8 @@ function renderSubLedgerSection() {
           </thead>
           <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
             ${items.map((b, i) => `
-              <tr class="hover:bg-teal-50/40">
-                <td class="py-1.5 px-2.5 text-center font-mono text-slate-400">${i + 1}</td>
+              <tr class="hover:bg-teal-50/40 ${b.is_web ? 'bg-emerald-50/25' : ''}">
+                <td class="py-1.5 px-2.5 text-center font-mono text-slate-400">${b.is_web ? `<span class="px-1 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-700">WEB</span>` : (i + 1)}</td>
                 <td class="py-1.5 px-2.5 text-center font-mono text-slate-700 whitespace-nowrap">${escSub(b.date || '-')}</td>
                 <td class="py-1.5 px-2.5 font-bold text-slate-900 truncate max-w-[180px]" title="${escSub(b.customer_name)}">${escSub(b.customer_name)}</td>
                 <td class="py-1.5 px-2.5 font-mono font-black text-indigo-950">${escSub(b.part_no || '-')}</td>
@@ -568,13 +580,16 @@ function renderSubLedgerSection() {
                 <td class="py-1.5 px-2 text-center whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">${escSub([b.gubun, b.result].filter(Boolean).join('/')) || '-'}</span></td>
                 <td class="py-1.5 px-2.5 text-center font-mono text-teal-700 whitespace-nowrap">${escSub(b.rtn_date || b.rdt || '-')}</td>
                 <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escSub(b.sales || '-')}</td>
-                <td class="py-1.5 px-2.5 text-slate-500 max-w-[200px]" title="${escSub(b.remark)}">
-                  ${(() => {
-                    const trk = (typeof window.extractTrackingNumber === 'function') ? window.extractTrackingNumber(b.remark) : '';
-                    return trk
-                      ? `<div class="flex items-center gap-1.5"><span class="truncate">${escSub(b.remark)}</span><button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escSub(trk)}', '${escSub(b.remark || '')}')" class="shrink-0 px-1.5 py-0.5 rounded bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-[10px] cursor-pointer" title="실시간 배송 추적">🚚 추적</button></div>`
-                      : `<span class="truncate block">${escSub(b.remark || '-')}</span>`;
-                  })()}
+                <td class="py-1.5 px-2.5 text-slate-500 max-w-[220px]" title="${escSub(b.remark)}">
+                  <div class="flex items-center justify-between gap-1.5">
+                    ${(() => {
+                      const trk = (typeof window.extractTrackingNumber === 'function') ? window.extractTrackingNumber(b.remark) : '';
+                      return trk
+                        ? `<div class="flex items-center gap-1 min-w-0"><span class="truncate">${escSub(b.remark)}</span><button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escSub(trk)}', '${escSub(b.remark || '')}')" class="shrink-0 px-1.5 py-0.5 rounded bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-[10px] cursor-pointer" title="실시간 배송 추적">🚚</button></div>`
+                        : `<span class="truncate block">${escSub(b.remark || '-')}</span>`;
+                    })()}
+                    ${b.is_web ? `<div class="flex items-center gap-1 shrink-0"><button type="button" onclick="window.openSubLedgerCrudModalByIdx('borrow', ${i})" class="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold cursor-pointer" title="수정">✏️</button><button type="button" onclick="window.deleteSubLedgerRecord('borrow', '${escSub(b.id)}')" class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded text-[10px] font-bold cursor-pointer" title="삭제">🗑️</button></div>` : ''}
+                  </div>
                 </td>
               </tr>
             `).join('')}
@@ -621,8 +636,8 @@ function renderSubLedgerSection() {
           </thead>
           <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
             ${items.map((r, i) => `
-              <tr class="hover:bg-amber-50/40">
-                <td class="py-1.5 px-2.5 text-center font-mono text-slate-400">${i + 1}</td>
+              <tr class="hover:bg-amber-50/40 ${r.is_web ? 'bg-emerald-50/25' : ''}">
+                <td class="py-1.5 px-2.5 text-center font-mono text-slate-400">${r.is_web ? `<span class="px-1 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-700">WEB</span>` : (i + 1)}</td>
                 <td class="py-1.5 px-2.5 text-center font-mono text-slate-700 whitespace-nowrap">${escSub(r.date || '-')}</td>
                 <td class="py-1.5 px-2.5 font-bold text-slate-900 truncate max-w-[180px]">${escSub(r.customer_name)}</td>
                 <td class="py-1.5 px-2.5 font-mono font-black text-indigo-950">${escSub(r.part_no || '-')}</td>
@@ -631,7 +646,12 @@ function renderSubLedgerSection() {
                 <td class="py-1.5 px-2.5 text-right font-mono font-black text-amber-800 whitespace-nowrap">${(r.qty || 0).toLocaleString()}</td>
                 <td class="py-1.5 px-2.5 text-right font-mono text-slate-700 whitespace-nowrap">₩${Math.round(r.out_up || 0).toLocaleString()}</td>
                 <td class="py-1.5 px-2.5 text-right font-mono font-black text-slate-900 whitespace-nowrap">₩${Math.round(r.out_amt || 0).toLocaleString()}</td>
-                <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escSub(r.sales || '-')}</td>
+                <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">
+                  <div class="inline-flex items-center gap-1">
+                    <span>${escSub(r.sales || '-')}</span>
+                    ${r.is_web ? `<button type="button" onclick="window.openSubLedgerCrudModalByIdx('rma', ${i})" class="px-1 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9px] cursor-pointer" title="수정">✏️</button><button type="button" onclick="window.deleteSubLedgerRecord('rma', '${escSub(r.id)}')" class="px-1 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded text-[9px] cursor-pointer" title="삭제">🗑️</button>` : ''}
+                  </div>
+                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -678,8 +698,8 @@ function renderSubLedgerSection() {
           </thead>
           <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
             ${items.map((l, i) => `
-              <tr class="hover:bg-rose-50/40">
-                <td class="py-1.5 px-2.5 text-center font-mono text-slate-400">${i + 1}</td>
+              <tr class="hover:bg-rose-50/40 ${l.is_web ? 'bg-emerald-50/25' : ''}">
+                <td class="py-1.5 px-2.5 text-center font-mono text-slate-400">${l.is_web ? `<span class="px-1 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-700">WEB</span>` : (i + 1)}</td>
                 <td class="py-1.5 px-2.5 text-center font-mono text-slate-700 whitespace-nowrap">${escSub(l.date || '-')}</td>
                 <td class="py-1.5 px-2.5 font-mono font-bold text-slate-700 whitespace-nowrap">${escSub(l.loss_no || '-')}</td>
                 <td class="py-1.5 px-2.5 font-mono font-black text-indigo-950">${escSub(l.part_no || '-')}</td>
@@ -688,7 +708,12 @@ function renderSubLedgerSection() {
                 <td class="py-1.5 px-2.5 text-right font-mono text-slate-600 whitespace-nowrap">₩${Math.round(l.np || 0).toLocaleString()}</td>
                 <td class="py-1.5 px-2.5 text-right font-mono font-black text-rose-700 whitespace-nowrap">₩${Math.round(l.np_amt || 0).toLocaleString()}</td>
                 <td class="py-1.5 px-2 text-center whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">${escSub(l.result)}</span></td>
-                <td class="py-1.5 px-2.5 text-slate-500 truncate max-w-[200px]" title="${escSub(l.remark)}">${escSub(l.remark || '-')}</td>
+                <td class="py-1.5 px-2.5 text-slate-500 max-w-[220px]" title="${escSub(l.remark)}">
+                  <div class="flex items-center justify-between gap-1.5">
+                    <span class="truncate">${escSub(l.remark || '-')}</span>
+                    ${l.is_web ? `<div class="flex items-center gap-1 shrink-0"><button type="button" onclick="window.openSubLedgerCrudModalByIdx('loss', ${i})" class="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold cursor-pointer" title="수정">✏️</button><button type="button" onclick="window.deleteSubLedgerRecord('loss', '${escSub(l.id)}')" class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded text-[10px] font-bold cursor-pointer" title="삭제">🗑️</button></div>` : ''}
+                  </div>
+                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -1594,3 +1619,285 @@ export async function deleteWebShipmentByIndex(idx) {
 
 window.openShipmentCrudModal = openShipmentCrudModal;
 window.deleteWebShipmentByIndex = deleteWebShipmentByIndex;
+
+// ========================================================
+// 🔄 대여/반납 · ↩️ 반품 RMA · ⚠️ 손실/폐기 Cloud CRUD 모달
+// ========================================================
+const SUB_LEDGER_META = {
+  borrow: {
+    label: '대여 / 반납',
+    icon: '🔄',
+    endpoint: '/api/shipped-info/borrows',
+    headerCls: 'from-teal-900 via-teal-800 to-slate-900',
+    btnCls: 'bg-teal-600 hover:bg-teal-500 text-white'
+  },
+  rma: {
+    label: '반품 (RMA)',
+    icon: '↩️',
+    endpoint: '/api/shipped-info/rmas',
+    headerCls: 'from-amber-900 via-amber-800 to-slate-900',
+    btnCls: 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+  },
+  loss: {
+    label: '손실 / 폐기',
+    icon: '⚠️',
+    endpoint: '/api/shipped-info/losses',
+    headerCls: 'from-rose-900 via-rose-800 to-slate-900',
+    btnCls: 'bg-rose-600 hover:bg-rose-500 text-white'
+  }
+};
+
+export function openSubLedgerCrudModal(kind = 'borrow', item = null) {
+  const cfg = SUB_LEDGER_META[kind] || SUB_LEDGER_META.borrow;
+  const isEdit = Boolean(item && item.id);
+  const today = new Date().toISOString().slice(0, 10);
+
+  let modal = document.getElementById('subLedgerCrudModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'subLedgerCrudModal';
+    modal.className = 'fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[99996] flex items-center justify-center p-3 overflow-y-auto';
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+    document.body.appendChild(modal);
+  }
+
+  const fieldsHtml = kind === 'borrow' ? `
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">출고 / 대여일 *</label>
+        <input type="date" id="slDate" value="${escSub(item?.date || today)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">구분 / 상태</label>
+        <div class="grid grid-cols-2 gap-1.5">
+          <select id="slGubun" class="px-2.5 py-2 border border-slate-300 rounded-lg font-bold bg-white">
+            <option value="대여" ${(item?.gubun || '대여') === '대여' ? 'selected' : ''}>대여</option>
+            <option value="반납" ${item?.gubun === '반납' ? 'selected' : ''}>반납</option>
+            <option value="샘플대여" ${item?.gubun === '샘플대여' ? 'selected' : ''}>샘플대여</option>
+          </select>
+          <select id="slResult" class="px-2.5 py-2 border border-slate-300 rounded-lg font-bold bg-white">
+            <option value="대여중" ${(item?.result || '대여중') === '대여중' ? 'selected' : ''}>대여중</option>
+            <option value="반납완료" ${item?.result === '반납완료' ? 'selected' : ''}>반납완료</option>
+            <option value="판매전환" ${item?.result === '판매전환' ? 'selected' : ''}>판매전환</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">고객사명 *</label>
+        <input type="text" id="slCustomer" value="${escSub(item?.customer_name || '')}" placeholder="예: LG Display, 현대모비스" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">품번 (Part#) *</label>
+        <input type="text" id="slPartNo" value="${escSub(item?.part_no || '')}" placeholder="예: IS25LP064A-JBLE" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">제조사 (Maker)</label>
+        <input type="text" id="slMaker" value="${escSub(item?.maker || '')}" placeholder="예: ISSI, ESMT, Giantec" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">수량 (EA) *</label>
+        <input type="number" id="slQty" value="${Number(item?.qty) || 0}" min="0" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">반납 예정/완료일</label>
+        <input type="date" id="slRtnDate" value="${escSub(item?.rtn_date || '')}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">영업 담당자 (영문)</label>
+        <input type="text" id="slSales" value="${escSub(toEnglishSalesName(item?.sales || ''))}" placeholder="예: STEVE, KELLY, DUSTIN" class="w-full px-3 py-2 border border-slate-300 rounded-lg uppercase font-bold">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block font-bold text-slate-600 mb-1">비고 / 운송장 번호</label>
+        <input type="text" id="slRemark" value="${escSub(item?.remark || '')}" placeholder="예: 로젠 45370526250 / 테스트 샘플 대여" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      </div>
+    </div>
+  ` : kind === 'rma' ? `
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">반품 일자 *</label>
+        <input type="date" id="slDate" value="${escSub(item?.date || today)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">고객사명 *</label>
+        <input type="text" id="slCustomer" value="${escSub(item?.customer_name || '')}" placeholder="고객사명 입력" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">품번 (Part#) *</label>
+        <input type="text" id="slPartNo" value="${escSub(item?.part_no || '')}" placeholder="품번 입력" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">제조사 (Maker)</label>
+        <input type="text" id="slMaker" value="${escSub(item?.maker || '')}" placeholder="예: ISSI, ESMT" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">PO 번호</label>
+        <input type="text" id="slPoNo" value="${escSub(item?.po_no || '')}" placeholder="원 발주번호 (선택)" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">반품 수량 (EA) *</label>
+        <input type="number" id="slQty" value="${Number(item?.qty) || 0}" min="0" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">판매 단가 (₩)</label>
+        <input type="number" id="slUnitPrice" value="${Number(item?.out_up) || 0}" step="any" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">반품 금액 (₩ · 자동계산)</label>
+        <input type="number" id="slTotalAmt" value="${Number(item?.out_amt) || 0}" step="any" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold bg-amber-50/40">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">영업 담당자 (영문)</label>
+        <input type="text" id="slSales" value="${escSub(toEnglishSalesName(item?.sales || ''))}" placeholder="예: STEVE, ALLEN" class="w-full px-3 py-2 border border-slate-300 rounded-lg uppercase font-bold">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">반품 사유 / 비고</label>
+        <input type="text" id="slRemark" value="${escSub(item?.remark || '')}" placeholder="예: 불량 반품, 오발주 교환" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      </div>
+    </div>
+  ` : `
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">처리 일자 *</label>
+        <input type="date" id="slDate" value="${escSub(item?.date || today)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">손실 번호</label>
+        <input type="text" id="slLossNo" value="${escSub(item?.loss_no || '')}" placeholder="미입력 시 자동 생성" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">품번 (Part#) *</label>
+        <input type="text" id="slPartNo" value="${escSub(item?.part_no || '')}" placeholder="품번 입력" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">제조사 (Maker)</label>
+        <input type="text" id="slMaker" value="${escSub(item?.maker || '')}" placeholder="예: ISSI, ESMT" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">손실 수량 (EA) *</label>
+        <input type="number" id="slQty" value="${Number(item?.qty) || 0}" min="0" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">구분</label>
+        <select id="slResult" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold bg-white">
+          <option value="폐기" ${(item?.result || '폐기') === '폐기' ? 'selected' : ''}>폐기</option>
+          <option value="불량" ${item?.result === '불량' ? 'selected' : ''}>불량</option>
+          <option value="분실" ${item?.result === '분실' ? 'selected' : ''}>분실</option>
+          <option value="재고조정" ${item?.result === '재고조정' ? 'selected' : ''}>재고조정</option>
+        </select>
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">단가 (₩)</label>
+        <input type="number" id="slUnitPrice" value="${Number(item?.np) || 0}" step="any" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono">
+      </div>
+      <div>
+        <label class="block font-bold text-slate-600 mb-1">손실 금액 (₩ · 자동계산)</label>
+        <input type="number" id="slTotalAmt" value="${Number(item?.np_amt) || 0}" step="any" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold bg-rose-50/40">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block font-bold text-slate-600 mb-1">손실 / 폐기 사유</label>
+        <input type="text" id="slRemark" value="${escSub(item?.remark || '')}" placeholder="예: 장기체화 폐기, 습기 손상, 실사 차이 조정" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      </div>
+    </div>
+  `;
+
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden" onclick="event.stopPropagation()">
+      <div class="bg-gradient-to-r ${cfg.headerCls} text-white px-5 py-3.5 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">${cfg.icon}</span>
+          <h3 class="font-black text-sm sm:text-base">${isEdit ? `${cfg.label} 내역 수정` : `신규 ${cfg.label} 등록`}</h3>
+        </div>
+        <button type="button" onclick="document.getElementById('subLedgerCrudModal').classList.add('hidden')" class="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold cursor-pointer">✕</button>
+      </div>
+      <form id="subLedgerCrudForm" class="p-5 space-y-4">
+        ${fieldsHtml}
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+          <button type="button" onclick="document.getElementById('subLedgerCrudModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg cursor-pointer">취소</button>
+          <button type="submit" id="btnSubLedgerSubmit" class="px-4 py-2 ${cfg.btnCls} font-black text-xs rounded-lg shadow-xs cursor-pointer">${isEdit ? '💾 수정 저장' : `➕ ${cfg.label} 등록`}</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+
+  // 수량 × 단가 자동 합계 계산 (RMA / Loss)
+  const qtyEl = document.getElementById('slQty');
+  const upEl = document.getElementById('slUnitPrice');
+  const totEl = document.getElementById('slTotalAmt');
+  if (qtyEl && upEl && totEl) {
+    const recalc = () => {
+      const q = Number(qtyEl.value) || 0;
+      const u = Number(upEl.value) || 0;
+      if (q > 0 && u > 0) totEl.value = Math.round(q * u);
+    };
+    qtyEl.addEventListener('input', recalc);
+    upEl.addEventListener('input', recalc);
+  }
+
+  document.getElementById('subLedgerCrudForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const partNo = document.getElementById('slPartNo')?.value.trim() || '';
+    if (!partNo) {
+      alert('품번(Part#)을 입력해 주세요.');
+      return;
+    }
+    const payload = {
+      date: document.getElementById('slDate')?.value || today,
+      customer_name: document.getElementById('slCustomer')?.value.trim() || '',
+      part_no: partNo,
+      maker: document.getElementById('slMaker')?.value.trim() || '',
+      qty: parseInt(document.getElementById('slQty')?.value || '0', 10) || 0,
+      gubun: document.getElementById('slGubun')?.value || '',
+      result: document.getElementById('slResult')?.value || '',
+      rtn_date: document.getElementById('slRtnDate')?.value || '',
+      po_no: document.getElementById('slPoNo')?.value.trim() || '',
+      out_up: kind === 'rma' ? (parseFloat(document.getElementById('slUnitPrice')?.value || '0') || 0) : 0,
+      out_amt: kind === 'rma' ? (parseFloat(document.getElementById('slTotalAmt')?.value || '0') || 0) : 0,
+      loss_no: document.getElementById('slLossNo')?.value.trim() || '',
+      np: kind === 'loss' ? (parseFloat(document.getElementById('slUnitPrice')?.value || '0') || 0) : 0,
+      np_amt: kind === 'loss' ? (parseFloat(document.getElementById('slTotalAmt')?.value || '0') || 0) : 0,
+      sales: toEnglishSalesName(document.getElementById('slSales')?.value.trim() || ''),
+      remark: document.getElementById('slRemark')?.value.trim() || ''
+    };
+
+    const btn = document.getElementById('btnSubLedgerSubmit');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 저장 중...'; }
+    try {
+      const url = isEdit ? `${cfg.endpoint}/${encodeURIComponent(item.id)}` : cfg.endpoint;
+      const res = await fetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || data.status !== 'success') throw new Error(data.detail || '저장 실패');
+      modal.classList.add('hidden');
+      await fetchSubLedgerData(kind, subLedgerQuery);
+      renderShipmentsView('shipmentsSection');
+    } catch (err) {
+      alert(`${cfg.label} 저장 오류: ` + err.message);
+      if (btn) { btn.disabled = false; btn.textContent = isEdit ? '💾 수정 저장' : `➕ ${cfg.label} 등록`; }
+    }
+  });
+}
+
+window.openSubLedgerCrudModal = openSubLedgerCrudModal;
+window.openSubLedgerCrudModalByIdx = function (kind, idx) {
+  const arr = kind === 'borrow' ? cachedBorrows : (kind === 'rma' ? cachedRmas : cachedLosses);
+  if (arr && arr[idx]) openSubLedgerCrudModal(kind, arr[idx]);
+};
+window.deleteSubLedgerRecord = async function (kind, recordId) {
+  const cfg = SUB_LEDGER_META[kind];
+  if (!cfg || !recordId) return;
+  if (!confirm(`이 ${cfg.label} 웹 등록 내역을 삭제하시겠습니까?`)) return;
+  try {
+    const res = await fetch(`${cfg.endpoint}/${encodeURIComponent(recordId)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.detail || '삭제 실패');
+    await fetchSubLedgerData(kind, subLedgerQuery);
+    renderShipmentsView('shipmentsSection');
+  } catch (err) {
+    alert(`${cfg.label} 삭제 오류: ` + err.message);
+  }
+};
