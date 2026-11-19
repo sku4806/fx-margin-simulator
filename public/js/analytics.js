@@ -287,19 +287,16 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
       const leftCenter = leftBarX + subBarW / 2;
       const rightCenter = rightBarX + subBarW / 2;
 
+      const fmtShortBar = (v) => {
+        if (v >= 100000000) return `${(v / 100000000).toFixed(1)}억`;
+        if (v >= 10000000) return `${(v / 10000000).toFixed(1)}천`;
+        if (v > 0) return `${Math.round(v / 10000)}만`;
+        return '';
+      };
+
       return `
         <g class="chart-group cursor-pointer group" data-idx="${idx}" onclick="window.switchAnalyticsMonth('${mNum}')">
           <rect x="${Math.round(slotCenter - slotWidth / 2 + 2)}" y="${plotTop - 15}" width="${Math.round(slotWidth - 4)}" height="${plotHeight + 25}" fill="${isSelected ? '#f5f3ff' : '#f8fafc'}" rx="8" stroke="${isSelected ? '#c4b5fd' : 'none'}" stroke-width="${isSelected ? '1.5' : '0'}" class="${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity" pointer-events="none"></rect>
-
-          <!-- 왼쪽 막대 상단: 국내마진 금액 -->
-          <text x="${leftCenter}" y="${mgnY - 5}" text-anchor="middle" font-size="9" font-weight="900" fill="#047857" class="font-mono tracking-tighter select-none">
-            ${mgn > 0 ? fmtCompactKrw(mgn) : ''}
-          </text>
-
-          <!-- 오른쪽 막대 상단: 💎 커미션 원화환산 금액 -->
-          <text x="${rightCenter}" y="${commY - 5}" text-anchor="middle" font-size="9" font-weight="900" fill="#6d28d9" class="font-mono tracking-tighter select-none">
-            ${cKrw > 0 ? fmtCompactKrw(cKrw) : ''}
-          </text>
 
           <!-- 막대 1 (왼쪽): Domestic 마진 (에메랄드) -->
           <rect x="${leftBarX}" y="${mgnY}" width="${subBarW}" height="${mgnH}" rx="3"
@@ -324,6 +321,14 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
 • 💎 커미션: $${cUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (≈₩${cKrw.toLocaleString()})
 • 국내 매출: ₩${Math.round(bill).toLocaleString()} (${billCount}건)</title>
           </rect>
+
+          <!-- 막대 위에 수치 라벨 렌더링 (흰색 외곽선으로 겹침 방지 & 천만원 단위 'X.X천' 축약) -->
+          <text x="${leftCenter - (cKrw > mgn ? 2 : 0)}" y="${mgnY - 5}" text-anchor="middle" font-size="9" font-weight="900" fill="#047857" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" class="font-mono tracking-tighter select-none pointer-events-none">
+            ${fmtShortBar(mgn)}
+          </text>
+          <text x="${rightCenter + (mgn > cKrw ? 3 : 0)}" y="${commY - 5}" text-anchor="middle" font-size="9" font-weight="900" fill="#6d28d9" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" class="font-mono tracking-tighter select-none pointer-events-none">
+            ${fmtShortBar(cKrw)}
+          </text>
 
           <text x="${slotCenter}" y="${plotBottom + 18}" text-anchor="middle" font-size="${isSelected ? '12' : '11'}" 
                 font-weight="${isSelected ? '900' : (idx >= slotCount - 2 ? '800' : 'bold')}" 

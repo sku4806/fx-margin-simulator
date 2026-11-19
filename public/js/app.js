@@ -1,7 +1,7 @@
 import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261119_webclean';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
 import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261119_comm';
-import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261119_grouped';
+import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261119_grouped2';
 import { initSamplesTab } from './samples.js';
 import { toEnglishSalesName } from './modules/utils.js';
 window.toEnglishSalesName = toEnglishSalesName;
