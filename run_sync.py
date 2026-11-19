@@ -6,6 +6,7 @@ import sys
 import datetime
 import argparse
 import pymssql
+import legacy_mssql
 try:
     from supabase import create_client
 except ImportError:
@@ -102,7 +103,8 @@ def sync_inventory(conn, sb):
         
         remain_qty = int(r['NOTOUTQTY']) if r['NOTOUTQTY'] else 0
         indt_str = r['INDT'].strftime('%Y-%m-%d') if r['INDT'] else '2026-01-01'
-        owner_val = clean_val(r['RealSales']) or 'BSK'
+        import legacy_mssql as _lm
+        owner_val = _lm.normalize_sales_rep(r['RealSales']) or 'BSK'
         
         # 사내 ERP 원장의 실제 입고/선적 환율(InRate) 및 원화/외화 단가 반영
         raw_in_rate = float(r['InRate']) if r.get('InRate') and float(r['InRate']) > 500 else 1350.0
@@ -220,7 +222,7 @@ def sync_quotations(conn, sb, min_date='2020-01-01'):
             "quote_price": float(r['quote_price']) if r['quote_price'] is not None else 0.0,
             "amount": float(r['amount']) if r['amount'] is not None else 0.0,
             "payment_terms": clean_val(r['payment_terms']),
-            "sales_rep": clean_val(r['sales_rep']),
+            "sales_rep": legacy_mssql.normalize_sales_rep(r['sales_rep']),
             "delivery": clean_val(r['delivery']),
             "application": clean_val(r['application']),
             "remark": clean_val(r['remark']),
@@ -309,7 +311,7 @@ def sync_unpaid(conn, sb, min_date='2010-01-01'):
             "amount_vat": float(r['amount_vat']) if r['amount_vat'] else 0.0,
             "due_date": due_dt_str,
             "contact": clean_val(r['contact']),
-            "sales_rep": clean_val(r['sales_rep']),
+            "sales_rep": legacy_mssql.normalize_sales_rep(r['sales_rep']),
             "pay_status": clean_val(r['pay_status']) or "미결제",
             "overdue_days": int(r['overdue_days']) if r['overdue_days'] is not None else 0,
             "color_code": int(r['gubun_color']),
@@ -386,7 +388,7 @@ def sync_customers(conn, sb):
             "fax": clean_val(r['fax']),
             "address": clean_val(r['address']),
             "email": clean_val(r['email']) or clean_val(r['contact_email']),
-            "sales_rep": clean_val(r['sales_rep']),
+            "sales_rep": legacy_mssql.normalize_sales_rep(r['sales_rep']),
             "contact_name": clean_val(r['contact_name']),
             "contact_title": clean_val(r['contact_title']),
             "contact_tel": clean_val(r['contact_tel']),
@@ -482,7 +484,7 @@ def sync_bundled_files(conn):
             "out_up": float(r["out_up"]) if r.get("out_up") is not None else 0.0,
             "out_amt": out_amt,
             "mgn": mgn,
-            "sales_rep": clean_val(r["sales_rep"]),
+            "sales_rep": legacy_mssql.normalize_sales_rep(r["sales_rep"]),
             "customer_name": clean_val(r["customer_name"]),
             "remark": clean_val(r["remark"]),
             "mgn_rate": round(mgn / out_amt * 100, 2) if out_amt > 0 else 0.0
@@ -580,7 +582,7 @@ def sync_bundled_files(conn):
             inv = clean_val(r["invoice_no"])
             sch_obj = {
                 "idx": r["idx"], "qty": int(r["qty"] or 0),
-                "sales": clean_val(r["sales"]), "actual_customer": clean_val(r["actual_customer"]),
+                "sales": legacy_mssql.normalize_sales_rep(r["sales"]), "actual_customer": clean_val(r["actual_customer"]),
                 "schedule_dt": clean_val(r["schedule_dt"]), "invoice_no": inv,
             }
             for k in (p, f"{p}||{inv}"):

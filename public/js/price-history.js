@@ -3,6 +3,8 @@
  * 품목별 과거 매입·판매·견적·발주 단가 이력 및 마진 추적 모듈
  */
 
+import { toEnglishSalesName } from './modules/utils.js';
+
 export async function openPriceHistoryModal(partNo) {
   if (!partNo || typeof partNo !== 'string') return;
   const cleanPartNo = partNo.trim();
@@ -90,6 +92,9 @@ function renderPriceHistoryContent(payload) {
   if (!container) return;
 
   const { summary = {}, purchases = [], sales = [], quotations = [], purchase_orders = [] } = payload;
+  sales.forEach(s => { s.sales_rep = toEnglishSalesName(s.sales_rep); });
+  quotations.forEach(q => { q.sales_rep = toEnglishSalesName(q.sales_rep); });
+  purchase_orders.forEach(p => { p.sales_rep = toEnglishSalesName(p.sales_rep); });
 
   const avgMargin = summary.avg_margin_rate || 0;
   let marginColor = 'text-emerald-700 bg-emerald-50 border-emerald-300';

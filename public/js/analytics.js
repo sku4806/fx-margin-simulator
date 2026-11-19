@@ -6,6 +6,8 @@
  * 특정 월 필터 (당월 보기 / 연간 누적 YTD 보기) 완벽 지원
  */
 
+import { toEnglishSalesName } from './modules/utils.js';
+
 let cachedAnalytics = null;
 let currentYear = "2026";
 let currentMonth = "all"; // "all" (연간 누적) 또는 "1".."12"

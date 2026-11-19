@@ -3,6 +3,8 @@ import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quo
 import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261111_1020';
 import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js';
 import { initSamplesTab } from './samples.js';
+import { toEnglishSalesName } from './modules/utils.js';
+window.toEnglishSalesName = toEnglishSalesName;
 import { supabase, sbClient } from './supabase.js';
 import * as InventoryModule from './inventory.js';
 import { initAuth, isCsOrAdminUser, isPaymentApprovalAdmin, getCurrentUserEmail, APPROVAL_ADMIN_EMAILS } from './modules/auth.js';
@@ -1042,23 +1044,23 @@ function updateLineFilterCounts(items) {
 }
 
 export const SALES_MASTER = [
-  { key: 'BSK', match: ['bsk', '본사', '본사 일반재고', '일반재고'], label: '본사 일반재고' },
-  { key: 'KELLY', match: ['kelly', '김경래', '김경래 차장'], label: 'Kelly (김경래 차장)' },
-  { key: 'WILLIAM', match: ['william', 'wiliam', '고기봉', '고기봉 부장'], label: 'William (고기봉 부장)' },
-  { key: 'ALLEN', match: ['allen', '박재범', '박재범 부장'], label: 'Allen (박재범 부장)' },
-  { key: 'STEVE', match: ['steve', '황환', '황 환', '황환 이사'], label: 'Steve (황환 이사)' },
-  { key: 'JOEY', match: ['joey', 'joye', '조지윤', '조지윤 과장'], label: 'Joey (조지윤 과장)' },
-  { key: 'DUSTIN', match: ['dustin', '김명호', '김명호 이사'], label: 'Dustin (김명호 이사)' },
-  { key: 'SCOTT', match: ['scott'], label: 'Scott' },
-  { key: 'WILSON', match: ['wilson'], label: 'Wilson' },
-  { key: 'ERIC', match: ['eric', '이재상', '이재상 부장'], label: 'Eric (이재상 부장)' },
-  { key: 'TIMOTHY', match: ['timothy', '박대원', '박대원 전무'], label: 'Timothy (박대원 전무)' },
-  { key: 'PHILIP', match: ['philip'], label: 'Philip' },
-  { key: 'TONY', match: ['tony', '이동일', '이동일 부사장'], label: 'Tony (이동일 부사장)' },
-  { key: 'KEVIN', match: ['kevin'], label: 'Kevin' },
-  { key: 'JOSEPH', match: ['joseph'], label: 'Joseph' },
-  { key: 'PAUL', match: ['paul', '김현진', '김현진 과장'], label: 'Paul (김현진 과장)' },
-  { key: 'LOGAN', match: ['logan', '이민수', '이민수 대리'], label: 'Logan (이민수 대리)' }
+  { key: 'BSK', match: ['bsk', '본사', '본사 일반재고', '일반재고', '빅샤인'], label: 'BSK' },
+  { key: 'KELLY', match: ['kelly', '김경래', '김경래 차장'], label: 'KELLY' },
+  { key: 'WILLIAM', match: ['william', 'wiliam', 'willam', '고기봉', '고기봉 부장'], label: 'WILLIAM' },
+  { key: 'ALLEN', match: ['allen', '박재범', '박재범 부장'], label: 'ALLEN' },
+  { key: 'STEVE', match: ['steve', '황환', '황 환', '황환 이사'], label: 'STEVE' },
+  { key: 'JOEY', match: ['joey', 'joye', '조지윤', '조지윤 과장'], label: 'JOEY' },
+  { key: 'DUSTIN', match: ['dustin', '김명호', '김명호 이사'], label: 'DUSTIN' },
+  { key: 'SCOTT', match: ['scott', '김경택'], label: 'SCOTT' },
+  { key: 'WILSON', match: ['wilson', '최원석'], label: 'WILSON' },
+  { key: 'ERIC', match: ['eric', '이재상', '이재상 부장'], label: 'ERIC' },
+  { key: 'TIMOTHY', match: ['timothy', '박대원', '박대원 전무'], label: 'TIMOTHY' },
+  { key: 'PHILIP', match: ['philip', '이정문'], label: 'PHILIP' },
+  { key: 'TONY', match: ['tony', '이동일', '이동열', '이동렬', '이동일 부사장'], label: 'TONY' },
+  { key: 'KEVIN', match: ['kevin', '방경현'], label: 'KEVIN' },
+  { key: 'JOSEPH', match: ['joseph', '염재섭'], label: 'JOSEPH' },
+  { key: 'PAUL', match: ['paul', '김현진', '김현진 과장'], label: 'PAUL' },
+  { key: 'LOGAN', match: ['logan', '이민수', '이민수 대리'], label: 'LOGAN' }
 ];
 window.SALES_MASTER = SALES_MASTER;
 

@@ -1,25 +1,25 @@
 import { getCurrentSession, loginWithEmail, logout, updatePassword, subscribeAuthChange } from '../supabase.js';
 
-// 🏢 BigShine 사내 계정별 공식 마스터 프로필 (이메일, 성명, 직급, 직책표기)
+// 🏢 BigShine 사내 계정별 공식 마스터 프로필 (담당자 표기 영문 표준화)
 export const USER_PROFILES = {
-  'nathan@bigshine.co.kr': { name: '김남천', position: '주임', fullTitle: '김남천 주임', isDevAdmin: true },
-  'timothy@bigshine.co.kr': { name: '박대원', position: '전무', fullTitle: '박대원 전무' },
-  'allenpark@bigshine.co.kr': { name: '박재범', position: '부장', fullTitle: '박재범 부장' },
-  'tony@bigshine.co.kr': { name: '이동일', position: '부사장', fullTitle: '이동일 부사장' },
-  'jane@bigshine.co.kr': { name: '문숙정', position: '과장', fullTitle: '문숙정 과장' },
-  'jamie@bigshine.co.kr': { name: '천소훈', position: '차장', fullTitle: '천소훈 차장' },
-  'lily@bigshine.co.kr': { name: '고유진', position: '사원', fullTitle: '고유진 사원' },
-  'raina@bigshine.co.kr': { name: '손유경', position: '과장', fullTitle: '손유경 과장' },
-  'susan@bigshine.co.kr': { name: '최연아', position: '부장', fullTitle: '최연아 부장' },
-  'trisha@bigshine.co.kr': { name: '진혜영', position: '과장', fullTitle: '진혜영 과장' },
-  'william@bigshine.co.kr': { name: '고기봉', position: '부장', fullTitle: '고기봉 부장' },
-  'joey@bigshine.co.kr': { name: '조지윤', position: '과장', fullTitle: '조지윤 과장' },
-  'steve@bigshine.co.kr': { name: '황환', position: '이사', fullTitle: '황환 이사' },
-  'kelly@bigshine.co.kr': { name: '김경래', position: '차장', fullTitle: '김경래 차장' },
-  'eric@bigshine.co.kr': { name: '이재상', position: '부장', fullTitle: '이재상 부장' },
-  'logan@bigshine.co.kr': { name: '이민수', position: '대리', fullTitle: '이민수 대리' },
-  'paul@bigshine.co.kr': { name: '김현진', position: '과장', fullTitle: '김현진 과장' },
-  'dustin@bigshine.co.kr': { name: '김명호', position: '이사', fullTitle: '김명호 이사' }
+  'nathan@bigshine.co.kr': { name: 'NATHAN', korName: '김남천', position: '주임', fullTitle: 'NATHAN', isDevAdmin: true },
+  'timothy@bigshine.co.kr': { name: 'TIMOTHY', korName: '박대원', position: '전무', fullTitle: 'TIMOTHY' },
+  'allenpark@bigshine.co.kr': { name: 'ALLEN', korName: '박재범', position: '부장', fullTitle: 'ALLEN' },
+  'tony@bigshine.co.kr': { name: 'TONY', korName: '이동일', position: '부사장', fullTitle: 'TONY' },
+  'jane@bigshine.co.kr': { name: 'JANE', korName: '문숙정', position: '과장', fullTitle: 'JANE' },
+  'jamie@bigshine.co.kr': { name: 'JAMIE', korName: '천소훈', position: '차장', fullTitle: 'JAMIE' },
+  'lily@bigshine.co.kr': { name: 'LILY', korName: '고유진', position: '사원', fullTitle: 'LILY' },
+  'raina@bigshine.co.kr': { name: 'RAINA', korName: '손유경', position: '과장', fullTitle: 'RAINA' },
+  'susan@bigshine.co.kr': { name: 'SUSAN', korName: '최연아', position: '부장', fullTitle: 'SUSAN' },
+  'trisha@bigshine.co.kr': { name: 'TRISHA', korName: '진혜영', position: '과장', fullTitle: 'TRISHA' },
+  'william@bigshine.co.kr': { name: 'WILLIAM', korName: '고기봉', position: '부장', fullTitle: 'WILLIAM' },
+  'joey@bigshine.co.kr': { name: 'JOEY', korName: '조지윤', position: '과장', fullTitle: 'JOEY' },
+  'steve@bigshine.co.kr': { name: 'STEVE', korName: '황환', position: '이사', fullTitle: 'STEVE' },
+  'kelly@bigshine.co.kr': { name: 'KELLY', korName: '김경래', position: '차장', fullTitle: 'KELLY' },
+  'eric@bigshine.co.kr': { name: 'ERIC', korName: '이재상', position: '부장', fullTitle: 'ERIC' },
+  'logan@bigshine.co.kr': { name: 'LOGAN', korName: '이민수', position: '대리', fullTitle: 'LOGAN' },
+  'paul@bigshine.co.kr': { name: 'PAUL', korName: '김현진', position: '과장', fullTitle: 'PAUL' },
+  'dustin@bigshine.co.kr': { name: 'DUSTIN', korName: '김명호', position: '이사', fullTitle: 'DUSTIN' }
 };
 
 // 사내 계정 이메일 -> 직급 포함 사원명 (하위 호환 매핑 맵)

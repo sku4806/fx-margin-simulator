@@ -4,6 +4,8 @@
  * 통합 조회 및 Design-In 프로젝트 클라우드 CRUD 모듈
  */
 
+import { toEnglishSalesName } from './modules/utils.js';
+
 let activeSampleSubTab = 'tracking'; // 'tracking' | 'stock' | 'req_in' | 'outflows'
 let activeReqInMode = 'requests';    // 'requests' | 'incomes'
 let activeTrackingResult = 'ALL';    // 'ALL' | '1' (Win) | '4' (Working) | '3' (Pending) | '2' (Fail)
@@ -40,7 +42,7 @@ export async function fetchSampleTracking() {
     if (sampleSearchQuery) params.set('query', sampleSearchQuery);
     const res = await fetch(`/api/samples/tracking?${params.toString()}`);
     const data = await res.json();
-    cachedTracking = data.items || [];
+    cachedTracking = (data.items || []).map(it => ({ ...it, sales: toEnglishSalesName(it.sales, '-') }));
   } catch (e) {
     console.warn('[Samples] 트래킹 조회 실패:', e);
   }
@@ -66,7 +68,7 @@ export async function fetchSampleRequests() {
     if (sampleSearchQuery) params.set('query', sampleSearchQuery);
     const res = await fetch(`/api/samples/requests?${params.toString()}`);
     const data = await res.json();
-    cachedRequests = data.items || [];
+    cachedRequests = (data.items || []).map(it => ({ ...it, sales: toEnglishSalesName(it.sales) }));
   } catch (e) {
     console.warn('[Samples] 요청 조회 실패:', e);
   }
@@ -79,7 +81,7 @@ export async function fetchSampleIncomes() {
     if (sampleSearchQuery) params.set('query', sampleSearchQuery);
     const res = await fetch(`/api/samples/incomes?${params.toString()}`);
     const data = await res.json();
-    cachedIncomes = data.items || [];
+    cachedIncomes = (data.items || []).map(it => ({ ...it, sales: toEnglishSalesName(it.sales) }));
   } catch (e) {
     console.warn('[Samples] 입고 조회 실패:', e);
   }
@@ -92,7 +94,7 @@ export async function fetchSampleOutflows() {
     if (sampleSearchQuery) params.set('query', sampleSearchQuery);
     const res = await fetch(`/api/samples/outflows?${params.toString()}`);
     const data = await res.json();
-    cachedOutflows = data.items || [];
+    cachedOutflows = (data.items || []).map(it => ({ ...it, sales: toEnglishSalesName(it.sales) }));
   } catch (e) {
     console.warn('[Samples] 출고 조회 실패:', e);
   }

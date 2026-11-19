@@ -177,7 +177,7 @@ export async function fetchInventoryItems() {
     sold_price_usd: parseFloat(item.sold_price_usd) || 0,
     entryDate: item.entry_date || '-',
     entry_date: item.entry_date || '-',
-    owner: item.owner || '본사 일반재고',
+    owner: (typeof window.toEnglishSalesName === 'function') ? window.toEnglishSalesName(item.owner, 'BSK') : (item.owner || 'BSK'),
     customer: (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-',
     realCustomer: item.real_customer || '-',
     real_customer: item.real_customer || '-',
@@ -428,7 +428,7 @@ function generateLegacyMasterRow(item, canEdit) {
 
   const kind = item.bizType || item.biz_type || 'DOMESTIC';
   const cname = (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-';
-  const sales = item.owner || '본사';
+  const sales = (typeof window.toEnglishSalesName === 'function') ? window.toEnglishSalesName(item.owner, 'BSK') : (item.owner || 'BSK');
   const part = item.partName || item.part_name || '-';
   const rawDate = item.entryDate || item.entry_date || '-';
   const entryDate = rawDate.length >= 10 ? rawDate.slice(2, 10) : rawDate;
@@ -526,7 +526,7 @@ function generateFulfillmentRow(item, canEdit) {
   const kind = item.bizType || item.biz_type || 'DOMESTIC';
   const cname = (item.customer && !/bigshine/i.test(item.customer)) ? item.customer : '-';
   const realCust = item.realCustomer || item.real_customer || '-';
-  const sales = item.owner || '본사';
+  const sales = (typeof window.toEnglishSalesName === 'function') ? window.toEnglishSalesName(item.owner, 'BSK') : (item.owner || 'BSK');
   const part = item.partName || item.part_name || '-';
   const mfg = item.maker || '-';
   const pono = (item.poNo || item.po_no || '').trim();

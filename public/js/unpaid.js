@@ -1,6 +1,7 @@
 // public/js/unpaid.js
 // 레거시 세일즈 마스터 [FrmUnpaidCustList] 미수금 및 결제예정일 관리 대시보드 모듈
 import { sbClient } from './supabase.js';
+import { toEnglishSalesName } from './modules/utils.js';
 
 let cachedUnpaid = [];
 let cachedSummary = null;
@@ -45,7 +46,7 @@ function mapSupabaseToUnpaid(r) {
     pay_status: r.pay_status || "미결제",
     contact: r.contact,
     due_date: r.due_date,
-    sales: r.sales_rep,
+    sales: toEnglishSalesName(r.sales_rep),
     color_code: Number(r.color_code) || 0
   };
 }
@@ -122,7 +123,10 @@ export async function fetchUnpaidList(params = {}) {
     const res = await fetch(`/api/unpaid?${urlParams.toString()}`);
     const data = await res.json();
     if (data.status === 'success') {
-      cachedUnpaid = data.items || [];
+      cachedUnpaid = (data.items || []).map(u => ({
+        ...u,
+        sales: toEnglishSalesName(u.sales)
+      }));
       window.currentUnpaidList = cachedUnpaid;
       return cachedUnpaid;
     }
@@ -178,7 +182,7 @@ export async function fetchUnpaidSalesReps() {
     try {
       const { data, error } = await sbClient.from('legacy_unpaid').select('sales_rep').not('sales_rep', 'is', null);
       if (!error && data && data.length > 0) {
-        cachedSalesReps = Array.from(new Set(data.map(d => d.sales_rep).filter(Boolean))).sort();
+        cachedSalesReps = Array.from(new Set(data.map(d => toEnglishSalesName(d.sales_rep)).filter(Boolean))).sort();
         if (cachedSalesReps.length > 0) return cachedSalesReps;
       }
     } catch(e) {}
@@ -188,7 +192,7 @@ export async function fetchUnpaidSalesReps() {
     const res = await fetch('/api/unpaid/sales-reps');
     const data = await res.json();
     if (data.status === 'success' && data.sales_reps) {
-      cachedSalesReps = data.sales_reps || [];
+      cachedSalesReps = Array.from(new Set((data.sales_reps || []).map(r => toEnglishSalesName(r)).filter(Boolean))).sort();
       return cachedSalesReps;
     }
   } catch (err) {

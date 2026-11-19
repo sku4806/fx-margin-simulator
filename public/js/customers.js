@@ -3,6 +3,8 @@
  * 거래처·담당자(복수)·매입처(CustomerBFile)·지정 포워더(CustForwarder) 통합 마스터 모달
  */
 
+import { toEnglishSalesName } from './modules/utils.js';
+
 let activeMasterTab = 'customers'; // 'customers' | 'suppliers' | 'forwarders'
 let custPage = 1;
 const custLimit = 30;
@@ -377,7 +379,10 @@ async function loadCustomersPage(page = 1) {
     if (data.status !== 'success') throw new Error(data.detail || '조회 실패');
 
     custTotal = data.total || 0;
-    custCache = data.customers || [];
+    custCache = (data.customers || []).map(c => ({
+      ...c,
+      sales_rep: toEnglishSalesName(c.sales_rep)
+    }));
 
     const badge = document.getElementById('custMasterCountBadge');
     if (badge) badge.innerText = `총 ${custTotal.toLocaleString()}개 매출 고객사`;

@@ -1,6 +1,7 @@
 // public/js/quotations.js
 // 레거시 세일즈 마스터 [Sales Daily Report - frmQuotationSQL] 견적 이력 뷰어 & Supabase 연동 모듈
 import { sbClient } from './supabase.js';
+import { toEnglishSalesName } from './modules/utils.js';
 
 let cachedQuotations = [];
 let cachedMfgs = [];
@@ -73,7 +74,7 @@ function mapSupabaseToQuotation(q) {
     qp: q.quote_price,
     amount: q.amount,
     payment: q.payment_terms,
-    sales: q.sales_rep,
+    sales: toEnglishSalesName(q.sales_rep),
     delivery: q.delivery,
     application: q.application,
     remark: q.remark,
@@ -146,7 +147,10 @@ export async function fetchQuotations(params = {}) {
     const res = await fetch(`/api/quotations?${urlParams.toString()}`);
     const data = await res.json();
     if (data.status === 'success') {
-      cachedQuotations = data.quotations || [];
+      cachedQuotations = (data.quotations || []).map(q => ({
+        ...q,
+        sales: toEnglishSalesName(q.sales)
+      }));
       return cachedQuotations;
     } else {
       console.warn("견적 목록 조회 경고:", data.message);
@@ -276,7 +280,7 @@ export async function openLegacyQuotationModal(quoteNo, fallbackItem = null) {
   setEl("qpFax", prime.fax || "");
   setEl("qpDate", prime.quote_dt || new Date().toISOString().slice(0, 10));
   setEl("qpRefNo", prime.quote_no || "QBK-MANUAL");
-  setEl("qpSales", prime.sales || "황 환");
+  setEl("qpSales", toEnglishSalesName(prime.sales, "STEVE"));
 
   // 테이블 행 렌더링 및 합계 계산
   if (typeof window.renderQuotationTableRows === 'function') {

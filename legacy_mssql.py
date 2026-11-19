@@ -31,6 +31,162 @@ def clean_val(v: Any) -> Any:
         return v.strip()
     return v
 
+
+import re as _re
+
+_KOR_TO_ENG_SALES_MAP: Dict[str, str] = {
+    "고기봉": "WILLIAM",
+    "김경래": "KELLY",
+    "김남천": "NATHAN",
+    "김명호": "DUSTIN",
+    "김하진": "HAROLD",
+    "김현진": "PAUL",
+    "박대원": "TIMOTHY",
+    "박재범": "ALLEN",
+    "뱍재범": "ALLEN",
+    "성임선": "GRACE",
+    "윤준영": "ROBIN",
+    "이민수": "LOGAN",
+    "이재상": "ERIC",
+    "조지윤": "JOEY",
+    "최원석": "WILSON",
+    "황환": "STEVE",
+    "염재섭": "JOSEPH",
+    "방경현": "KEVIN",
+    "이정문": "PHILIP",
+    "이동열": "TONY",
+    "이동렬": "TONY",
+    "이동일": "TONY",
+    "안진필": "JASON",
+    "최연유": "DEAN",
+    "이대룡": "ALEX",
+    "이길성": "KS",
+    "서길재": "ADMIN",
+    "이재석": "JAMES",
+    "김경택": "SCOTT",
+    "김상운": "EDGAR",
+    "신석승": "HUBERT",
+    "조웅규": "BRIAN",
+    "한희성": "HANS",
+    "문숙정": "JANE",
+    "천소훈": "JAMIE",
+    "고유진": "LILY",
+    "손유경": "RAINA",
+    "최연아": "SUSAN",
+    "진혜영": "TRISHA",
+    "김현아": "ANNE",
+    "류승윤": "SIMON",
+    "임병세": "SEAN",
+    "조재윤": "DAVID",
+    "이숙희": "CINDY",
+    "유상현": "RYAN",
+    "류상현": "RYAN",
+    "원대연": "ANDY",
+    "신준수": "THOMAS",
+    "강향구": "PETER",
+    "윤현주": "IRIS",
+    "박광민": "KWANGMIN",
+    "박괌민": "KWANGMIN",
+    "박은경": "EUNKYUNG",
+    "강미금": "MIKEUM",
+    "라형준": "HYUNGJUN",
+    "전창주": "CHANGJOO",
+    "전장주": "CHANGJOO",
+    "이혁재": "HYUKJAE",
+    "이혁제": "HYUKJAE",
+    "엄태선": "TAESUN",
+    "빅샤인": "BSK",
+    "빅샤인코리아": "BSK",
+    "빅샤인월드": "BSW",
+    # 영문 오타/약어 표준화
+    "WILLAM": "WILLIAM",
+    "WILIAM": "WILLIAM",
+    "WIILIAM": "WILLIAM",
+    "WILLLIAM": "WILLIAM",
+    "WILLIMA": "WILLIAM",
+    "WILLIMAM": "WILLIAM",
+    "JOYE": "JOEY",
+    "JEOY": "JOEY",
+    "KELLEY": "KELLY",
+    "KELLLY": "KELLY",
+    "KEELY": "KELLY",
+    "KELL": "KELLY",
+    "KELLYC": "KELLY",
+    "KELLYE": "KELLY",
+    "KELLY KIM": "KELLY",
+    "DUSIN": "DUSTIN",
+    "DUSTIN KIM": "DUSTIN",
+    "EIRC": "ERIC",
+    "ERICE": "ERIC",
+    "ERIC.": "ERIC",
+    "PHLIP": "PHILIP",
+    "PHILIP LEE": "PHILIP",
+    "HALOLD": "HAROLD",
+    "ALLE": "ALLEN",
+    "ALLENS": "ALLEN",
+    "ALLLEN": "ALLEN",
+    "ALLNE": "ALLEN",
+    "WILLSON": "WILSON",
+    "WILSOM": "WILSON",
+    "WILSON CHOI": "WILSON",
+    "SOCTT": "SCOTT",
+    "SCOCCT": "SCOTT",
+    "ROBIB": "ROBIN",
+    "ROBINI": "ROBIN",
+    "STEV": "STEVE",
+    "STVE": "STEVE",
+    "STEVEE": "STEVE",
+    "STEVEW": "STEVE",
+    "STESVE": "STEVE",
+    "STEVSE": "STEVE",
+    "STE VE": "STEVE",
+    "STEV E": "STEVE",
+    "STEVE HWANG": "STEVE",
+    "TONY LEE": "TONY",
+    "TIMOTHY PARK": "TIMOTHY",
+    "KEVIN BANG": "KEVIN",
+    "SIMON RYU": "SIMON",
+    "IRIS YOON": "IRIS",
+}
+
+_RANK_SUFFIX_RE = _re.compile(r"(주임|대리|과장|차장|부장|이사|전무|부사장|사장|대표|사원|프로|연구원|선임|책임|님)$")
+
+def _normalize_single_rep(token: str) -> str:
+    t = token.strip()
+    if not t or t in (".", "-", "0", "11"):
+        return ""
+    up = t.upper()
+    if up in _KOR_TO_ENG_SALES_MAP:
+        return _KOR_TO_ENG_SALES_MAP[up]
+    # 공백 및 직급 제거 후 매칭
+    no_space = _re.sub(r"\s+", "", t)
+    no_rank = _RANK_SUFFIX_RE.sub("", no_space)
+    if no_rank in _KOR_TO_ENG_SALES_MAP:
+        return _KOR_TO_ENG_SALES_MAP[no_rank]
+    if no_space in _KOR_TO_ENG_SALES_MAP:
+        return _KOR_TO_ENG_SALES_MAP[no_space]
+    # 부분 매칭 (예: '박 대 원 대원', '조 재 윤 재윤')
+    for k_kor, v_eng in _KOR_TO_ENG_SALES_MAP.items():
+        if len(k_kor) >= 2 and k_kor in no_space:
+            return v_eng
+    return up
+
+def normalize_sales_rep(v: Any) -> str:
+    """담당자(Sales/Owner/InputPerson) 이름을 항상 표준 영문 대문자로 변환"""
+    raw = clean_val(v)
+    if not raw or not isinstance(raw, str):
+        return ""
+    if "/" in raw or "," in raw:
+        parts = [_normalize_single_rep(p) for p in _re.split(r"[/,]", raw)]
+        parts = [p for p in parts if p]
+        # 중복 제거 유지
+        seen = []
+        for p in parts:
+            if p not in seen:
+                seen.append(p)
+        return " / ".join(seen)
+    return _normalize_single_rep(raw)
+
 class _SafeConnection:
     """예외 발생 시에도 MS-SQL 소켓 누수를 원천 차단하는 자동 해제 커넥션 래퍼"""
     __slots__ = ("_conn", "_closed")
@@ -217,6 +373,8 @@ def query_quotations(
         results = []
         for row in raw_rows:
             cleaned = {k: clean_val(v) for k, v in row.items()}
+            if "sales" in cleaned:
+                cleaned["sales"] = normalize_sales_rep(cleaned["sales"])
             # 수량 및 단가 기본 정리
             if cleaned.get("amount") == "":
                 cleaned["amount"] = 0.0
@@ -269,7 +427,13 @@ def get_quotation_by_no(quote_no: str) -> List[Dict[str, Any]]:
     raw_rows = cur.fetchall()
     conn.close()
 
-    return [{k: clean_val(v) for k, v in row.items()} for row in raw_rows]
+    out_rows = []
+    for row in raw_rows:
+        d = {k: clean_val(v) for k, v in row.items()}
+        if "sales" in d:
+            d["sales"] = normalize_sales_rep(d["sales"])
+        out_rows.append(d)
+    return out_rows
 
 # ========================================================
 # 💰 미수금 및 결제예정일 관리 (FrmUnpaidCustList) 모듈
@@ -287,7 +451,7 @@ def get_unpaid_sales_reps() -> List[str]:
         """)
         rows = cur.fetchall()
         conn.close()
-        reps = [clean_val(r['sales']) for r in rows if clean_val(r['sales'])]
+        reps = sorted(set(normalize_sales_rep(r['sales']) for r in rows if normalize_sales_rep(r['sales'])))
         return reps or ["ALLEN", "STEVE", "WILLIAM", "PAUL", "JOEY", "DUSTIN"]
     except Exception as e:
         print(f"[WARN] 영업사원 목록 조회 실패: {e}")
@@ -481,7 +645,7 @@ def query_unpaid_list(
                 "pay_status": clean_val(r["pay_status"]),
                 "contact": clean_val(r["contact"]),
                 "due_date": clean_val(r["due_date"]),
-                "sales": clean_val(r["sales_rep"]),
+                "sales": normalize_sales_rep(r["sales_rep"]),
                 "color_code": int(r["gubun_color"])
             })
         return results
@@ -558,7 +722,7 @@ def query_customers(search_query: Optional[str] = None, limit: int = 30) -> List
                 "fax": clean_val(r["fax"]),
                 "address": clean_val(r["address"]),
                 "email": clean_val(r["email"]) or clean_val(r["contact_email"]),
-                "sales_rep": clean_val(r["sales_rep"]),
+                "sales_rep": normalize_sales_rep(r["sales_rep"]),
                 "contact_name": contact,
                 "contact_title": title,
                 "contact_display": contact_display,
@@ -588,7 +752,7 @@ def query_customers(search_query: Optional[str] = None, limit: int = 30) -> List
                         "fax": "",
                         "address": "",
                         "email": "",
-                        "sales_rep": clean_val(dr["rep"]) or "",
+                        "sales_rep": normalize_sales_rep(dr["rep"]) or "",
                         "contact_name": "",
                         "contact_title": "",
                         "contact_display": "",
@@ -729,15 +893,17 @@ def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dic
             ORDER BY total_billing DESC
         """, (filter_start, filter_end))
         sales_raw = cur.fetchall()
-        sales_reps = [
-            {
-                "sales_rep": clean_val(r["sales_rep"]),
-                "billing": float(r["total_billing"] or 0.0),
-                "margin": float(r["total_margin"] or 0.0),
-                "margin_rate": round((float(r["total_margin"] or 0.0) / float(r["total_billing"] or 1.0)) * 100, 1),
-                "shipment_count": int(r["shipment_count"] or 0)
-            } for r in sales_raw
-        ]
+        rep_agg: Dict[str, Dict[str, Any]] = {}
+        for r in sales_raw:
+            rep_name = normalize_sales_rep(r["sales_rep"]) or "BSK"
+            slot = rep_agg.setdefault(rep_name, {"sales_rep": rep_name, "billing": 0.0, "margin": 0.0, "shipment_count": 0})
+            slot["billing"] += float(r["total_billing"] or 0.0)
+            slot["margin"] += float(r["total_margin"] or 0.0)
+            slot["shipment_count"] += int(r["shipment_count"] or 0)
+        sales_reps = []
+        for slot in sorted(rep_agg.values(), key=lambda x: x["billing"], reverse=True):
+            slot["margin_rate"] = round((slot["margin"] / (slot["billing"] or 1.0)) * 100, 1)
+            sales_reps.append(slot)
 
         conn.close()
 
@@ -831,7 +997,7 @@ def query_sales_memos(sales_rep: Optional[str] = None, limit: int = 40) -> List[
         results = []
         for r in rows:
             results.append({
-                "sales_rep": clean_val(r["sales_rep"]),
+                "sales_rep": normalize_sales_rep(r["sales_rep"]),
                 "input_date": clean_val(r["input_date"]),
                 "update_date": clean_val(r["update_date"]),
                 "memo": clean_val(r["memo"])
@@ -959,7 +1125,7 @@ def query_purchase_orders(
                 "eta_date": clean_val(r.get("eta_date")),
                 "status": st,
                 "status_label": "입고대기(예정)" if st == "PO" else ("입고완료" if st == "IN" else ("취소" if st == "CNL" else st)),
-                "sales_rep": clean_val(r["sales_rep"]),
+                "sales_rep": normalize_sales_rep(r["sales_rep"]),
                 "supplier_name": clean_val(r.get("supplier_name")),
                 "supplier_cname": clean_val(r.get("supplier_cname")),
                 "real_cust": clean_val(r.get("real_cust")),
@@ -1030,7 +1196,7 @@ def get_purchase_orders_summary() -> Dict[str, Any]:
                 "qty": int(r["qty"]) if r["qty"] is not None else 0,
                 "unit_price": float(r["unit_price"]) if r["unit_price"] is not None else 0.0,
                 "eta_date": clean_val(r.get("eta_date")),
-                "sales_rep": clean_val(r["sales_rep"]),
+                "sales_rep": normalize_sales_rep(r["sales_rep"]),
                 "real_cust": clean_val(r.get("real_cust")),
                 "supplier_name": clean_val(r.get("supplier_name"))
             })
@@ -1209,7 +1375,7 @@ def get_part_price_history(part_no: str) -> Dict[str, Any]:
                 "out_amt": out_amt,
                 "mgn": mgn,
                 "mgn_rate": mgn_rate,
-                "sales_rep": clean_val(r["sales_rep"]),
+                "sales_rep": normalize_sales_rep(r["sales_rep"]),
                 "customer_name": clean_val(r.get("customer_name")) or clean_val(r.get("customer_cname")),
                 "remark": clean_val(r["remark"])
             })
@@ -1222,7 +1388,7 @@ def get_part_price_history(part_no: str) -> Dict[str, Any]:
                 "quote_no": clean_val(r["quote_no"]),
                 "maker": clean_val(r["maker"]),
                 "customer_name": clean_val(r["customer_name"]),
-                "sales_rep": clean_val(r["sales_rep"]),
+                "sales_rep": normalize_sales_rep(r["sales_rep"]),
                 "part_no": clean_val(r["part_no"]),
                 "qty": int(r["qty"]) if r["qty"] is not None else 0,
                 "qunit": clean_val(r["qunit"]),
@@ -1251,7 +1417,7 @@ def get_part_price_history(part_no: str) -> Dict[str, Any]:
                 "eta_date": clean_val(r.get("eta_date")),
                 "status": st,
                 "status_label": "입고대기(예정)" if st == "PO" else ("입고완료" if st == "IN" else ("취소" if st == "CNL" else st)),
-                "sales_rep": clean_val(r["sales_rep"]),
+                "sales_rep": normalize_sales_rep(r["sales_rep"]),
                 "real_cust": clean_val(r.get("real_cust")),
                 "supplier_name": clean_val(r.get("supplier_name")),
                 "remark": clean_val(r["remark"])
@@ -1580,8 +1746,8 @@ def query_suppliers(query: Optional[str] = None, limit: int = 500) -> List[Dict[
             "product": clean_val(r["product"]),
             "address": clean_val(r["address"]),
             "remark": clean_val(r["remark"]),
-            "sales": clean_val(r["sales"]),
-            "cs": clean_val(r["cs"]),
+            "sales": normalize_sales_rep(r["sales"]),
+            "cs": normalize_sales_rep(r["cs"]),
             "gubun": clean_val(r["gubun"]),
             "update_dt": _fmt_dt(r.get("update_dt")),
         } for r in rows if clean_val(r["cname"])]
@@ -1698,7 +1864,7 @@ def query_inventory_detail(part_no: str, invoice_no: Optional[str] = None) -> Di
         schedules = [{
             "idx": r["idx"],
             "qty": int(r["qty"] or 0),
-            "sales": clean_val(r["sales"]),
+            "sales": normalize_sales_rep(r["sales"]),
             "actual_customer": clean_val(r["actual_customer"]),
             "schedule_dt": clean_val(r["schedule_dt"]),
             "invoice_no": clean_val(r["invoice_no"]),
@@ -1785,7 +1951,7 @@ def query_borrows(query: Optional[str] = None, limit: int = 300) -> List[Dict[st
             "part_no": clean_val(r["part_no"]),
             "maker": clean_val(r["maker"]) or "OTHERS",
             "qty": int(r["qty"] or 0),
-            "sales": clean_val(r["sales"]),
+            "sales": normalize_sales_rep(r["sales"]),
             "gubun": clean_val(r["gubun"]),
             "result": clean_val(r["result"]),
             "remark": clean_val(r["remark"]),
@@ -1836,7 +2002,7 @@ def query_rmas(query: Optional[str] = None, limit: int = 300) -> List[Dict[str, 
             "out_up": float(r["out_up"] or 0.0),
             "out_amt": float(r["out_amt"] or 0.0),
             "mgn": float(r["mgn"] or 0.0),
-            "sales": clean_val(r["sales"]),
+            "sales": normalize_sales_rep(r["sales"]),
             "gubun": clean_val(r["gubun"]),
             "result": clean_val(r["result"]) or "RMA",
         } for r in rows]
@@ -1971,7 +2137,7 @@ def query_import_charges(query: Optional[str] = None, supp: Optional[str] = None
                 "entry_fee": entry_fee,
                 "etc_fee": etc_fee,
                 "notice_no": clean_val(r.get("notice_no")),
-                "input_person": clean_val(r.get("input_person")),
+                "input_person": normalize_sales_rep(r.get("input_person")),
                 "est_goods_krw": round(est_goods_krw),
                 "est_goods_usd": est_goods_usd,
                 "overhead_pct": overhead_pct,
@@ -2030,7 +2196,7 @@ def query_remittances(query: Optional[str] = None, mfg: Optional[str] = None, li
                 "exrate": ex,
                 "krw_amount": round(rem * ex) if ex > 0 else 0,
                 "tt_no": clean_val(r.get("tt_no")),
-                "input_person": clean_val(r.get("input_person")),
+                "input_person": normalize_sales_rep(r.get("input_person")),
                 "input_dt": _fmt_dt(r.get("input_dt")),
                 "remark": clean_val(r.get("remark")),
             })
@@ -2129,7 +2295,7 @@ def query_sample_tracking(
                 "customer_name": clean_val(r.get("customer_name")) or "-",
                 "part_no": clean_val(r.get("part_no")) or "-",
                 "mfg": clean_val(r.get("mfg")) or "-",
-                "sales": clean_val(r.get("sales")) or "-",
+                "sales": normalize_sales_rep(r.get("sales")) or "-",
                 "app": clean_val(r.get("app")),
                 "prj_model": clean_val(r.get("prj_model")),
                 "volume": int(r.get("volume") or 0),
@@ -2248,7 +2414,7 @@ def query_sample_requests(query: Optional[str] = None, limit: int = 300) -> List
             "qty": int(r.get("qty") or 0),
             "crd_date": _fmt_dt(r.get("crd_date")),
             "ship_date": _fmt_dt(r.get("ship_date")),
-            "sales": clean_val(r.get("sales")),
+            "sales": normalize_sales_rep(r.get("sales")),
             "status": clean_val(r.get("status")) or "REQ",
             "app": clean_val(r.get("app")),
             "remark": clean_val(r.get("remark")),
@@ -2302,7 +2468,7 @@ def query_sample_incomes(query: Optional[str] = None, limit: int = 300) -> List[
             "date_code": clean_val(r.get("date_code")),
             "lot_no": clean_val(r.get("lot_no")),
             "awb_no": clean_val(r.get("awb_no")),
-            "sales": clean_val(r.get("sales")),
+            "sales": normalize_sales_rep(r.get("sales")),
             "real_cust": clean_val(r.get("real_cust")),
             "remark": clean_val(r.get("remark")),
         } for r in rows]
@@ -2354,7 +2520,7 @@ def query_sample_outflows(query: Optional[str] = None, limit: int = 300) -> List
             "rtn_date": _fmt_dt(r.get("rtn_date")),
             "rtn_plan_date": _fmt_dt(r.get("rtn_plan_date")),
             "qty": int(r.get("qty") or 0),
-            "sales": clean_val(r.get("sales")),
+            "sales": normalize_sales_rep(r.get("sales")),
             "item_type": clean_val(r.get("item_type")),
             "delivery": clean_val(r.get("delivery")),
             "contact": clean_val(r.get("contact")),

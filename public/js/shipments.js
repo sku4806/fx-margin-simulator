@@ -10,6 +10,7 @@
 
 import { sbClient } from './supabase.js';
 import { openInvoiceModal, openPackingListModal } from './trade-documents.js';
+import { toEnglishSalesName } from './modules/utils.js';
 
 // 상태 관리
 let activeShipmentMode = 'ledger'; // 'ledger' | 'web' | 'borrow' | 'rma' | 'loss'
@@ -441,7 +442,10 @@ async function fetchSubLedgerData(mode, query = '') {
     if (query) params.set('query', query);
     const res = await fetch(`${url}?${params.toString()}`);
     const data = await res.json();
-    const items = data.items || [];
+    const items = (data.items || []).map(it => ({
+      ...it,
+      sales: toEnglishSalesName(it.sales)
+    }));
     if (mode === 'borrow') cachedBorrows = items;
     else if (mode === 'rma') cachedRmas = items;
     else if (mode === 'loss') cachedLosses = items;

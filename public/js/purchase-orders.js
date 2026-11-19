@@ -3,6 +3,8 @@
  * 발주(PO) 및 입고 예정(ETA) 조회 모듈 (MS-SQL DPOFile 2,828건 실시간 연동)
  */
 
+import { toEnglishSalesName } from './modules/utils.js';
+
 let cachedPoSummary = null;
 let currentPoList = [];
 let activePoMainTab = 'po'; // 'po' | 'charges' | 'remittances'
@@ -47,7 +49,10 @@ export async function fetchPurchaseOrders(params = {}) {
     const res = await fetch(`/api/purchase-orders?${query.toString()}`);
     const data = await res.json();
     if (data.status === 'success') {
-      currentPoList = data.orders || [];
+      currentPoList = (data.orders || []).map(o => ({
+        ...o,
+        sales_rep: toEnglishSalesName(o.sales_rep)
+      }));
       return currentPoList;
     }
   } catch (err) {
