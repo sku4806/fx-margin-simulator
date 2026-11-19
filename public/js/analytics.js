@@ -96,6 +96,65 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
 
   const periodBooking = a.period_booking != null ? a.period_booking : (isMonthly ? (targetM ? targetM.booking : 0) : bookingYtd);
 
+  // 💎 Commission + Domestic 마진 통합 수익 지표 (동일 포인트 비교용, 현재 실시간 환율 기준)
+  const fxRate = (typeof window.getLiveFxRate === 'function' ? window.getLiveFxRate() : window.rawFxRate) || 1380;
+  const comm = a.commission || {};
+  const commMonthlyList = Array.isArray(comm.monthly) ? comm.monthly : [];
+  const commMonthlyMap = {};
+  commMonthlyList.forEach(cm => {
+    if (cm && cm.month) commMonthlyMap[cm.month] = cm;
+  });
+  const periodCommUsd = Number(comm.total_comm_amt) || 0;
+  const periodCommKrw = Math.round(periodCommUsd * fxRate);
+  const periodCommCount = Number(comm.comm_count) || 0;
+  const ytdCommUsd = commMonthlyList.reduce((s, cm) => s + (Number(cm.comm_amt) || 0), 0);
+  const ytdCommKrw = Math.round(ytdCommUsd * fxRate);
+  const periodTotalProfitKrw = (isMonthly ? periodMargin : marginYtd) + periodCommKrw;
+  const ytdTotalProfitKrw = marginYtd + ytdCommKrw;
+
+  // 영업 담당자별 Domestic + Commission 통합 매핑
+  const commBySalesMap = {};
+  (Array.isArray(comm.by_sales) ? comm.by_sales : []).forEach(cs => {
+    const key = toEnglishSalesName(cs.sales_rep || '') || 'BSK';
+    commBySalesMap[key] = {
+      comm_amt: Number(cs.comm_amt) || 0,
+      unpaid_amt: Number(cs.unpaid_amt) || 0,
+      count: Number(cs.count) || 0
+    };
+  });
+  const mergedSalesMap = {};
+  (Array.isArray(a.sales_reps) ? a.sales_reps : []).forEach(s => {
+    const key = toEnglishSalesName(s.sales_rep || '') || 'BSK';
+    mergedSalesMap[key] = {
+      sales_rep: key,
+      billing: Number(s.billing) || 0,
+      margin: Number(s.margin) || 0,
+      margin_rate: Number(s.margin_rate) || 0,
+      shipment_count: Number(s.shipment_count) || 0,
+      comm_usd: 0,
+      comm_krw: 0,
+      comm_count: 0
+    };
+  });
+  Object.entries(commBySalesMap).forEach(([key, cv]) => {
+    if (!mergedSalesMap[key]) {
+      mergedSalesMap[key] = { sales_rep: key, billing: 0, margin: 0, margin_rate: 0, shipment_count: 0, comm_usd: 0, comm_krw: 0, comm_count: 0 };
+    }
+    mergedSalesMap[key].comm_usd = cv.comm_amt;
+    mergedSalesMap[key].comm_krw = Math.round(cv.comm_amt * fxRate);
+    mergedSalesMap[key].comm_count = cv.count;
+  });
+  const mergedSalesReps = Object.values(mergedSalesMap)
+    .map(s => ({ ...s, total_profit: s.margin + s.comm_krw }))
+    .sort((x, y) => y.total_profit - x.total_profit);
+
+  // 제조사별 Commission 빠른 조회 맵
+  const commByMakerMap = {};
+  (Array.isArray(comm.by_maker) ? comm.by_maker : []).forEach(cm => {
+    const k = String(cm.maker || '').trim().toUpperCase();
+    if (k) commByMakerMap[k] = cm;
+  });
+
   // 월 선택 드롭다운 옵션 목록 (최신 월부터 1월까지 역순 생성)
   const availableMonths = [];
   const maxMo = Math.max(latestMonthNum, 11);
@@ -247,18 +306,51 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
               return `<td class="py-1.5 px-2 font-mono font-black ${isSelected ? 'bg-indigo-50/60 text-indigo-700 font-black' : 'text-indigo-950'} whitespace-nowrap" title="₩${Math.round(bill).toLocaleString()}">₩${eokStr}</td>`;
             }).join('')}
           </tr>
-          <!-- 2. 매출이익 (마진) -->
+          <!-- 2. 매출이익 (Domestic 마진) -->
           <tr class="hover:bg-emerald-50/30 transition-colors">
             <td class="py-1.5 px-3 text-left font-bold text-emerald-900 sticky left-0 bg-white z-10 shadow-xs flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0"></span>
-              <span>매출이익</span>
+              <span>국내마진</span>
             </td>
             ${monthly.map(m => {
               const mgn = m.margin || 0;
               const mNum = parseInt(m.month.slice(5), 10);
               const isSelected = isMonthly && (selectedMonthNum === mNum);
               const eokStr = mgn >= 100000000 ? `${(mgn / 100000000).toFixed(1)}억` : `${Math.round(mgn / 10000).toLocaleString()}만`;
-              return `<td class="py-1.5 px-2 font-mono font-bold ${isSelected ? 'bg-indigo-50/60 text-emerald-900' : 'text-emerald-800'} whitespace-nowrap" title="₩${Math.round(mgn).toLocaleString()}">₩${eokStr}</td>`;
+              return `<td class="py-1.5 px-2 font-mono font-bold ${isSelected ? 'bg-indigo-50/60 text-emerald-900' : 'text-emerald-800'} whitespace-nowrap" title="Domestic 마진: ₩${Math.round(mgn).toLocaleString()}">₩${eokStr}</td>`;
+            }).join('')}
+          </tr>
+          <!-- 2-2. 💎 커미션 (원화환산) -->
+          <tr class="hover:bg-violet-50/40 transition-colors">
+            <td class="py-1.5 px-3 text-left font-bold text-violet-800 sticky left-0 bg-white z-10 shadow-xs flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-violet-500 inline-block shrink-0"></span>
+              <span>💎 커미션</span>
+            </td>
+            ${monthly.map(m => {
+              const cm = commMonthlyMap[m.month];
+              const cUsd = cm ? (Number(cm.comm_amt) || 0) : 0;
+              const cKrw = Math.round(cUsd * fxRate);
+              const mNum = parseInt(m.month.slice(5), 10);
+              const isSelected = isMonthly && (selectedMonthNum === mNum);
+              const eokStr = cKrw === 0 ? '-' : (cKrw >= 100000000 ? `₩${(cKrw / 100000000).toFixed(1)}억` : `₩${Math.round(cKrw / 10000).toLocaleString()}만`);
+              return `<td class="py-1.5 px-2 font-mono font-bold ${isSelected ? 'bg-indigo-50/60 text-violet-900' : 'text-violet-700'} whitespace-nowrap" title="Commission: $${cUsd.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})} (≈₩${cKrw.toLocaleString()} / @${fxRate.toLocaleString()})">${eokStr}</td>`;
+            }).join('')}
+          </tr>
+          <!-- 2-3. 🏆 통합 총수익 (국내마진 + 커미션) -->
+          <tr class="bg-gradient-to-r from-emerald-50/50 via-violet-50/40 to-emerald-50/50 hover:bg-violet-50/60 transition-colors">
+            <td class="py-1.5 px-3 text-left font-black text-slate-900 sticky left-0 bg-violet-50/90 z-10 shadow-xs flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-gradient-to-r from-emerald-500 to-violet-600 inline-block shrink-0"></span>
+              <span>🏆 총수익</span>
+            </td>
+            ${monthly.map(m => {
+              const mgn = m.margin || 0;
+              const cm = commMonthlyMap[m.month];
+              const cUsd = cm ? (Number(cm.comm_amt) || 0) : 0;
+              const tot = mgn + Math.round(cUsd * fxRate);
+              const mNum = parseInt(m.month.slice(5), 10);
+              const isSelected = isMonthly && (selectedMonthNum === mNum);
+              const eokStr = tot >= 100000000 ? `${(tot / 100000000).toFixed(1)}억` : `${Math.round(tot / 10000).toLocaleString()}만`;
+              return `<td class="py-1.5 px-2 font-mono font-black ${isSelected ? 'bg-indigo-100/70 text-violet-950' : 'text-slate-900'} whitespace-nowrap" title="통합 총수익: ₩${Math.round(tot).toLocaleString()} (마진 ₩${Math.round(mgn).toLocaleString()} + 커미션 $${cUsd.toLocaleString()})">₩${eokStr}</td>`;
             }).join('')}
           </tr>
           <!-- 3. 실현 마진율 -->
@@ -312,17 +404,19 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
         </div>
       </div>
 
-      <!-- 2) 선택 월 실현 마진 -->
-      <div class="bg-white p-3 sm:p-4 rounded-xl border border-emerald-300 bg-emerald-50/30 shadow-sm relative overflow-hidden flex flex-col justify-between">
-        <div class="text-[10px] sm:text-[11px] font-bold text-emerald-900 flex items-center justify-between">
-          <span class="truncate">${selectedMonthNum}월 실현 마진</span>
+      <!-- 2) 선택 월 통합 총수익 (국내 마진 + 💎 커미션) -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-violet-300 bg-gradient-to-br from-emerald-50/40 via-white to-violet-50/40 shadow-sm relative overflow-hidden flex flex-col justify-between">
+        <div class="text-[10px] sm:text-[11px] font-bold text-emerald-950 flex items-center justify-between gap-1">
+          <span class="truncate">🏆 ${selectedMonthNum}월 총수익 (마진+커미션)</span>
           <span class="text-emerald-700 font-black text-[9px] sm:text-xs shrink-0 bg-emerald-100 px-1.5 py-0.2 rounded">${periodMarginRate}%</span>
         </div>
-        <div class="text-sm sm:text-xl font-black text-emerald-950 mt-1 font-mono truncate">
-          ₩${Math.round(periodMargin).toLocaleString()}
+        <div class="text-sm sm:text-xl font-black text-slate-900 mt-1 font-mono truncate" title="국내마진 ₩${Math.round(periodMargin).toLocaleString()} + 커미션 $${periodCommUsd.toLocaleString()} (≈₩${periodCommKrw.toLocaleString()})">
+          ₩${Math.round(periodTotalProfitKrw).toLocaleString()}
         </div>
-        <div class="text-[9px] sm:text-[10px] text-emerald-700 mt-0.5 truncate">
-          마진율: <strong class="text-emerald-950 font-bold">${periodMarginRate}% 달성</strong>
+        <div class="text-[9px] sm:text-[10px] text-slate-600 mt-0.5 flex flex-wrap items-center gap-x-1.5 leading-tight">
+          <span>마진 <strong class="text-emerald-700">₩${Math.round(periodMargin).toLocaleString()}</strong></span>
+          <span class="text-slate-300">+</span>
+          <span class="text-violet-700 font-bold">💎 $${periodCommUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span class="font-normal opacity-80">(₩${Math.round(periodCommKrw / 10000).toLocaleString()}만)</span></span>
         </div>
       </div>
 
@@ -371,17 +465,19 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
         </div>
       </div>
 
-      <!-- 2) 연간 누적 매출이익 (Margin) -->
-      <div class="bg-white p-3 sm:p-4 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm relative overflow-hidden flex flex-col justify-between">
-        <div class="text-[10px] sm:text-[11px] font-bold text-emerald-800 flex items-center justify-between">
-          <span class="truncate">${currentYear}년 연간 누적 마진</span>
-          <span class="text-emerald-600 font-black text-[9px] sm:text-xs shrink-0">${marginRate}%</span>
+      <!-- 2) 연간 누적 통합 총수익 (국내 마진 + 💎 커미션) -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-violet-300 bg-gradient-to-br from-emerald-50/40 via-white to-violet-50/40 shadow-sm relative overflow-hidden flex flex-col justify-between">
+        <div class="text-[10px] sm:text-[11px] font-bold text-emerald-950 flex items-center justify-between gap-1">
+          <span class="truncate">🏆 ${currentYear}년 총수익 (마진+커미션)</span>
+          <span class="text-emerald-700 font-black text-[9px] sm:text-xs shrink-0 bg-emerald-100 px-1.5 py-0.2 rounded">${marginRate}%</span>
         </div>
-        <div class="text-sm sm:text-xl font-black text-emerald-900 mt-1 font-mono truncate">
-          ₩${Math.round(marginYtd).toLocaleString()}
+        <div class="text-sm sm:text-xl font-black text-slate-900 mt-1 font-mono truncate" title="국내마진 ₩${Math.round(marginYtd).toLocaleString()} + 커미션 $${periodCommUsd.toLocaleString()} (≈₩${periodCommKrw.toLocaleString()})">
+          ₩${Math.round(periodTotalProfitKrw).toLocaleString()}
         </div>
-        <div class="text-[9px] sm:text-[10px] text-emerald-700 mt-0.5 truncate">
-          전사 평균: <strong class="text-emerald-900 font-bold">${marginRate}% 달성</strong>
+        <div class="text-[9px] sm:text-[10px] text-slate-600 mt-0.5 flex flex-wrap items-center gap-x-1.5 leading-tight">
+          <span>마진 <strong class="text-emerald-700">₩${(marginYtd / 100000000).toFixed(2)}억</strong></span>
+          <span class="text-slate-300">+</span>
+          <span class="text-violet-700 font-bold">💎 $${Math.round(periodCommUsd).toLocaleString()} <span class="font-normal opacity-80">(₩${(periodCommKrw / 100000000).toFixed(2)}억)</span></span>
         </div>
       </div>
 
@@ -593,14 +689,18 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
           <div class="space-y-2 overflow-y-auto max-h-80 pr-1 text-xs">
             ${(a.top_makers && a.top_makers.length > 0) ? a.top_makers.map((m, idx) => {
               const pct = baseBilling > 0 ? ((m.billing / baseBilling) * 100).toFixed(1) : 0;
+              const cm = commByMakerMap[String(m.maker || '').trim().toUpperCase()];
+              const cUsd = cm ? (Number(cm.comm_amt) || 0) : 0;
+              const cKrw = Math.round(cUsd * fxRate);
               return `
                 <div class="space-y-0.5">
-                  <div class="flex items-center justify-between text-[11px]">
-                    <span class="font-bold text-slate-800 flex items-center gap-1">
-                      <span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-50 text-indigo-800 border border-indigo-200">${m.maker}</span>
-                      <span class="text-slate-400 text-[10px] font-normal">(${m.item_count}건)</span>
+                  <div class="flex items-center justify-between text-[11px] gap-1">
+                    <span class="font-bold text-slate-800 flex items-center gap-1 min-w-0">
+                      <span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-50 text-indigo-800 border border-indigo-200 shrink-0">${m.maker}</span>
+                      <span class="text-slate-400 text-[10px] font-normal shrink-0">(${m.item_count}건)</span>
+                      ${cUsd > 0 ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-violet-100 text-violet-800 border border-violet-200 truncate" title="Commission: $${cUsd.toLocaleString()} (≈₩${cKrw.toLocaleString()})">💎 +$${Math.round(cUsd).toLocaleString()}</span>` : ''}
                     </span>
-                    <span class="font-mono font-bold text-slate-900">₩${Math.round(m.billing).toLocaleString()}</span>
+                    <span class="font-mono font-bold text-slate-900 shrink-0">₩${Math.round(m.billing).toLocaleString()}</span>
                   </div>
                   <div class="flex items-center gap-2 text-[10px] text-slate-400">
                     <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
@@ -616,34 +716,41 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
           </div>
         </div>
 
-        <!-- 3) 영업 담당자별 실적 기여도 -->
+        <!-- 3) 영업 담당자별 통합 실적 (마진 + 💎 커미션) -->
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col space-y-3">
           <div class="flex items-center justify-between border-b border-slate-100 pb-2">
             <h3 class="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-              <span>👤</span> 영업 담당자별 실적 & 마진
+              <span>👤</span> 영업 담당자별 마진 + 💎 커미션
             </h3>
-            <span class="text-[10px] ${isMonthly ? 'text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-bold' : 'text-slate-400 font-medium'}">
-              ${isMonthly ? `${selectedMonthNum}월 영업사원 기여도` : '연간 영업사원 기여도'}
+            <span class="text-[10px] ${isMonthly ? 'text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-bold' : 'text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.2 rounded font-bold'}">
+              🏆 통합 총수익 순
             </span>
           </div>
 
           <div class="space-y-2.5 overflow-y-auto max-h-80 pr-1 text-xs">
-            ${(a.sales_reps && a.sales_reps.length > 0) ? a.sales_reps.map(s => {
+            ${mergedSalesReps.length > 0 ? mergedSalesReps.map(s => {
+              const hasComm = s.comm_usd > 0;
               return `
-                <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
-                  <div class="flex items-center justify-between">
+                <div class="bg-slate-50 p-2.5 rounded-lg border ${hasComm ? 'border-violet-200/80' : 'border-slate-200'} space-y-1">
+                  <div class="flex items-center justify-between gap-2">
                     <span class="font-black text-indigo-950 flex items-center gap-1">
-                      <span class="w-2 h-2 rounded-full bg-indigo-600"></span>
+                      <span class="w-2 h-2 rounded-full ${hasComm ? 'bg-violet-600' : 'bg-indigo-600'}"></span>
                       ${s.sales_rep}
                     </span>
-                    <span class="font-black font-mono text-slate-900 text-xs">
-                      ₩${Math.round(s.billing).toLocaleString()}
+                    <span class="font-black font-mono text-slate-900 text-xs" title="통합 총수익 = 국내마진 ₩${Math.round(s.margin).toLocaleString()} + 커미션 ₩${s.comm_krw.toLocaleString()}">
+                      🏆 ₩${Math.round(s.total_profit).toLocaleString()}
                     </span>
                   </div>
                   <div class="flex items-center justify-between text-[10px] text-slate-500">
-                    <span>마진: <strong class="text-emerald-700">₩${Math.round(s.margin).toLocaleString()}</strong> (${s.margin_rate}%)</span>
-                    <span>출하: <strong class="text-slate-700">${s.shipment_count}건</strong></span>
+                    <span>국내마진: <strong class="text-emerald-700">₩${Math.round(s.margin).toLocaleString()}</strong> <span class="text-[9px]">(${s.margin_rate}%)</span></span>
+                    <span class="font-mono text-slate-500">매출 ₩${Math.round(s.billing / 10000).toLocaleString()}만 · ${s.shipment_count}건</span>
                   </div>
+                  ${hasComm ? `
+                    <div class="flex items-center justify-between text-[10px] pt-1 border-t border-violet-100">
+                      <span class="text-violet-700 font-bold">💎 커미션: $${s.comm_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span class="font-normal text-violet-500">(≈₩${s.comm_krw.toLocaleString()})</span></span>
+                      <span class="text-[9px] font-bold text-violet-600">${s.comm_count}건</span>
+                    </div>
+                  ` : ''}
                 </div>
               `;
             }).join('') : `
