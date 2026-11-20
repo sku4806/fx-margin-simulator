@@ -1,4 +1,4 @@
-import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261119_v51';
+import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261119_fast';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
 import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261119_v51';
 import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261119_v51';
@@ -6,7 +6,7 @@ const initSamplesTab = async (...args) => (await import('./samples.js?v=20261119
 import { toEnglishSalesName } from './modules/utils.js';
 window.toEnglishSalesName = toEnglishSalesName;
 import { supabase, sbClient } from './supabase.js';
-import * as InventoryModule from './inventory.js?v=20261119_avail';
+import * as InventoryModule from './inventory.js?v=20261119_fast';
 import { initAuth, isCsOrAdminUser, isPaymentApprovalAdmin, getCurrentUserEmail, APPROVAL_ADMIN_EMAILS } from './modules/auth.js';
 window.isCsOrAdminUser = isCsOrAdminUser;
 window.isPaymentApprovalAdmin = isPaymentApprovalAdmin;
@@ -479,43 +479,57 @@ export async function bootstrap() {
   initManualViewer();
   initCustomerMasterAutocomplete();
 
-  try {
-    const fxRes = await fetch('/api/fx-rate');
-    const fxData = await fxRes.json();
-    rawFxRate = fxData.current_rate || 1332.40;
-    currentFxDiff = fxData.diff || 0.0;
-    currentFxSource = fxData.source || "SMBS (서울외국환중개)";
-    currentFxDate = fxData.tr_date || "";
-    window.rawFxRate = rawFxRate;
-    window.appliedFxRate = appliedFxRate;
-    window.getLiveFxRate = () => appliedFxRate;
-  } catch (err) {
-    console.warn("FX 기본값 유지", err);
-  }
-  updateFxDisplay();
-
-  try {
-    await fetchPackagingStandards();
-    renderPackagingTable();
-  } catch (e) {
-    console.warn("포장기준 로드 예외 무시", e);
+  // 🚀 2. Stale-While-Revalidate: 로컬 스냅샷이 있으면 0.03초 만에 재고 목록 즉시 표시
+  if (typeof InventoryModule.getLocalInventorySnapshot === 'function') {
+    const snap = InventoryModule.getLocalInventorySnapshot();
+    if (snap && snap.length > 0) {
+      cachedItems = snap;
+      window.cachedItems = cachedItems;
+      updateLineFilterCounts(cachedItems);
+      updateSalesFilterCounts(cachedItems);
+      callRenderInventoryHeaders(activeTab);
+      applyFilters();
+    }
   }
 
-  try {
-    await fetchPurchaseOrdersSummary();
-  } catch (e) {
-    console.warn("PO 요약 로드 예외 무시", e);
-  }
+  // 🚀 3. 직렬 워터폴 제거: 재고·환율·포장기준·PO배지·전자결재·인증을 모두 병렬로 즉시 시작
+  const initialInventoryPromise = refreshInventory();
 
-  try {
-    await updatePaymentPendingBadge();
-  } catch (e) {
-    console.warn("전자결재 대기건 로드 예외 무시", e);
-  }
+  fetch('/api/fx-rate')
+    .then(r => r.json())
+    .then(fxData => {
+      rawFxRate = fxData.current_rate || 1332.40;
+      currentFxDiff = fxData.diff || 0.0;
+      currentFxSource = fxData.source || "SMBS (서울외국환중개)";
+      currentFxDate = fxData.tr_date || "";
+      window.rawFxRate = rawFxRate;
+      window.appliedFxRate = appliedFxRate;
+      window.getLiveFxRate = () => appliedFxRate;
+      updateFxDisplay();
+      runEngine();
+    })
+    .catch(err => {
+      console.warn("FX 기본값 유지", err);
+      updateFxDisplay();
+    });
 
+  fetchPackagingStandards()
+    .then(() => renderPackagingTable())
+    .catch(e => console.warn("포장기준 로드 예외 무시", e));
+
+  fetchPurchaseOrdersSummary().catch(e => console.warn("PO 요약 로드 예외 무시", e));
+  updatePaymentPendingBadge().catch(e => console.warn("전자결재 대기건 로드 예외 무시", e));
+
+  let authInitializedOnce = false;
   initAuth(async (session, canEdit) => {
     updateFormVisibility(canEdit);
-    await refreshInventory();
+    if (!authInitializedOnce) {
+      authInitializedOnce = true;
+      await initialInventoryPromise;
+      applyFilters(); // 권한(CS/Admin 수정 버튼) 반영하여 즉시 재렌더링 (중복 DB 조회 없음)
+    } else {
+      await refreshInventory();
+    }
     if (typeof window.syncPaymentAuthSession === 'function') {
       window.syncPaymentAuthSession(session);
     } else if (typeof window.refreshAdminPaymentAuthUI === 'function') {

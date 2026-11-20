@@ -123,39 +123,59 @@ function getKindBadge(kindRaw) {
 }
 
 import { sbClient } from './supabase.js';
-import { syncShipmentLifecycle } from './shipments.js';
+import { syncShipmentLifecycle } from './shipments.js?v=20261119_fast';
 
 let cachedItems = [];
+const INV_CACHE_KEY = 'bsk_inv_snapshot_v1';
+
+export function getLocalInventorySnapshot() {
+  try {
+    const raw = localStorage.getItem(INV_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+      return parsed.items;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function saveLocalInventorySnapshot(items) {
+  try {
+    if (Array.isArray(items) && items.length > 0) {
+      localStorage.setItem(INV_CACHE_KEY, JSON.stringify({ ts: Date.now(), items }));
+    }
+  } catch (_) {}
+}
 
 export async function fetchInventoryItems() {
   if (!sbClient) return [];
-  
-  // Supabase의 단일 쿼리 1,000건 제한을 우회하여 전건(1,600건 이상) 청크 로드
-  let allData = [];
-  const chunkSize = 1000;
-  let from = 0;
-  let hasMore = true;
 
-  while (hasMore) {
-    const to = from + chunkSize - 1;
-    const { data, error } = await sbClient
+  // 🚀 Supabase 1,000건 제한 우회: 1·2청크(0~1999) 동시 병렬(Promise.all) 로드로 대기시간 50% 단축
+  const chunkSize = 1000;
+  const fetchChunk = (from, to) =>
+    sbClient
       .from('inventory_items')
       .select('*')
       .range(from, to)
       .order('entry_date', { ascending: false, nullsFirst: false });
 
-    if (error) throw error;
+  const [r1, r2] = await Promise.all([fetchChunk(0, chunkSize - 1), fetchChunk(chunkSize, chunkSize * 2 - 1)]);
+  if (r1.error) throw r1.error;
+  if (r2.error) throw r2.error;
 
-    if (data && data.length > 0) {
-      allData = allData.concat(data);
-      if (data.length < chunkSize) {
-        hasMore = false;
-      } else {
-        from += chunkSize;
-      }
-    } else {
-      hasMore = false;
-    }
+  let allData = [...(r1.data || []), ...(r2.data || [])];
+
+  // 2,000건 초과 시에만 추가 청크 순차 로드
+  let nextFrom = chunkSize * 2;
+  let lastLen = (r2.data || []).length;
+  while (lastLen === chunkSize) {
+    const res = await fetchChunk(nextFrom, nextFrom + chunkSize - 1);
+    if (res.error) throw res.error;
+    const rows = res.data || [];
+    allData = allData.concat(rows);
+    lastLen = rows.length;
+    nextFrom += chunkSize;
   }
 
   cachedItems = allData.map(item => ({
@@ -216,6 +236,7 @@ export async function fetchInventoryItems() {
   }));
 
   window.cachedItems = cachedItems;
+  saveLocalInventorySnapshot(cachedItems);
   return cachedItems;
 }
 
