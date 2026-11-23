@@ -1103,6 +1103,14 @@ def query_rep_domestic_sales(
     s_dt = (start_date or "2026-01-01").strip()[:10]
     e_dt = (end_date or "2026-12-31").strip()[:10]
 
+    # 영문 표준명에 매핑되는 모든 원본 표기(한글/오타 포함)를 SQL IN 절로 직접 필터링하여 TOP 누락 방지
+    alias_set = {target_rep}
+    for k_raw, v_eng in _KOR_TO_ENG_SALES_MAP.items():
+        if v_eng == target_rep:
+            alias_set.add(k_raw)
+    alias_list = sorted(alias_set)
+    in_placeholders = ", ".join(["%s"] * len(alias_list))
+
     try:
         conn = get_db_connection()
         cur = conn.cursor(as_dict=True)
@@ -1125,9 +1133,9 @@ def query_rep_domestic_sales(
             LEFT JOIN CustomerFile c ON r.Custid = c.CID
             WHERE r.RESULT = 'OUT'
               AND r.OUTDT >= %s AND r.OUTDT <= %s
-              AND r.Sales IS NOT NULL AND LTRIM(RTRIM(r.Sales)) <> ''
+              AND UPPER(LTRIM(RTRIM(ISNULL(r.Sales, '')))) IN ({in_placeholders})
             ORDER BY r.OUTDT DESC, r.IDX DESC
-        """, (s_dt, e_dt + " 23:59:59"))
+        """, (s_dt, e_dt + " 23:59:59", *alias_list))
         rows = cur.fetchall()
         conn.close()
 
