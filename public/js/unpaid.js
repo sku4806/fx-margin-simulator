@@ -1,7 +1,7 @@
 // public/js/unpaid.js
 // 레거시 세일즈 마스터 [FrmUnpaidCustList] 미수금 및 결제예정일 관리 대시보드 모듈
 import { sbClient } from './supabase.js';
-import { toEnglishSalesName } from './modules/utils.js';
+import { toEnglishSalesName, debounce } from './modules/utils.js';
 
 let cachedUnpaid = [];
 let cachedSummary = null;
@@ -29,14 +29,6 @@ const AGING_COLOR_MAP = {
   'overdue_45_59': 3,
   'overdue_60_plus': 4
 };
-
-function debounce(fn, delay = 200) {
-  let timer = null;
-  return function(...args) {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), delay);
-  };
-}
 
 function mapSupabaseToUnpaid(r) {
   return {

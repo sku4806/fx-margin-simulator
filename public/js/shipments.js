@@ -10,7 +10,7 @@
 
 import { sbClient } from './supabase.js';
 import { openInvoiceModal, openPackingListModal } from './trade-documents.js';
-import { toEnglishSalesName } from './modules/utils.js';
+import { toEnglishSalesName, debounce, escapeHtml as escSub } from './modules/utils.js';
 
 // 상태 관리
 let activeShipmentMode = 'ledger'; // 'ledger' | 'web' | 'borrow' | 'rma' | 'loss'
@@ -44,14 +44,6 @@ let shipmentPageSize = 50;
 // 백그라운드 자동보정 쿨다운
 let lastHealTime = 0;
 const HEAL_INTERVAL_MS = 10 * 60 * 1000;
-
-function debounce(func, wait = 200) {
-  let timeout;
-  return function (...args) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(this, args), wait);
-  };
-}
 
 /**
  * 기본 날짜 계산 (종료일: 오늘, 시작일: 4달 전)
@@ -533,10 +525,6 @@ async function fetchSubLedgerData(mode, query = '') {
     console.error(`[SubLedger:${mode}] 조회 오류:`, err);
     return [];
   }
-}
-
-function escSub(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function renderSubLedgerSection() {

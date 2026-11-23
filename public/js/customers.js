@@ -3,7 +3,7 @@
  * 거래처·담당자(복수)·매입처(CustomerBFile)·지정 포워더(CustForwarder) 통합 마스터 모달
  */
 
-import { toEnglishSalesName } from './modules/utils.js';
+import { toEnglishSalesName, escapeHtml as escHtml } from './modules/utils.js';
 
 let activeMasterTab = 'customers'; // 'customers' | 'suppliers' | 'forwarders'
 let custPage = 1;
@@ -17,10 +17,6 @@ let contactCountMap = null;
 const contactsCacheByCid = {};
 let supplierCache = [];
 let forwarderCache = [];
-
-function escHtml(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 function canModifyMaster() {
   return (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;

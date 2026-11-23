@@ -6,7 +6,7 @@
  * 특정 월 필터 (당월 보기 / 연간 누적 YTD 보기) 완벽 지원
  */
 
-import { toEnglishSalesName } from './modules/utils.js';
+import { toEnglishSalesName, escapeHtml as escRep } from './modules/utils.js';
 
 let cachedAnalytics = null;
 let lastMergedSalesReps = [];
@@ -907,11 +907,7 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
           <div class="flex items-center gap-2 text-xs">
             <select id="memoSalesFilter" onchange="window.filterSalesMemos(this.value)" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700 outline-none">
               <option value="ALL">전체 영업사원</option>
-              <option value="STEVE">STEVE</option>
-              <option value="KELLY">KELLY</option>
-              <option value="WILLIAM">WILLIAM</option>
-              <option value="ALLEN">ALLEN</option>
-              <option value="DUSTIN">DUSTIN</option>
+              ${Array.from(new Set(['STEVE', 'KELLY', 'WILLIAM', 'ALLEN', 'DUSTIN', 'ERIC', 'JOEY', ...mergedSalesReps.map(s => s.sales_rep)].filter(Boolean))).map(rep => `<option value="${rep}">${rep}</option>`).join('')}
             </select>
             <button type="button" onclick="window.toggleMemoInputForm()" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg border border-indigo-200 text-xs transition-colors cursor-pointer">
               + 메모 작성
@@ -923,11 +919,7 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
         <div id="memoInputFormBox" class="hidden bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
           <div class="flex flex-wrap items-center gap-2 text-xs">
             <select id="newMemoRep" class="bg-white border border-slate-300 rounded-lg px-2 py-1 font-bold text-slate-800">
-              <option value="STEVE">STEVE</option>
-              <option value="KELLY">KELLY</option>
-              <option value="WILLIAM">WILLIAM</option>
-              <option value="ALLEN">ALLEN</option>
-              <option value="DUSTIN">DUSTIN</option>
+              ${Array.from(new Set(['STEVE', 'KELLY', 'WILLIAM', 'ALLEN', 'DUSTIN', 'ERIC', 'JOEY', ...mergedSalesReps.map(s => s.sales_rep)].filter(Boolean))).map(rep => `<option value="${rep}">${rep}</option>`).join('')}
             </select>
             <input type="date" id="newMemoDate" value="${new Date().toISOString().slice(0, 10)}" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-mono">
             <button type="button" onclick="window.saveNewSalesMemo()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs">
@@ -946,30 +938,8 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
     </div>
   `;
 
-  // 메모 자동 로드
+  // 메모 자동 로드 (인라인 onchange 중복 호출 방지를 위해 중복 addEventListener 제거)
   loadSalesMemos('ALL');
-
-  // DOM 이벤트 리스너 안전 바인딩
-  const yrSelect = container.querySelector('#analyticsYearSelect');
-  if (yrSelect) {
-    yrSelect.addEventListener('change', (e) => {
-      window.switchAnalyticsYear(e.target.value);
-    });
-  }
-
-  const moSelect = container.querySelector('#analyticsMonthSelect');
-  if (moSelect) {
-    moSelect.addEventListener('change', (e) => {
-      window.switchAnalyticsMonth(e.target.value);
-    });
-  }
-
-  const memoFilter = container.querySelector('#memoSalesFilter');
-  if (memoFilter) {
-    memoFilter.addEventListener('change', (e) => {
-      window.filterSalesMemos(e.target.value);
-    });
-  }
 }
 
 let allMemos = [];
@@ -1152,21 +1122,18 @@ window.refreshSalesAnalytics = function() {
 // ========================================================
 let repModalState = {
   rep: '',
-  tab: 'biz',      // 'biz' | 'stock' | 'customers'
-  bizFilter: 'ALL', // 'ALL' | 'COMMISSION' | 'DOMESTIC'
+  tab: 'biz',       // 'biz' | 'stock' | 'customers'
+  bizFilter: 'ALL', // 'ALL' | 'DOMESTIC' | 'COMMISSION'
   search: '',
-  shipments: [],
+  domesticSales: [],
+  commShipments: [],
   unpaidDom: [],
   loading: false
 };
 
-function escRep(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
 window.openSalesRepPortfolioModal = async function(salesRep) {
   const rep = toEnglishSalesName(salesRep || '') || 'BSK';
-  repModalState = { rep, tab: 'biz', bizFilter: 'ALL', search: '', shipments: [], unpaidDom: [], loading: true };
+  repModalState = { rep, tab: 'biz', bizFilter: 'ALL', search: '', domesticSales: [], commShipments: [], unpaidDom: [], loading: true };
 
   let modal = document.getElementById('salesRepPortfolioModal');
   if (!modal) {
@@ -1185,12 +1152,12 @@ window.openSalesRepPortfolioModal = async function(salesRep) {
   const endDate = isMonthly ? `${currentYear}-${moPad}-31` : `${currentYear}-12-31`;
 
   try {
-    const [shipRes, unpaidRes] = await Promise.all([
-      fetch(`/api/shipped-info?start_date=${startDate}&end_date=${endDate}&query=${encodeURIComponent(rep)}&limit=1200`).then(r => r.json()).catch(() => ({ items: [] })),
+    const [detailRes, unpaidRes] = await Promise.all([
+      fetch(`/api/analytics/rep-detail?sales_rep=${encodeURIComponent(rep)}&start_date=${startDate}&end_date=${endDate}&limit=600`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/unpaid?sales_rep=${encodeURIComponent(rep)}&limit=500`).then(r => r.json()).catch(() => ({ items: [] }))
     ]);
-    const allShips = Array.isArray(shipRes.items) ? shipRes.items : [];
-    repModalState.shipments = allShips.filter(it => toEnglishSalesName(it.sales_rep || '') === rep);
+    repModalState.domesticSales = Array.isArray(detailRes.domestic_sales) ? detailRes.domestic_sales : [];
+    repModalState.commShipments = Array.isArray(detailRes.commission_shipments) ? detailRes.commission_shipments : [];
     const rawUnpaid = Array.isArray(unpaidRes.items) ? unpaidRes.items : (Array.isArray(unpaidRes.data) ? unpaidRes.data : []);
     repModalState.unpaidDom = rawUnpaid.filter(u => toEnglishSalesName(u.sales_rep || u.sales || '') === rep && u.pay_status !== '수금완료');
   } catch (e) {
@@ -1239,13 +1206,49 @@ function renderSalesRepPortfolioModal() {
   const modal = document.getElementById('salesRepPortfolioModal');
   if (!modal) return;
 
-  const { rep, tab, bizFilter, search, shipments, unpaidDom, loading } = repModalState;
+  const { rep, tab, bizFilter, search, domesticSales, commShipments, unpaidDom, loading } = repModalState;
   const fx = (typeof window.getLiveFxRate === 'function' ? window.getLiveFxRate() : window.rawFxRate) || 1380;
   const periodLabel = currentMonth !== 'all' ? `${currentYear}년 ${currentMonth}월` : `${currentYear}년 연간 누적(YTD)`;
 
   const repStats = lastMergedSalesReps.find(s => s.sales_rep === rep) || {
     sales_rep: rep, billing: 0, margin: 0, margin_rate: 0, shipment_count: 0, comm_usd: 0, comm_krw: 0, comm_count: 0, total_profit: 0
   };
+
+  // Domestic(DReportFile) + Commission(ShippingFile) 통합 비즈니스 내역 (최신순 정렬)
+  const unifiedBizRows = [
+    ...domesticSales.map(d => ({
+      biz_type: 'DOMESTIC',
+      date: d.ship_date || '',
+      customer: d.customer || '기타',
+      maker: d.maker || 'OTHERS',
+      part_no: d.part_no || '-',
+      po_no: d.po_no || '',
+      qty: Number(d.ship_qty) || 0,
+      unit_str: `₩${Math.round(Number(d.out_up_krw) || 0).toLocaleString()}`,
+      amt_str: `₩${Math.round(Number(d.out_amt_krw) || 0).toLocaleString()}`,
+      profit_krw: Math.round(Number(d.margin_krw) || 0),
+      profit_str: `₩${Math.round(Number(d.margin_krw) || 0).toLocaleString()}`,
+      rate_str: `${Number(d.margin_rate || 0).toFixed(1)}%`,
+      status_str: '국내출고',
+      awb_no: ''
+    })),
+    ...commShipments.map(c => ({
+      biz_type: 'COMMISSION',
+      date: c.ship_date || '',
+      customer: c.customer || '기타',
+      maker: c.maker || 'OTHERS',
+      part_no: c.part_no || '-',
+      po_no: c.po_no || c.invoice_no || '',
+      qty: Number(c.ship_qty) || 0,
+      unit_str: `$${(Number(c.net_up) || 0).toFixed(4)}`,
+      amt_str: `$${(Number(c.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      profit_krw: Math.round((Number(c.comm_amt) || 0) * fx),
+      profit_str: `$${(Number(c.comm_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (≈₩${Math.round((Number(c.comm_amt) || 0) * fx).toLocaleString()})`,
+      rate_str: `${(Number(c.comm_rate) || 0).toFixed(2)}%`,
+      status_str: c.comm_status || '미입금',
+      awb_no: c.awb_no || ''
+    }))
+  ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   // 담당 보유 재고 (window.cachedItems 실시간 연동)
   const allInv = Array.isArray(window.cachedItems) ? window.cachedItems : [];
@@ -1264,99 +1267,104 @@ function renderSalesRepPortfolioModal() {
 
   // 미수금 요약 (Domestic 미수 + Commission 미입금)
   const unpaidDomKrw = unpaidDom.reduce((s, u) => s + (Number(u.amount_vat ?? u.out_amt) || 0), 0);
-  const commShipments = shipments.filter(s => (Number(s.comm_amt) || 0) > 0 || s.biz_type === 'COMMISSION');
   const unpaidCommUsd = commShipments.filter(s => s.comm_status === '미입금').reduce((s, r) => s + (Number(r.comm_amt) || 0), 0);
 
-  // 고객사별 집계
+  // 고객사별 통합 집계 (Domestic 매출/마진 + Commission)
   const custMap = {};
-  shipments.forEach(s => {
-    const c = (s.customer || '기타').trim();
-    if (!custMap[c]) custMap[c] = { customer: c, count: 0, ship_usd: 0, comm_usd: 0, makers: new Set() };
+  domesticSales.forEach(d => {
+    const c = (d.customer || '기타').trim();
+    if (!custMap[c]) custMap[c] = { customer: c, count: 0, dom_krw: 0, mgn_krw: 0, comm_usd: 0, makers: new Set() };
     custMap[c].count += 1;
-    custMap[c].ship_usd += Number(s.ship_amt) || 0;
+    custMap[c].dom_krw += Number(d.out_amt_krw) || 0;
+    custMap[c].mgn_krw += Number(d.margin_krw) || 0;
+    if (d.maker) custMap[c].makers.add(d.maker);
+  });
+  commShipments.forEach(s => {
+    const c = (s.customer || '기타').trim();
+    if (!custMap[c]) custMap[c] = { customer: c, count: 0, dom_krw: 0, mgn_krw: 0, comm_usd: 0, makers: new Set() };
+    custMap[c].count += 1;
     custMap[c].comm_usd += Number(s.comm_amt) || 0;
     if (s.maker) custMap[c].makers.add(s.maker);
   });
   const topRepCustomers = Object.values(custMap)
-    .map(c => ({ ...c, makers: Array.from(c.makers).join(', ') }))
-    .sort((a, b) => (b.comm_usd * 20 + b.ship_usd) - (a.comm_usd * 20 + a.ship_usd));
+    .map(c => ({ ...c, total_profit_krw: c.mgn_krw + Math.round(c.comm_usd * fx), makers: Array.from(c.makers).join(', ') }))
+    .sort((a, b) => b.total_profit_krw - a.total_profit_krw);
 
   const q = search.trim().toLowerCase();
 
   // 탭별 본문 렌더링
   let tabBodyHtml = '';
   if (tab === 'biz') {
-    const filteredShips = shipments.filter(it => {
-      const isComm = (Number(it.comm_amt) || 0) > 0 || it.biz_type === 'COMMISSION';
-      if (bizFilter === 'COMMISSION' && !isComm) return false;
-      if (bizFilter === 'DOMESTIC' && isComm) return false;
+    const filteredBiz = unifiedBizRows.filter(it => {
+      if (bizFilter === 'COMMISSION' && it.biz_type !== 'COMMISSION') return false;
+      if (bizFilter === 'DOMESTIC' && it.biz_type !== 'DOMESTIC') return false;
       if (q) {
-        const hay = `${it.customer || ''} ${it.real_cust || ''} ${it.part_no || ''} ${it.po_no || ''} ${it.maker || ''} ${it.invoice_no || ''}`.toLowerCase();
+        const hay = `${it.customer} ${it.part_no} ${it.po_no} ${it.maker}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-    const sumShipUsd = filteredShips.reduce((s, r) => s + (Number(r.ship_amt) || 0), 0);
-    const sumCommUsd = filteredShips.reduce((s, r) => s + (Number(r.comm_amt) || 0), 0);
+    const sumProfitKrw = filteredBiz.reduce((s, r) => s + (r.profit_krw || 0), 0);
 
     tabBodyHtml = `
       <div class="space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-slate-200 text-xs">
           <div class="flex items-center gap-1">
-            <button type="button" onclick="window.setSalesRepBizFilter('ALL')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">전체 (${shipments.length})</button>
-            <button type="button" onclick="window.setSalesRepBizFilter('COMMISSION')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'COMMISSION' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">💎 Commission (${commShipments.length})</button>
-            <button type="button" onclick="window.setSalesRepBizFilter('DOMESTIC')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'DOMESTIC' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">🏢 Domestic (${shipments.length - commShipments.length})</button>
+            <button type="button" onclick="window.setSalesRepBizFilter('ALL')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">전체 (${unifiedBizRows.length})</button>
+            <button type="button" onclick="window.setSalesRepBizFilter('DOMESTIC')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'DOMESTIC' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">🏢 Domestic 매출·마진 (${domesticSales.length})</button>
+            <button type="button" onclick="window.setSalesRepBizFilter('COMMISSION')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'COMMISSION' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">💎 Commission 직송 (${commShipments.length})</button>
           </div>
           <div class="flex items-center gap-3 text-[11px] font-mono font-bold text-slate-700">
-            <span>선적합계: <strong class="text-blue-700">$${sumShipUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-            <span>💎 커미션합계: <strong class="text-violet-700">$${sumCommUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+            <span>조회 건수: <strong>${filteredBiz.length.toLocaleString()}건</strong></span>
+            <span>🏆 조회 수익합계(마진+커미션): <strong class="text-violet-800">₩${sumProfitKrw.toLocaleString()}</strong></span>
           </div>
         </div>
 
-        ${loading ? `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ [${escRep(rep)}] 담당 출하·커미션 원장을 불러오는 중입니다...</div>` : filteredShips.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">조회된 출하·비즈니스 내역이 없습니다.</div>` : `
+        ${loading ? `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ [${escRep(rep)}] 담당 Domestic 매출·마진 및 Commission 원장을 불러오는 중입니다...</div>` : filteredBiz.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">조회된 비즈니스 내역이 없습니다.</div>` : `
           <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-100 text-slate-700 font-bold text-[11px] border-b border-slate-200 sticky top-0 z-10">
                 <tr>
                   <th class="py-2 px-2 text-center w-16">구분</th>
-                  <th class="py-2 px-2 text-center w-22">선적일</th>
-                  <th class="py-2 px-2">고객사 / 실수요처</th>
+                  <th class="py-2 px-2 text-center w-22">일자</th>
+                  <th class="py-2 px-2">고객사</th>
                   <th class="py-2 px-2 text-center w-20">제조사</th>
                   <th class="py-2 px-2">품번 (PartNo)</th>
-                  <th class="py-2 px-2">PO / Invoice</th>
+                  <th class="py-2 px-2">PO / 번호</th>
                   <th class="py-2 px-2 text-right">수량</th>
-                  <th class="py-2 px-2 text-right">단가($)</th>
-                  <th class="py-2 px-2 text-right">선적액($)</th>
-                  <th class="py-2 px-2 text-right">💎 커미션($/%)</th>
-                  <th class="py-2 px-2 text-center">정산/추적</th>
+                  <th class="py-2 px-2 text-right">판매단가</th>
+                  <th class="py-2 px-2 text-right">매출/선적액</th>
+                  <th class="py-2 px-2 text-right">🏆 마진 / 💎 커미션</th>
+                  <th class="py-2 px-2 text-center">상태/추적</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 text-[11px]">
-                ${filteredShips.slice(0, 250).map(r => {
-                  const isComm = (Number(r.comm_amt) || 0) > 0 || r.biz_type === 'COMMISSION';
+                ${filteredBiz.slice(0, 300).map(r => {
+                  const isComm = r.biz_type === 'COMMISSION';
                   return `
                     <tr class="hover:bg-slate-50 ${isComm ? 'bg-violet-50/15' : ''}">
                       <td class="py-1.5 px-2 text-center whitespace-nowrap">
                         ${isComm
                           ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-violet-100 text-violet-800 border border-violet-200">💎 COMM</span>`
-                          : `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 text-sky-700 border border-sky-200">🏢 DOM</span>`}
+                          : `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">🏢 DOM</span>`}
                       </td>
-                      <td class="py-1.5 px-2 text-center font-mono text-slate-600 whitespace-nowrap">${escRep(r.ship_date)}</td>
-                      <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[160px]" title="${escRep(r.customer)}">${escRep(r.customer)}${r.real_cust ? `<div class="text-[9px] text-indigo-700 font-semibold">${escRep(r.real_cust)}</div>` : ''}</td>
+                      <td class="py-1.5 px-2 text-center font-mono text-slate-600 whitespace-nowrap">${escRep(r.date)}</td>
+                      <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[160px]" title="${escRep(r.customer)}">${escRep(r.customer)}</td>
                       <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escRep(r.maker)}</td>
                       <td class="py-1.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
                         <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${escRep(r.part_no)}')" class="hover:text-indigo-700 hover:underline cursor-pointer" title="과거 단가·커미션 이력 보기">📈 ${escRep(r.part_no)}</button>
                       </td>
-                      <td class="py-1.5 px-2 font-mono text-[10px] text-slate-600 truncate max-w-[130px]">${escRep(r.po_no || '-')}${r.invoice_no ? `<div class="text-[9px] text-slate-400">${escRep(r.invoice_no)}</div>` : ''}</td>
-                      <td class="py-1.5 px-2 text-right font-mono font-bold text-slate-900 whitespace-nowrap">${(Number(r.ship_qty) || 0).toLocaleString()}</td>
-                      <td class="py-1.5 px-2 text-right font-mono text-blue-700 whitespace-nowrap">$${(Number(r.net_up) || 0).toFixed(4)}</td>
-                      <td class="py-1.5 px-2 text-right font-mono font-black text-slate-900 whitespace-nowrap">$${(Number(r.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td class="py-1.5 px-2 font-mono text-[10px] text-slate-600 truncate max-w-[125px]">${escRep(r.po_no || '-')}</td>
+                      <td class="py-1.5 px-2 text-right font-mono font-bold text-slate-900 whitespace-nowrap">${r.qty.toLocaleString()}</td>
+                      <td class="py-1.5 px-2 text-right font-mono text-blue-700 whitespace-nowrap">${escRep(r.unit_str)}</td>
+                      <td class="py-1.5 px-2 text-right font-mono font-black text-slate-900 whitespace-nowrap">${escRep(r.amt_str)}</td>
                       <td class="py-1.5 px-2 text-right font-mono whitespace-nowrap">
-                        ${isComm ? `<div class="font-black text-violet-700">$${(Number(r.comm_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div><div class="text-[9px] text-violet-500 font-bold">${(Number(r.comm_rate) || 0).toFixed(2)}%</div>` : `<span class="text-slate-300">-</span>`}
+                        <div class="font-black ${isComm ? 'text-violet-700' : 'text-emerald-700'}">${escRep(r.profit_str)}</div>
+                        <div class="text-[9px] ${isComm ? 'text-violet-500' : 'text-emerald-600'} font-bold">${escRep(r.rate_str)}</div>
                       </td>
                       <td class="py-1.5 px-2 text-center whitespace-nowrap">
                         <div class="inline-flex items-center gap-1">
-                          ${isComm ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.comm_status === '미입금' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">${escRep(r.comm_status)}</span>` : ''}
+                          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.status_str === '미입금' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-slate-100 text-slate-700'}">${escRep(r.status_str)}</span>
                           ${r.awb_no ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escRep(r.awb_no)}')" class="px-1.5 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded text-[9px] font-bold cursor-pointer" title="배송 조회">🚚</button>` : ''}
                         </div>
                       </td>
@@ -1461,8 +1469,11 @@ function renderSalesRepPortfolioModal() {
                     <div class="text-[10px] text-slate-500 truncate">${escRep(c.makers)} · ${c.count}건 출하</div>
                   </div>
                   <div class="text-right font-mono shrink-0">
-                    <div class="font-bold text-slate-800">$${Math.round(c.ship_usd).toLocaleString()}</div>
-                    ${c.comm_usd > 0 ? `<div class="text-[10px] font-black text-violet-700">💎 $${c.comm_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>` : ''}
+                    <div class="font-black text-slate-900">🏆 ₩${Math.round(c.total_profit_krw).toLocaleString()}</div>
+                    <div class="text-[10px] text-slate-500">
+                      ${c.mgn_krw > 0 ? `<span class="text-emerald-700 font-bold">마진 ₩${Math.round(c.mgn_krw / 10000).toLocaleString()}만</span>` : ''}
+                      ${c.comm_usd > 0 ? `<span class="text-violet-700 font-black ml-1">💎 $${c.comm_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : ''}
+                    </div>
                   </div>
                 </div>
               `).join('')}
@@ -1570,7 +1581,7 @@ function renderSalesRepPortfolioModal() {
       <!-- 서브탭 & 검색 바 -->
       <div class="px-4 py-2 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div class="flex items-center gap-1">
-          <button type="button" onclick="window.switchSalesRepModalTab('biz')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'biz' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">🚚 진행 비즈니스 내역 (${shipments.length})</button>
+          <button type="button" onclick="window.switchSalesRepModalTab('biz')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'biz' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">🚚 진행 비즈니스 내역 (${unifiedBizRows.length})</button>
           <button type="button" onclick="window.switchSalesRepModalTab('stock')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'stock' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">📦 담당 보유 재고 (${totalStockLotCount})</button>
           <button type="button" onclick="window.switchSalesRepModalTab('customers')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'customers' ? 'bg-violet-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">🏢 주요 고객사 &amp; 미수/메모 (${topRepCustomers.length})</button>
         </div>

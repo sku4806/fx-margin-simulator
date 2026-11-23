@@ -123,7 +123,7 @@ function getKindBadge(kindRaw) {
 }
 
 import { sbClient } from './supabase.js';
-import { syncShipmentLifecycle } from './shipments.js?v=20261119_fast';
+import { syncShipmentLifecycle } from './shipments.js?v=20261123_opt2';
 
 let cachedItems = [];
 const INV_CACHE_KEY = 'bsk_inv_snapshot_v1';

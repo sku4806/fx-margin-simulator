@@ -1601,6 +1601,46 @@ def register_crud_routes(app):
     def api_unsettle_commission(idx: str):
         return unsettle_commission_record(idx)
 
+    # 👤 영업 담당자별 포트폴리오 상세 조회 (Domestic 매출·마진 DReportFile + Commission 선적 ShippingFile 통합)
+    @app.get("/api/analytics/rep-detail")
+    def api_sales_rep_detail(
+        sales_rep: str,
+        start_date: Optional[str] = "2026-01-01",
+        end_date: Optional[str] = "2026-12-31",
+        limit: int = 500
+    ):
+        import legacy_mssql
+        target = legacy_mssql.normalize_sales_rep(sales_rep)
+        dom_sales = legacy_mssql.query_rep_domestic_sales(
+            sales_rep=target, start_date=start_date, end_date=end_date, limit=limit
+        )
+        comm_rows = legacy_mssql.query_shipped_info(
+            start_date=start_date, end_date=end_date, search_query=target, biz_type="COMMISSION", limit=limit
+        )
+        if not comm_rows:
+            bundle_ships = legacy_mssql._load_phase1_bundle("shipped_info.json") or []
+            s_dt = (start_date or "")[:10]
+            e_dt = (end_date or "")[:10]
+            for it in bundle_ships:
+                if legacy_mssql.normalize_sales_rep(it.get("sales_rep")) != target:
+                    continue
+                if (it.get("comm_amt") or 0) <= 0 and it.get("biz_type") != "COMMISSION":
+                    continue
+                dt = (it.get("ship_date") or "")[:10]
+                if s_dt and dt and dt < s_dt:
+                    continue
+                if e_dt and dt and dt > e_dt:
+                    continue
+                comm_rows.append(it)
+        else:
+            comm_rows = [it for it in comm_rows if legacy_mssql.normalize_sales_rep(it.get("sales_rep")) == target]
+        return {
+            "status": "success",
+            "sales_rep": target,
+            "domestic_sales": dom_sales,
+            "commission_shipments": comm_rows,
+        }
+
     # 8. Phase 2 확장 조회 API (수입 통관·B/L·부대비용 DchargeFile & 해외 송금 FinanceFile)
     @app.get("/api/import-charges")
     def api_list_import_charges(query: Optional[str] = None, supp: Optional[str] = None, limit: int = 300):
