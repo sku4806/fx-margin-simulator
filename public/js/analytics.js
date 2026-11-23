@@ -9,6 +9,7 @@
 import { toEnglishSalesName } from './modules/utils.js';
 
 let cachedAnalytics = null;
+let lastMergedSalesReps = [];
 let currentYear = "2026";
 let currentMonth = "all"; // "all" (연간 누적) 또는 "1".."12"
 let analyticsChartMode = "profit"; // "profit" (마진+커미션 통합 스택) | "billing" (매출액 추이)
@@ -156,6 +157,7 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
   const mergedSalesReps = Object.values(mergedSalesMap)
     .map(s => ({ ...s, total_profit: s.margin + s.comm_krw }))
     .sort((x, y) => y.total_profit - x.total_profit);
+  lastMergedSalesReps = mergedSalesReps;
 
   // 제조사별 Domestic + Commission 통합 목록 (커미션 전용 제조사 SMI/Giantec 등도 포함)
   const commByMakerMap = {};
@@ -862,11 +864,12 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
               const hasComm = s.comm_usd > 0;
               const safeRep = String(s.sales_rep || '').replace(/'/g, "\\'");
               return `
-                <div class="bg-slate-50 hover:bg-violet-50/50 p-2.5 rounded-lg border ${hasComm ? 'border-violet-200/80' : 'border-slate-200'} space-y-1 cursor-pointer transition-colors" onclick="window.jumpToShipmentsFiltered && window.jumpToShipmentsFiltered({ query: '${safeRep}', year: '${currentYear}' })" title="클릭하여 [${s.sales_rep}] 담당 출하 원장 바로 보기">
+                <div class="bg-slate-50 hover:bg-violet-50/60 p-2.5 rounded-lg border ${hasComm ? 'border-violet-200/80' : 'border-slate-200'} space-y-1 cursor-pointer transition-all hover:shadow-xs group" onclick="window.openSalesRepPortfolioModal && window.openSalesRepPortfolioModal('${safeRep}')" title="클릭하여 [${s.sales_rep}] 개인별 비즈니스 내역 및 재고 현황 상세 팝업 보기">
                   <div class="flex items-center justify-between gap-2">
                     <span class="font-black text-indigo-950 flex items-center gap-1">
                       <span class="w-2 h-2 rounded-full ${hasComm ? 'bg-violet-600' : 'bg-indigo-600'}"></span>
                       ${s.sales_rep}
+                      <span class="text-[9px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded opacity-80 group-hover:opacity-100">상세 팝업 ↗</span>
                     </span>
                     <span class="font-black font-mono text-slate-900 text-xs" title="통합 총수익 = 국내마진 ₩${Math.round(s.margin).toLocaleString()} + 커미션 ₩${s.comm_krw.toLocaleString()}">
                       🏆 ₩${Math.round(s.total_profit).toLocaleString()}
@@ -1143,3 +1146,441 @@ window.refreshSalesAnalytics = function() {
     renderAnalyticsView('analyticsSection');
   });
 };
+
+// ========================================================
+// 👤 영업 담당자별 비즈니스 내역 & 보유 재고 종합 포트폴리오 팝업 모달
+// ========================================================
+let repModalState = {
+  rep: '',
+  tab: 'biz',      // 'biz' | 'stock' | 'customers'
+  bizFilter: 'ALL', // 'ALL' | 'COMMISSION' | 'DOMESTIC'
+  search: '',
+  shipments: [],
+  unpaidDom: [],
+  loading: false
+};
+
+function escRep(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+window.openSalesRepPortfolioModal = async function(salesRep) {
+  const rep = toEnglishSalesName(salesRep || '') || 'BSK';
+  repModalState = { rep, tab: 'biz', bizFilter: 'ALL', search: '', shipments: [], unpaidDom: [], loading: true };
+
+  let modal = document.getElementById('salesRepPortfolioModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'salesRepPortfolioModal';
+    modal.className = 'fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[99994] flex items-center justify-center p-2 sm:p-4 overflow-hidden';
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+    document.body.appendChild(modal);
+  }
+  modal.classList.remove('hidden');
+  renderSalesRepPortfolioModal();
+
+  const isMonthly = currentMonth !== 'all';
+  const moPad = isMonthly ? String(parseInt(currentMonth, 10)).padStart(2, '0') : '01';
+  const startDate = isMonthly ? `${currentYear}-${moPad}-01` : `${currentYear}-01-01`;
+  const endDate = isMonthly ? `${currentYear}-${moPad}-31` : `${currentYear}-12-31`;
+
+  try {
+    const [shipRes, unpaidRes] = await Promise.all([
+      fetch(`/api/shipped-info?start_date=${startDate}&end_date=${endDate}&query=${encodeURIComponent(rep)}&limit=1200`).then(r => r.json()).catch(() => ({ items: [] })),
+      fetch(`/api/unpaid?sales_rep=${encodeURIComponent(rep)}&limit=500`).then(r => r.json()).catch(() => ({ items: [] }))
+    ]);
+    const allShips = Array.isArray(shipRes.items) ? shipRes.items : [];
+    repModalState.shipments = allShips.filter(it => toEnglishSalesName(it.sales_rep || '') === rep);
+    const rawUnpaid = Array.isArray(unpaidRes.items) ? unpaidRes.items : (Array.isArray(unpaidRes.data) ? unpaidRes.data : []);
+    repModalState.unpaidDom = rawUnpaid.filter(u => toEnglishSalesName(u.sales_rep || u.sales || '') === rep && u.pay_status !== '수금완료');
+  } catch (e) {
+    console.warn('담당자 포트폴리오 상세 로드 예외:', e);
+  } finally {
+    repModalState.loading = false;
+    renderSalesRepPortfolioModal();
+  }
+};
+
+window.switchSalesRepModalTab = function(tab) {
+  repModalState.tab = tab;
+  renderSalesRepPortfolioModal();
+};
+
+window.setSalesRepBizFilter = function(f) {
+  repModalState.bizFilter = f;
+  renderSalesRepPortfolioModal();
+};
+
+window.setSalesRepModalSearch = function(val) {
+  repModalState.search = val || '';
+  renderSalesRepPortfolioModal();
+  const inp = document.getElementById('repModalSearchInput');
+  if (inp) {
+    inp.focus();
+    const len = inp.value.length;
+    try { inp.setSelectionRange(len, len); } catch (_) {}
+  }
+};
+
+window.jumpFromRepModalToInventory = function(rep, itemId = null) {
+  document.getElementById('salesRepPortfolioModal')?.classList.add('hidden');
+  document.getElementById('tabSales')?.click();
+  const salesFilter = document.getElementById('salesFilter');
+  if (salesFilter) {
+    salesFilter.value = rep;
+    salesFilter.dispatchEvent(new Event('change'));
+  }
+  if (itemId && typeof window.loadFormFromItem === 'function') {
+    setTimeout(() => window.loadFormFromItem(itemId), 120);
+  }
+};
+
+function renderSalesRepPortfolioModal() {
+  const modal = document.getElementById('salesRepPortfolioModal');
+  if (!modal) return;
+
+  const { rep, tab, bizFilter, search, shipments, unpaidDom, loading } = repModalState;
+  const fx = (typeof window.getLiveFxRate === 'function' ? window.getLiveFxRate() : window.rawFxRate) || 1380;
+  const periodLabel = currentMonth !== 'all' ? `${currentYear}년 ${currentMonth}월` : `${currentYear}년 연간 누적(YTD)`;
+
+  const repStats = lastMergedSalesReps.find(s => s.sales_rep === rep) || {
+    sales_rep: rep, billing: 0, margin: 0, margin_rate: 0, shipment_count: 0, comm_usd: 0, comm_krw: 0, comm_count: 0, total_profit: 0
+  };
+
+  // 담당 보유 재고 (window.cachedItems 실시간 연동)
+  const allInv = Array.isArray(window.cachedItems) ? window.cachedItems : [];
+  const repStocks = allInv.filter(it => toEnglishSalesName(it.owner || it.sales || '') === rep && (Number(it.stock) || 0) > 0);
+  const totalStockLotCount = repStocks.length;
+  const totalStockQty = repStocks.reduce((s, it) => s + (Number(it.stock) || 0), 0);
+  const totalStockUsd = repStocks.reduce((s, it) => s + ((Number(it.stock) || 0) * (Number(it.unitUsd ?? it.unit_usd) || 0)), 0);
+  const totalStockKrw = repStocks.reduce((s, it) => s + Math.round((Number(it.stock) || 0) * (Number(it.unitUsd ?? it.unit_usd) || 0) * (Number(it.shipFx ?? it.ship_fx) || fx)), 0);
+  const totalAvailQty = repStocks.reduce((s, it) => {
+    const stk = Number(it.stock) || 0;
+    const rawArr = Number(it.arrangedQty ?? it.arranged_qty) || 0;
+    const isExp = it.orderStatus === '배정완료' || it.orderStatus === '배정요청';
+    const arr = rawArr > 0 ? Math.min(stk, rawArr) : (isExp ? stk : 0);
+    return s + Math.max(0, stk - arr);
+  }, 0);
+
+  // 미수금 요약 (Domestic 미수 + Commission 미입금)
+  const unpaidDomKrw = unpaidDom.reduce((s, u) => s + (Number(u.amount_vat ?? u.out_amt) || 0), 0);
+  const commShipments = shipments.filter(s => (Number(s.comm_amt) || 0) > 0 || s.biz_type === 'COMMISSION');
+  const unpaidCommUsd = commShipments.filter(s => s.comm_status === '미입금').reduce((s, r) => s + (Number(r.comm_amt) || 0), 0);
+
+  // 고객사별 집계
+  const custMap = {};
+  shipments.forEach(s => {
+    const c = (s.customer || '기타').trim();
+    if (!custMap[c]) custMap[c] = { customer: c, count: 0, ship_usd: 0, comm_usd: 0, makers: new Set() };
+    custMap[c].count += 1;
+    custMap[c].ship_usd += Number(s.ship_amt) || 0;
+    custMap[c].comm_usd += Number(s.comm_amt) || 0;
+    if (s.maker) custMap[c].makers.add(s.maker);
+  });
+  const topRepCustomers = Object.values(custMap)
+    .map(c => ({ ...c, makers: Array.from(c.makers).join(', ') }))
+    .sort((a, b) => (b.comm_usd * 20 + b.ship_usd) - (a.comm_usd * 20 + a.ship_usd));
+
+  const q = search.trim().toLowerCase();
+
+  // 탭별 본문 렌더링
+  let tabBodyHtml = '';
+  if (tab === 'biz') {
+    const filteredShips = shipments.filter(it => {
+      const isComm = (Number(it.comm_amt) || 0) > 0 || it.biz_type === 'COMMISSION';
+      if (bizFilter === 'COMMISSION' && !isComm) return false;
+      if (bizFilter === 'DOMESTIC' && isComm) return false;
+      if (q) {
+        const hay = `${it.customer || ''} ${it.real_cust || ''} ${it.part_no || ''} ${it.po_no || ''} ${it.maker || ''} ${it.invoice_no || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    const sumShipUsd = filteredShips.reduce((s, r) => s + (Number(r.ship_amt) || 0), 0);
+    const sumCommUsd = filteredShips.reduce((s, r) => s + (Number(r.comm_amt) || 0), 0);
+
+    tabBodyHtml = `
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-slate-200 text-xs">
+          <div class="flex items-center gap-1">
+            <button type="button" onclick="window.setSalesRepBizFilter('ALL')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">전체 (${shipments.length})</button>
+            <button type="button" onclick="window.setSalesRepBizFilter('COMMISSION')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'COMMISSION' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">💎 Commission (${commShipments.length})</button>
+            <button type="button" onclick="window.setSalesRepBizFilter('DOMESTIC')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'DOMESTIC' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">🏢 Domestic (${shipments.length - commShipments.length})</button>
+          </div>
+          <div class="flex items-center gap-3 text-[11px] font-mono font-bold text-slate-700">
+            <span>선적합계: <strong class="text-blue-700">$${sumShipUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+            <span>💎 커미션합계: <strong class="text-violet-700">$${sumCommUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+          </div>
+        </div>
+
+        ${loading ? `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ [${escRep(rep)}] 담당 출하·커미션 원장을 불러오는 중입니다...</div>` : filteredShips.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">조회된 출하·비즈니스 내역이 없습니다.</div>` : `
+          <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-100 text-slate-700 font-bold text-[11px] border-b border-slate-200 sticky top-0 z-10">
+                <tr>
+                  <th class="py-2 px-2 text-center w-16">구분</th>
+                  <th class="py-2 px-2 text-center w-22">선적일</th>
+                  <th class="py-2 px-2">고객사 / 실수요처</th>
+                  <th class="py-2 px-2 text-center w-20">제조사</th>
+                  <th class="py-2 px-2">품번 (PartNo)</th>
+                  <th class="py-2 px-2">PO / Invoice</th>
+                  <th class="py-2 px-2 text-right">수량</th>
+                  <th class="py-2 px-2 text-right">단가($)</th>
+                  <th class="py-2 px-2 text-right">선적액($)</th>
+                  <th class="py-2 px-2 text-right">💎 커미션($/%)</th>
+                  <th class="py-2 px-2 text-center">정산/추적</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 text-[11px]">
+                ${filteredShips.slice(0, 250).map(r => {
+                  const isComm = (Number(r.comm_amt) || 0) > 0 || r.biz_type === 'COMMISSION';
+                  return `
+                    <tr class="hover:bg-slate-50 ${isComm ? 'bg-violet-50/15' : ''}">
+                      <td class="py-1.5 px-2 text-center whitespace-nowrap">
+                        ${isComm
+                          ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-violet-100 text-violet-800 border border-violet-200">💎 COMM</span>`
+                          : `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 text-sky-700 border border-sky-200">🏢 DOM</span>`}
+                      </td>
+                      <td class="py-1.5 px-2 text-center font-mono text-slate-600 whitespace-nowrap">${escRep(r.ship_date)}</td>
+                      <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[160px]" title="${escRep(r.customer)}">${escRep(r.customer)}${r.real_cust ? `<div class="text-[9px] text-indigo-700 font-semibold">${escRep(r.real_cust)}</div>` : ''}</td>
+                      <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escRep(r.maker)}</td>
+                      <td class="py-1.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
+                        <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${escRep(r.part_no)}')" class="hover:text-indigo-700 hover:underline cursor-pointer" title="과거 단가·커미션 이력 보기">📈 ${escRep(r.part_no)}</button>
+                      </td>
+                      <td class="py-1.5 px-2 font-mono text-[10px] text-slate-600 truncate max-w-[130px]">${escRep(r.po_no || '-')}${r.invoice_no ? `<div class="text-[9px] text-slate-400">${escRep(r.invoice_no)}</div>` : ''}</td>
+                      <td class="py-1.5 px-2 text-right font-mono font-bold text-slate-900 whitespace-nowrap">${(Number(r.ship_qty) || 0).toLocaleString()}</td>
+                      <td class="py-1.5 px-2 text-right font-mono text-blue-700 whitespace-nowrap">$${(Number(r.net_up) || 0).toFixed(4)}</td>
+                      <td class="py-1.5 px-2 text-right font-mono font-black text-slate-900 whitespace-nowrap">$${(Number(r.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td class="py-1.5 px-2 text-right font-mono whitespace-nowrap">
+                        ${isComm ? `<div class="font-black text-violet-700">$${(Number(r.comm_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div><div class="text-[9px] text-violet-500 font-bold">${(Number(r.comm_rate) || 0).toFixed(2)}%</div>` : `<span class="text-slate-300">-</span>`}
+                      </td>
+                      <td class="py-1.5 px-2 text-center whitespace-nowrap">
+                        <div class="inline-flex items-center gap-1">
+                          ${isComm ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.comm_status === '미입금' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">${escRep(r.comm_status)}</span>` : ''}
+                          ${r.awb_no ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escRep(r.awb_no)}')" class="px-1.5 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded text-[9px] font-bold cursor-pointer" title="배송 조회">🚚</button>` : ''}
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    `;
+  } else if (tab === 'stock') {
+    const filteredStocks = repStocks.filter(it => {
+      if (!q) return true;
+      const hay = `${it.partName || it.part_name || ''} ${it.maker || ''} ${it.customer || ''} ${it.poNo || it.po_no || ''} ${it.invoiceNo || it.invoice_no || ''} ${it.memo || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+    const todayMs = Date.now();
+
+    tabBodyHtml = filteredStocks.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">[${escRep(rep)}] 담당으로 보유 중인 재고가 없습니다.</div>` : `
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-emerald-50 text-emerald-950 font-bold text-[11px] border-b border-emerald-200 sticky top-0 z-10">
+            <tr>
+              <th class="py-2 px-2.5 text-center w-16">상태</th>
+              <th class="py-2 px-2.5">계약처 / 비고</th>
+              <th class="py-2 px-2.5 text-center w-20">제조사</th>
+              <th class="py-2 px-2.5">품번 (PartNo)</th>
+              <th class="py-2 px-2.5 text-right">보유수량</th>
+              <th class="py-2 px-2.5 text-right">배정 / 가용</th>
+              <th class="py-2 px-2.5 text-right">매입단가($)</th>
+              <th class="py-2 px-2.5 text-right">재고금액($ / ₩)</th>
+              <th class="py-2 px-2.5 text-center">입고일 (보유일)</th>
+              <th class="py-2 px-2.5 text-center">바로가기</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-[11px]">
+            ${filteredStocks.map(it => {
+              const stk = Number(it.stock) || 0;
+              const rawArr = Number(it.arrangedQty ?? it.arranged_qty) || 0;
+              const isExp = it.orderStatus === '배정완료' || it.orderStatus === '배정요청';
+              const arr = rawArr > 0 ? Math.min(stk, rawArr) : (isExp ? stk : 0);
+              const avail = Math.max(0, stk - arr);
+              const uUsd = Number(it.unitUsd ?? it.unit_usd) || 0;
+              const sFx = Number(it.shipFx ?? it.ship_fx) || fx;
+              const amtUsd = stk * uUsd;
+              const amtKrw = Math.round(amtUsd * sFx);
+              const eDate = (it.entryDate || it.entry_date || '').slice(0, 10);
+              const ageDays = eDate ? Math.max(0, Math.floor((todayMs - new Date(eDate).getTime()) / 86400000)) : 0;
+              const part = it.partName || it.part_name || '-';
+              const cust = (it.customer && it.customer !== '-') ? it.customer : (it.memo || '-');
+              return `
+                <tr class="hover:bg-emerald-50/30">
+                  <td class="py-1.5 px-2.5 text-center whitespace-nowrap">
+                    <span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold ${isExp ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">${escRep(it.orderStatus || '보유')}</span>
+                  </td>
+                  <td class="py-1.5 px-2.5 font-bold text-slate-800 truncate max-w-[160px]" title="${escRep(cust)}">${escRep(cust)}</td>
+                  <td class="py-1.5 px-2.5 text-center font-bold text-indigo-900 whitespace-nowrap">${escRep(it.maker)}</td>
+                  <td class="py-1.5 px-2.5 font-mono font-black text-indigo-950 whitespace-nowrap">
+                    <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${escRep(part)}')" class="hover:text-indigo-700 hover:underline cursor-pointer">📈 ${escRep(part)}</button>
+                  </td>
+                  <td class="py-1.5 px-2.5 text-right font-mono font-black text-slate-900 whitespace-nowrap">${stk.toLocaleString()} EA</td>
+                  <td class="py-1.5 px-2.5 text-right font-mono whitespace-nowrap">
+                    <span class="text-amber-700 font-bold">배정:${arr.toLocaleString()}</span> · <span class="text-emerald-700 font-black">가용:${avail.toLocaleString()}</span>
+                  </td>
+                  <td class="py-1.5 px-2.5 text-right font-mono text-slate-700 whitespace-nowrap">$${uUsd.toFixed(4)}</td>
+                  <td class="py-1.5 px-2.5 text-right font-mono whitespace-nowrap">
+                    <div class="font-black text-slate-900">$${amtUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div class="text-[9px] text-rose-600 font-bold">₩${amtKrw.toLocaleString()}</div>
+                  </td>
+                  <td class="py-1.5 px-2.5 text-center font-mono whitespace-nowrap">
+                    <div>${escRep(eDate || '-')}</div>
+                    <div class="text-[9px] ${ageDays >= 90 ? 'text-rose-600 font-bold' : 'text-slate-400'}">${ageDays}일 경과</div>
+                  </td>
+                  <td class="py-1.5 px-2.5 text-center whitespace-nowrap">
+                    <button type="button" onclick="window.jumpFromRepModalToInventory('${escRep(rep)}', '${escRep(it.id)}')" class="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[10px] font-bold cursor-pointer">상세/배정 ↗</button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else {
+    const repMemos = (allMemos || []).filter(m => toEnglishSalesName(m.sales_rep || '') === rep);
+    tabBodyHtml = `
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- 좌측: 주요 거래 고객사 Top 순위 -->
+        <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h4 class="font-black text-xs text-slate-900">🏢 [${escRep(rep)}] 주요 거래 고객사 (${topRepCustomers.length}개사)</h4>
+            <span class="text-[10px] text-slate-400 font-mono">선적액 / 💎 커미션</span>
+          </div>
+          ${topRepCustomers.length === 0 ? `<div class="py-8 text-center text-slate-400 text-xs font-bold">집계된 고객사 출하 내역이 없습니다.</div>` : `
+            <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+              ${topRepCustomers.slice(0, 15).map((c, i) => `
+                <div class="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+                  <div class="min-w-0">
+                    <div class="font-black text-slate-900 truncate"><span class="text-indigo-600 font-mono">${i + 1}.</span> ${escRep(c.customer)}</div>
+                    <div class="text-[10px] text-slate-500 truncate">${escRep(c.makers)} · ${c.count}건 출하</div>
+                  </div>
+                  <div class="text-right font-mono shrink-0">
+                    <div class="font-bold text-slate-800">$${Math.round(c.ship_usd).toLocaleString()}</div>
+                    ${c.comm_usd > 0 ? `<div class="text-[10px] font-black text-violet-700">💎 $${c.comm_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <!-- 우측: Domestic 미수금 & 최근 영업 활동 메모 -->
+        <div class="space-y-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h4 class="font-black text-xs text-rose-900">💰 Domestic 미수 채권 (${unpaidDom.length}건)</h4>
+              <span class="font-mono font-black text-rose-700 text-xs">₩${Math.round(unpaidDomKrw).toLocaleString()}</span>
+            </div>
+            ${unpaidDom.length === 0 ? `<div class="py-4 text-center text-slate-400 text-xs">미결제 Domestic 미수금이 없습니다.</div>` : `
+              <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-[11px]">
+                ${unpaidDom.slice(0, 10).map(u => `
+                  <div class="flex items-center justify-between gap-2 py-1 border-b border-slate-100">
+                    <span class="font-bold text-slate-800 truncate">${escRep(u.customer_name || u.cname)} · <span class="font-mono text-indigo-800">${escRep(u.part_name || u.part_no)}</span></span>
+                    <span class="font-mono font-bold text-rose-700 shrink-0">₩${Math.round(Number(u.amount_vat ?? u.out_amt) || 0).toLocaleString()}</span>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2">
+            <h4 class="font-black text-xs text-slate-900 border-b border-slate-100 pb-2">📝 최근 영업 활동 메모 (${repMemos.length}건)</h4>
+            ${repMemos.length === 0 ? `<div class="py-4 text-center text-slate-400 text-xs">작성된 영업 활동 메모가 없습니다.</div>` : `
+              <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-[11px]">
+                ${repMemos.slice(0, 8).map(m => `
+                  <div class="p-2 rounded-lg bg-slate-50 border border-slate-100">
+                    <div class="text-[10px] font-mono text-slate-400">${escRep(m.input_date)}</div>
+                    <div class="text-slate-700 mt-0.5">${escRep(m.memo)}</div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+      <!-- 헤더 -->
+      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-violet-950 text-white px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-violet-500/25 border border-violet-400/40 flex items-center justify-center text-xl font-black">👤</div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="text-base sm:text-lg font-black tracking-wide">${escRep(rep)} 비즈니스 &amp; 재고 포트폴리오</h2>
+              <span class="text-[10px] bg-violet-500/30 border border-violet-300/40 text-violet-100 font-bold px-2 py-0.5 rounded-full">${periodLabel}</span>
+            </div>
+            <p class="text-[11px] text-slate-300 mt-0.5">개인별 Domestic 마진 · 💎 Commission · 담당 보유재고 · 주요 고객사 및 미수 채권 통합 브리핑</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="document.getElementById('salesRepPortfolioModal').classList.add('hidden'); window.jumpToShipmentsFiltered && window.jumpToShipmentsFiltered({ query: '${escRep(rep)}', year: '${currentYear}' })" class="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold cursor-pointer transition">🚚 출하원장 전체 ↗</button>
+          <button type="button" onclick="window.jumpFromRepModalToInventory('${escRep(rep)}')" class="px-2.5 py-1.5 bg-emerald-500/25 hover:bg-emerald-500/40 border border-emerald-400/40 text-emerald-100 rounded-lg text-xs font-bold cursor-pointer transition">📦 재고탭 필터 ↗</button>
+          <button type="button" onclick="document.getElementById('salesRepPortfolioModal').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center cursor-pointer">✕</button>
+        </div>
+      </div>
+
+      <!-- 4대 핵심 KPI 카드 -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 p-3 sm:p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+        <div class="bg-white border border-violet-200 rounded-xl p-3 shadow-2xs">
+          <div class="text-[11px] font-bold text-violet-900 flex items-center justify-between">
+            <span>🏆 통합 총수익 (마진+커미션)</span>
+            <span class="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-black">${repStats.margin_rate}%</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-slate-900 font-mono mt-1">₩${Math.round(repStats.total_profit).toLocaleString()}</div>
+          <div class="text-[10px] text-slate-600 mt-0.5">마진 <strong class="text-emerald-700">₩${Math.round(repStats.margin).toLocaleString()}</strong> + 💎 <strong class="text-violet-700">$${repStats.comm_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong></div>
+        </div>
+
+        <div class="bg-white border border-indigo-200 rounded-xl p-3 shadow-2xs">
+          <div class="text-[11px] font-bold text-indigo-900 flex items-center justify-between">
+            <span>📈 Domestic 매출 실적</span>
+            <span class="text-[10px] text-indigo-600 font-mono">BILLING</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-indigo-950 font-mono mt-1">₩${Math.round(repStats.billing).toLocaleString()}</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">국내출하 <strong>${repStats.shipment_count}건</strong> · 커미션 <strong>${repStats.comm_count}건</strong></div>
+        </div>
+
+        <div class="bg-white border border-emerald-200 rounded-xl p-3 shadow-2xs cursor-pointer hover:border-emerald-400" onclick="window.switchSalesRepModalTab('stock')">
+          <div class="text-[11px] font-bold text-emerald-900 flex items-center justify-between">
+            <span>📦 담당 보유 재고 (${totalStockLotCount}건)</span>
+            <span class="text-[10px] text-emerald-700 font-bold">재고보기 👉</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-emerald-950 font-mono mt-1">$${totalStockUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="text-[10px] text-emerald-700 mt-0.5">총 <strong>${totalStockQty.toLocaleString()} EA</strong> (가용 <strong>${totalAvailQty.toLocaleString()} EA</strong> · ≈₩${Math.round(totalStockKrw / 10000).toLocaleString()}만)</div>
+        </div>
+
+        <div class="bg-white border border-rose-200 rounded-xl p-3 shadow-2xs cursor-pointer hover:border-rose-400" onclick="window.switchSalesRepModalTab('customers')">
+          <div class="text-[11px] font-bold text-rose-900 flex items-center justify-between">
+            <span>💰 미회수 채권 (미수/커미션)</span>
+            <span class="text-[10px] text-rose-600 font-bold">상세 👉</span>
+          </div>
+          <div class="text-sm sm:text-base font-black text-rose-700 font-mono mt-1">₩${Math.round(unpaidDomKrw).toLocaleString()} <span class="text-xs text-violet-700">+ 💎$${unpaidCommUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></div>
+          <div class="text-[10px] text-slate-500 mt-0.5">국내미수 <strong>${unpaidDom.length}건</strong> · 커미션미입금 <strong>$${unpaidCommUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
+        </div>
+      </div>
+
+      <!-- 서브탭 & 검색 바 -->
+      <div class="px-4 py-2 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-1">
+          <button type="button" onclick="window.switchSalesRepModalTab('biz')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'biz' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">🚚 진행 비즈니스 내역 (${shipments.length})</button>
+          <button type="button" onclick="window.switchSalesRepModalTab('stock')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'stock' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">📦 담당 보유 재고 (${totalStockLotCount})</button>
+          <button type="button" onclick="window.switchSalesRepModalTab('customers')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'customers' ? 'bg-violet-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">🏢 주요 고객사 &amp; 미수/메모 (${topRepCustomers.length})</button>
+        </div>
+        <input type="text" id="repModalSearchInput" value="${escRep(search)}" oninput="window.setSalesRepModalSearch(this.value)" placeholder="고객사, 품번(PartNo), 제조사, PO 빠른 검색..." class="w-full sm:w-64 px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg outline-none focus:bg-white focus:border-indigo-500">
+      </div>
+
+      <!-- 본문 영역 -->
+      <div class="flex-1 overflow-y-auto p-3 sm:p-4 bg-slate-50/70">
+        ${tabBodyHtml}
+      </div>
+    </div>
+  `;
+}
