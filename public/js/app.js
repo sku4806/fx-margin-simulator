@@ -12,7 +12,7 @@ window.isCsOrAdminUser = isCsOrAdminUser;
 window.isPaymentApprovalAdmin = isPaymentApprovalAdmin;
 window.getCurrentUserEmail = getCurrentUserEmail;
 window.APPROVAL_ADMIN_EMAILS = APPROVAL_ADMIN_EMAILS;
-import { initManualViewer } from './modules/manual.js?v=20261119_v51';
+import { initManualViewer } from './modules/manual.js?v=20261124_v52';
 import {
   evaluatePackaging,
   fetchPackagingStandards,
