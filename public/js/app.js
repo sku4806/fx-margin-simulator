@@ -2079,8 +2079,12 @@ function updateFxDisplay() {
   }
 
   const sourceBadge = document.getElementById('fxSourceBadge');
-  if (sourceBadge && currentFxDate) {
-    sourceBadge.title = `${currentFxSource} [고시일: ${currentFxDate}] 실시간 매매기준율`;
+  if (sourceBadge) {
+    const isFallback = currentFxSource && /open exchange/i.test(currentFxSource);
+    sourceBadge.href = isFallback ? 'https://www.openexchangerates.org/' : 'http://www.smbs.biz/ExRate/TodayExRate.jsp';
+    if (currentFxDate) {
+      sourceBadge.title = `${currentFxSource} [고시일: ${currentFxDate}] 실시간 매매기준율 (클릭 시 공식 환율 사이트 열기)`;
+    }
   }
 
   runEngine();
