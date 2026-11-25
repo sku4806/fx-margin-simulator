@@ -86,7 +86,7 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
 
   modal.classList.remove('hidden');
   modal.innerHTML = `
-    <div class="bg-white w-full max-w-7xl h-[93dvh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+    <div class="bg-white w-[96vw] max-w-[1640px] h-[93dvh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
       
       <!-- 상단 헤더 (모바일·데스크톱 완벽 대응) -->
       <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-md shrink-0">
@@ -223,22 +223,22 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
         <table class="hidden md:table w-full text-left text-xs border-collapse">
           <thead class="bg-slate-800 text-white sticky top-0 z-10 text-[11px] font-bold">
             <tr>
-              <th class="py-2.5 px-2 text-center w-10">#</th>
-              <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">상태</th>
-              <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">발주일자</th>
-              <th class="py-2.5 px-3 text-left min-w-[115px]">발주번호 (PO NO)</th>
-              <th class="py-2.5 px-3 text-left min-w-[170px]">품번 (Part#)</th>
-              <th class="py-2.5 px-2.5 text-left min-w-[80px]">제조사</th>
-              <th class="py-2.5 px-2.5 text-right whitespace-nowrap w-20">수량</th>
-              <th class="py-2.5 px-2.5 text-right whitespace-nowrap min-w-[85px]">발주단가</th>
-              <th class="py-2.5 px-2.5 text-right whitespace-nowrap min-w-[95px]">발주금액</th>
-              <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">입고예정(CRD/ETA)</th>
-              <th class="py-2.5 px-3 text-left min-w-[120px]">매입처(공급사)</th>
-              <th class="py-2.5 px-2.5 text-left min-w-[115px]">결제조건 / 환율</th>
-              <th class="py-2.5 px-3 text-left min-w-[110px]">실수요처(납품처)</th>
-              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">영업담당</th>
-              <th class="py-2.5 px-3 text-left min-w-[120px]">비고</th>
-              <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">관리</th>
+              <th class="py-2 px-1.5 text-center w-9">#</th>
+              <th class="py-2 px-2 text-center whitespace-nowrap w-22">상태</th>
+              <th class="py-2 px-2 text-center whitespace-nowrap w-22">발주일자</th>
+              <th class="py-2 px-2 text-left min-w-[105px]">발주번호 (PO NO)</th>
+              <th class="py-2 px-2 text-left min-w-[155px]">품번 (Part#)</th>
+              <th class="py-2 px-2 text-left min-w-[65px]">제조사</th>
+              <th class="py-2 px-2 text-right whitespace-nowrap w-18">수량</th>
+              <th class="py-2 px-2 text-right whitespace-nowrap min-w-[75px]">발주단가</th>
+              <th class="py-2 px-2 text-right whitespace-nowrap min-w-[85px]">발주금액</th>
+              <th class="py-2 px-2 text-center whitespace-nowrap w-24">입고예정(ETA)</th>
+              <th class="py-2 px-2 text-left min-w-[105px]">매입처(공급사)</th>
+              <th class="py-2 px-2 text-left min-w-[105px]">결제조건 / 환율</th>
+              <th class="py-2 px-2 text-left min-w-[95px]">실수요처</th>
+              <th class="py-2 px-1.5 text-center whitespace-nowrap w-14">담당</th>
+              <th class="py-2 px-2 text-left min-w-[90px]">비고</th>
+              <th class="py-2 px-1.5 text-center whitespace-nowrap w-14">관리</th>
             </tr>
           </thead>
           <tbody id="poTableBody" class="divide-y divide-slate-200">

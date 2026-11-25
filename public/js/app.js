@@ -3744,7 +3744,7 @@ function renderActionInboxModal() {
   }
 
   modal.innerHTML = `
-    <div class="bg-white w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+    <div class="bg-white w-[96vw] max-w-[1560px] h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
       <!-- 헤더 -->
       <div class="bg-gradient-to-r from-slate-900 via-rose-950 to-indigo-950 text-white px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div class="flex items-center gap-3">

@@ -23,7 +23,7 @@ export async function openPriceHistoryModal(partNo) {
 
   modal.classList.remove('hidden');
   modal.innerHTML = `
-    <div class="bg-white w-full max-w-6xl h-[92vh] sm:h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+    <div class="bg-white w-[96vw] max-w-[1560px] h-[92vh] sm:h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
       
       <!-- 상단 헤더 -->
       <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-start sm:items-center justify-between gap-2 shadow-md shrink-0">
