@@ -1810,20 +1810,21 @@ def register_crud_routes(app):
 
     # 🔔 상단 헤더 '오늘의 액션 알림 센터 (Action Inbox)' 통합 집계 API
     @app.get("/api/notifications/action-inbox")
-    def api_action_inbox(sales_rep: Optional[str] = None):
+    def api_action_inbox(sales_rep: Optional[str] = None, include_archive: bool = False):
         import legacy_mssql
         target_rep = legacy_mssql.normalize_sales_rep(sales_rep) if (sales_rep and sales_rep.upper() != "ALL") else ""
         today_str = datetime.date.today().isoformat()
+        min_active_date = "2010-01-01" if include_archive else "2025-01-01"
 
-        # 1) Domestic 연체 미수금 (30일 이상 또는 입금약속일 도래)
+        # 1) Domestic 연체 미수금 (만기일 경과 건)
         overdue_dom = []
         try:
-            raw_unpaid = legacy_mssql.query_unpaid_list(sales_rep=target_rep or None, limit=600) or []
+            raw_unpaid = legacy_mssql.query_unpaid_list(sales_rep=target_rep or None, min_out_date=min_active_date, limit=800) or []
         except Exception:
             raw_unpaid = []
         if not raw_unpaid:
             try:
-                params = [("select", "*"), ("limit", "600")]
+                params = [("select", "*"), ("out_date", f"gte.{min_active_date}"), ("limit", "800")]
                 if target_rep:
                     params.append(("sales_rep", f"eq.{target_rep}"))
                 r_u = requests.get(_sb_url("legacy_unpaid"), headers=_sb_headers(prefer=""), params=params, timeout=4)
@@ -1847,19 +1848,26 @@ def register_crud_routes(app):
         for u in raw_unpaid:
             if u.get("pay_status") == "수금완료":
                 continue
+            cust_name = (u.get("cname") or u.get("customer_name") or "-").strip()
+            out_dt = (u.get("out_dt") or u.get("out_date") or "")[:10]
+            if not include_archive:
+                if legacy_mssql.is_self_company_name(cust_name):
+                    continue
+                if out_dt and out_dt < min_active_date:
+                    continue
             rep = legacy_mssql.normalize_sales_rep(u.get("sales") or u.get("sales_rep"))
             if target_rep and rep != target_rep:
                 continue
             ov = int(u.get("overdue_days") or 0)
-            if ov >= 14:
+            if ov >= 1:
                 overdue_dom.append({
-                    "customer": u.get("cname") or u.get("customer_name") or "-",
+                    "customer": cust_name,
                     "part_no": u.get("part_no") or u.get("part_name") or "-",
                     "maker": u.get("mfg") or u.get("maker") or "",
                     "amount_krw": round(float(u.get("amount_vat") or 0.0)),
                     "overdue_days": ov,
                     "due_date": (u.get("due_date") or "")[:10],
-                    "out_date": (u.get("out_dt") or u.get("out_date") or "")[:10],
+                    "out_date": out_dt,
                     "sales_rep": rep,
                 })
         overdue_dom.sort(key=lambda x: (x["overdue_days"], x["amount_krw"]), reverse=True)
@@ -1867,8 +1875,8 @@ def register_crud_routes(app):
         # 2) 해외 Commission 미입금 (45일 이상 경과)
         overdue_comm = []
         try:
-            comm_list = legacy_mssql.query_commission_unpaid(
-                sales_rep=target_rep or None, status="UNPAID", min_date="2024-01-01", limit=400
+            comm_list = legacy_mssql.query_unpaid_commissions(
+                sales_rep=target_rep or None, status="UNPAID", min_date=min_active_date, limit=800
             ) or []
         except Exception:
             comm_list = []
@@ -1887,7 +1895,12 @@ def register_crud_routes(app):
             if target_rep and rep != target_rep:
                 continue
             sdt = (c.get("ship_date") or "")[:10]
-            elapsed = int(c.get("elapsed_days") or 0)
+            if not include_archive and sdt and sdt < min_active_date:
+                continue
+            eff_cust = legacy_mssql.resolve_effective_customer(c.get("customer"), c.get("real_cust"), fallback="본사 입고(BSK)")
+            if not include_archive and (legacy_mssql.is_self_company_name(eff_cust) or eff_cust == "본사 입고(BSK)"):
+                continue
+            elapsed = int(c.get("overdue_days") or c.get("elapsed_days") or 0)
             if not elapsed and sdt and len(sdt) == 10:
                 try:
                     elapsed = max(0, (today_dt - datetime.date.fromisoformat(sdt)).days)
@@ -1896,7 +1909,7 @@ def register_crud_routes(app):
             if elapsed >= 45:
                 overdue_comm.append({
                     "idx": c.get("idx"),
-                    "customer": c.get("customer") or "-",
+                    "customer": eff_cust,
                     "part_no": c.get("part_no") or "-",
                     "maker": c.get("maker") or "OTHERS",
                     "comm_usd": round(float(c.get("comm_amt") or 0.0), 2),
@@ -1910,7 +1923,7 @@ def register_crud_routes(app):
         overdue_borrows = []
         try:
             cloud_brw = list_cloud_sub_ledgers("borrow", limit=150)
-            legacy_brw = legacy_mssql.query_borrows(limit=250)
+            legacy_brw = legacy_mssql.query_borrows(limit=350)
             all_brw = cloud_brw + legacy_brw
         except Exception:
             all_brw = []
@@ -1923,6 +1936,11 @@ def register_crud_routes(app):
             if target_rep and rep != target_rep:
                 continue
             b_dt = (b.get("date") or "")[:10]
+            if not include_archive and b_dt and b_dt < min_active_date:
+                continue
+            cust_b = (b.get("customer_name") or "-").strip()
+            if not include_archive and legacy_mssql.is_self_company_name(cust_b):
+                continue
             rtn_dt = (b.get("rtn_date") or "")[:10]
             elapsed = 0
             if b_dt and len(b_dt) == 10:
@@ -1934,7 +1952,7 @@ def register_crud_routes(app):
             if is_due_passed or elapsed >= 21:
                 overdue_borrows.append({
                     "idx": b.get("idx"),
-                    "customer": b.get("customer_name") or "-",
+                    "customer": cust_b,
                     "part_no": b.get("part_no") or "-",
                     "maker": b.get("maker") or "OTHERS",
                     "qty": int(b.get("qty") or 0),

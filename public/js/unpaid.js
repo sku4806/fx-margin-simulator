@@ -13,6 +13,7 @@ let activeSortBy = 'out_date_desc';
 let unpaidPage = 1;
 let unpaidPageSize = 50;
 let lastFilteredUnpaid = [];
+let includeHistoricalUnpaid = false; // 기본값 false: 2025~2026년 최근 실무 채권만 표시 (2024년 이전 과거 및 BIGSHINE 자사 더미 숨김)
 
 // 💎 Commission 미수금 서브탭 상태
 let activeUnpaidMode = 'domestic'; // 'domestic' | 'commission'
@@ -213,19 +214,23 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
     if (reps.length > 0) cachedSalesReps = reps;
   }
 
-  // 에이징 구간별 실시간 건수 계산
-  const cntAll = cachedUnpaid.length;
-  const cntUpcoming = cachedUnpaid.filter(u => u.overdue_days <= 0).length;
-  const cnt1_30 = cachedUnpaid.filter(u => u.overdue_days >= 1 && u.overdue_days < 30).length;
-  const cnt30_45 = cachedUnpaid.filter(u => u.overdue_days >= 30 && u.overdue_days < 45).length;
-  const cnt45_60 = cachedUnpaid.filter(u => u.overdue_days >= 45 && u.overdue_days < 60).length;
-  const cnt60Plus = cachedUnpaid.filter(u => u.overdue_days >= 60).length;
+  // 범위(실무 활성 vs 과거 전체) 기준 베이스 목록 산출
+  const scopedBase = getScopedUnpaidBase();
+  const archivedCount = Math.max(0, cachedUnpaid.length - getScopedUnpaidBase(false).length);
+
+  // 에이징 구간별 실시간 건수 계산 (현재 선택된 범위 기준)
+  const cntAll = scopedBase.length;
+  const cntUpcoming = scopedBase.filter(u => u.overdue_days <= 0).length;
+  const cnt1_30 = scopedBase.filter(u => u.overdue_days >= 1 && u.overdue_days < 30).length;
+  const cnt30_45 = scopedBase.filter(u => u.overdue_days >= 30 && u.overdue_days < 45).length;
+  const cnt45_60 = scopedBase.filter(u => u.overdue_days >= 45 && u.overdue_days < 60).length;
+  const cnt60Plus = scopedBase.filter(u => u.overdue_days >= 60).length;
 
   // 필터 적용
   applyLocalUnpaidFilters();
   unpaidPage = 1;
 
-  const sum = cachedSummary || computeSummaryFromItems(cachedUnpaid);
+  const sum = computeSummaryFromItems(scopedBase);
   const topCust = sum.top_customers && sum.top_customers.length > 0 ? sum.top_customers[0] : null;
 
   container.innerHTML = `
@@ -259,14 +264,25 @@ export function renderUnpaidView(containerId = 'unpaidSection') {
         </div>
       </div>
 
-      <!-- 1-2. Domestic vs Commission 미수금 서브탭 스위처 -->
-      <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit">
-        <button type="button" onclick="window.switchUnpaidMode && window.switchUnpaidMode('domestic')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeUnpaidMode === 'domestic' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
-          🏢 Domestic 미수금 <span class="opacity-80 text-[10px]">(국내 외상)</span>
-        </button>
-        <button type="button" onclick="window.switchUnpaidMode && window.switchUnpaidMode('commission')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeUnpaidMode === 'commission' ? 'bg-violet-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
-          💎 Commission 미수금 <span class="opacity-80 text-[10px]">(해외 커미션 USD)</span>
-        </button>
+      <!-- 1-2. Domestic vs Commission 미수금 서브탭 스위처 + 최근 실무 활성 vs 과거 전체 기록 토글 -->
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit">
+          <button type="button" onclick="window.switchUnpaidMode && window.switchUnpaidMode('domestic')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeUnpaidMode === 'domestic' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+            🏢 Domestic 미수금 <span class="opacity-80 text-[10px]">(국내 외상)</span>
+          </button>
+          <button type="button" onclick="window.switchUnpaidMode && window.switchUnpaidMode('commission')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeUnpaidMode === 'commission' ? 'bg-violet-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+            💎 Commission 미수금 <span class="opacity-80 text-[10px]">(해외 커미션 USD)</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+          <button type="button" onclick="window.setUnpaidHistoryScope && window.setUnpaidHistoryScope(false)" class="px-2.5 py-1 rounded-lg transition cursor-pointer ${!includeHistoricalUnpaid ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'}" title="2025~2026년 실제 외부 고객사 활성 미수금만 깔끔하게 표시 (BIGSHINE 자사 내부 더미 제외)">
+            ✨ 최근 실무 활성 (2025~)
+          </button>
+          <button type="button" onclick="window.setUnpaidHistoryScope && window.setUnpaidHistoryScope(true)" class="px-2.5 py-1 rounded-lg transition cursor-pointer ${includeHistoricalUnpaid ? 'bg-amber-500 text-slate-950 font-black shadow-2xs' : 'text-slate-600 hover:text-slate-900'}" title="2010~2024년 과거 미마감 기록 및 자사(BIGSHINE) 명의 레코드까지 모두 포함하여 조회">
+            📂 과거 전체 기록 포함 (2010~ · +${archivedCount}건)
+          </button>
+        </div>
       </div>
 
       ${activeUnpaidMode === 'commission' ? renderCommissionUnpaidBody() : `
@@ -479,10 +495,16 @@ function getFilteredCommUnpaid() {
   const raw = cachedCommUnpaid || [];
   const q = (commUnpaidQuery || '').trim().toLowerCase();
   return raw.filter(it => {
+    const effCust = resolveCustomerName(it.customer, it.real_cust, '본사 입고(BSK)');
+    const sDate = (it.ship_date || '').slice(0, 10);
+    if (!includeHistoricalUnpaid) {
+      if (isSelfCompanyName(effCust) || effCust === '본사 입고(BSK)') return false;
+      if (sDate && sDate < '2025-01-01') return false;
+    }
     if (commUnpaidMaker !== 'ALL' && (it.maker || 'OTHERS') !== commUnpaidMaker) return false;
     if (commUnpaidSales !== 'ALL' && toEnglishSalesName(it.sales_rep || '') !== commUnpaidSales) return false;
     if (q) {
-      const hay = `${it.customer || ''} ${it.real_cust || ''} ${it.part_no || ''} ${it.po_no || ''} ${it.invoice_no || ''} ${it.maker || ''} ${it.sales_rep || ''}`.toLowerCase();
+      const hay = `${effCust} ${it.customer || ''} ${it.real_cust || ''} ${it.part_no || ''} ${it.po_no || ''} ${it.invoice_no || ''} ${it.maker || ''} ${it.sales_rep || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -1172,10 +1194,27 @@ function bindUnpaidEvents() {
   });
 }
 
+function getScopedUnpaidBase(includeAll = includeHistoricalUnpaid) {
+  if (includeAll) return cachedUnpaid || [];
+  return (cachedUnpaid || []).filter(u => {
+    const cname = (u.cname || '').trim();
+    const outDt = (u.out_dt || '').slice(0, 10);
+    if (isSelfCompanyName(cname)) return false;
+    if (outDt && outDt < '2025-01-01') return false;
+    return true;
+  });
+}
+
+window.setUnpaidHistoryScope = function(includeAll) {
+  includeHistoricalUnpaid = Boolean(includeAll);
+  renderUnpaidView('unpaidSection');
+};
+
 function applyLocalUnpaidFilters() {
   const term = activeSearchTerm;
+  const baseList = getScopedUnpaidBase();
 
-  lastFilteredUnpaid = cachedUnpaid.filter(u => {
+  lastFilteredUnpaid = baseList.filter(u => {
     // 1. Aging 필터
     if (activeAgingFilter === 'upcoming' && u.overdue_days > 0) return false;
     if (activeAgingFilter === '1_30' && (u.overdue_days <= 0 || u.overdue_days >= 30)) return false;

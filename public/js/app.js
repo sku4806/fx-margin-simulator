@@ -1,7 +1,7 @@
-import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261125_v54';
+import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261125_v55';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
-import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261125_v54';
-import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261125_v54';
+import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261125_v55';
+import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261125_v55';
 const initSamplesTab = async (...args) => (await import('./samples.js?v=20261119_opt')).initSamplesTab(...args);
 import { toEnglishSalesName, isSelfCompanyName, resolveCustomerName } from './modules/utils.js?v=20261125_v54';
 window.toEnglishSalesName = toEnglishSalesName;
@@ -3407,6 +3407,7 @@ window.deleteDrawerItem = async function() {
 const actionInboxState = {
   tab: 'unpaid_dom', // 'unpaid_dom' | 'unpaid_comm' | 'aging_stock' | 'borrows_po'
   salesRep: 'ALL',
+  includeArchive: false, // 기본값 false: 2025~2026년 최근 실무 활성 채권만 표시 (자사 BIGSHINE 명의 더미 제외)
   loading: false,
   data: null,
 };
@@ -3457,8 +3458,11 @@ window.refreshActionInboxBadge = async function(forceFetch = false) {
 
   try {
     if (!actionInboxState.data || forceFetch) {
-      const repParam = actionInboxState.salesRep !== 'ALL' ? `?sales_rep=${encodeURIComponent(actionInboxState.salesRep)}` : '';
-      const res = await fetch(`/api/notifications/action-inbox${repParam}`);
+      const qs = new URLSearchParams();
+      if (actionInboxState.salesRep !== 'ALL') qs.set('sales_rep', actionInboxState.salesRep);
+      if (actionInboxState.includeArchive) qs.set('include_archive', 'true');
+      const qStr = qs.toString() ? `?${qs.toString()}` : '';
+      const res = await fetch(`/api/notifications/action-inbox${qStr}`);
       const json = await res.json();
       if (json && json.status === 'success') {
         actionInboxState.data = json;
@@ -3511,6 +3515,15 @@ window.switchActionInboxTab = function(tab) {
 
 window.switchActionInboxRep = async function(rep) {
   actionInboxState.salesRep = rep || 'ALL';
+  actionInboxState.loading = true;
+  renderActionInboxModal();
+  await window.refreshActionInboxBadge(true);
+  actionInboxState.loading = false;
+  renderActionInboxModal();
+};
+
+window.toggleActionInboxArchive = async function() {
+  actionInboxState.includeArchive = !actionInboxState.includeArchive;
   actionInboxState.loading = true;
   renderActionInboxModal();
   await window.refreshActionInboxBadge(true);
@@ -3740,7 +3753,10 @@ function renderActionInboxModal() {
             <p class="text-[11px] text-slate-300 mt-0.5">연체 미수금 · 해외 커미션 미입금 · 90일+ 장기 체화 재고 · 대여 미반납 및 입고지연 발주 통합 점검</p>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" onclick="window.toggleActionInboxArchive()" class="px-2.5 py-1.5 rounded-lg text-xs font-black cursor-pointer border transition ${actionInboxState.includeArchive ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-xs' : 'bg-white/10 text-slate-200 border-white/20 hover:bg-white/20'}" title="클릭하여 2024년 이전 과거 장기 레코드 및 자사(BIGSHINE) 내부 명의 데이터 포함 여부 전환">
+            ${actionInboxState.includeArchive ? '📂 전체 기간(2010~ 과거/자사 포함) 보기 중' : '✨ 최근 실무 활성(2025~ · 자사더미 제외)'}
+          </button>
           ${myRepName ? `
             <button type="button" onclick="window.switchActionInboxRep('${salesRep === myRepName ? 'ALL' : myRepName}')" class="px-2.5 py-1.5 rounded-lg text-xs font-black cursor-pointer border transition ${salesRep === myRepName ? 'bg-amber-400 text-slate-950 border-amber-300' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'}">
               👤 내 담당(${myRepName})만 보기
