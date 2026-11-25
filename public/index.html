@@ -34,12 +34,19 @@
 
 <style id="mobile-font-fix">
   @media (max-width: 640px) {
-    body { padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px)) !important; }
+    html, body {
+      overflow-x: hidden !important;
+      word-break: keep-all;
+      padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    button, th, label, [class*="rounded-full"] {
+      word-break: keep-all;
+    }
     /* 검색 및 필터 박스가 상단에 눌리지 않도록 패딩 및 세로 정렬 보장 */
     #searchQuery, #searchInput {
       width: 100% !important;
       font-size: 14px !important;
-      padding: 9px 12px !important;
+      padding: 8px 12px 8px 28px !important;
       box-sizing: border-box !important;
     }
     /* 모바일 터치 입력 편의성 (날짜/셀렉트 최소 높이 보장) */
@@ -93,20 +100,20 @@
         </button>
       </div>
 
-      <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-2 sm:gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-slate-700/60">
+      <div class="w-full md:w-auto flex flex-wrap items-center justify-between md:justify-end gap-2 sm:gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-slate-700/60">
         <!-- 🔔 오늘의 액션 알림 센터 (Action Inbox) 버튼 -->
-        <button id="openActionInboxBtn" type="button" onclick="window.openActionInboxModal && window.openActionInboxModal()" class="text-[11px] sm:text-xs bg-rose-600/90 hover:bg-rose-500 text-white font-black px-2.5 sm:px-3 py-1.5 rounded-xl border border-rose-400/50 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0" title="장기 미수금, 커미션 미입금, 대여 미반납, 장기 체화재고, 납기지연 발주 등 즉시 조치가 필요한 알림 센터 열기">
+        <button id="openActionInboxBtn" type="button" onclick="window.openActionInboxModal && window.openActionInboxModal()" class="text-[11px] sm:text-xs bg-rose-600/90 hover:bg-rose-500 text-white font-black px-2.5 sm:px-3 py-1.5 rounded-xl border border-rose-400/50 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0 whitespace-nowrap" title="장기 미수금, 커미션 미입금, 대여 미반납, 장기 체화재고, 납기지연 발주 등 즉시 조치가 필요한 알림 센터 열기">
           <span class="animate-pulse">🔔</span>
           <span>액션 알림</span>
           <span id="actionInboxCountBadge" class="bg-white text-rose-700 text-[10px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">...</span>
         </button>
 
-        <button id="openManualBtnDesktop" onclick="document.getElementById('openManualBtn').click()" class="hidden md:flex text-xs bg-indigo-600/80 hover:bg-indigo-600 text-white font-bold px-3 py-1.5 rounded-xl border border-indigo-400/40 items-center gap-1.5 transition-colors shadow-sm">
+        <button id="openManualBtnDesktop" onclick="document.getElementById('openManualBtn').click()" class="hidden md:flex text-xs bg-indigo-600/80 hover:bg-indigo-600 text-white font-bold px-3 py-1.5 rounded-xl border border-indigo-400/40 items-center gap-1.5 transition-colors shadow-sm whitespace-nowrap shrink-0">
           <span>📖</span> 시스템 가이드북
         </button>
 
-        <div class="bg-slate-900/60 border border-slate-700 px-2.5 py-1 sm:py-1.5 rounded-xl">
-          <span class="text-[8px] sm:text-[9px] font-semibold text-slate-400 block leading-tight">안전 환율 버퍼 (FX)</span>
+        <div class="bg-slate-900/60 border border-slate-700 px-2.5 py-1 sm:py-1.5 rounded-xl shrink-0">
+          <span class="text-[8px] sm:text-[9px] font-semibold text-slate-400 block leading-tight whitespace-nowrap">안전 환율 버퍼 (FX)</span>
           <select id="fxBufferSelect" class="bg-transparent text-[11px] sm:text-xs font-bold text-amber-400 outline-none cursor-pointer">
             <option value="0" class="text-slate-800">버퍼 없음 (+0원)</option>
             <option value="10" class="text-slate-800">보수적 (+10원)</option>
@@ -115,12 +122,12 @@
           </select>
         </div>
 
-        <div class="text-right">
-          <div class="flex items-center justify-end gap-1">
-            <a id="fxSourceBadge" href="http://www.smbs.biz/ExRate/TodayExRate.jsp" target="_blank" rel="noopener noreferrer" class="text-[9px] sm:text-[10px] font-semibold text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/40 px-1.5 py-0.2 rounded-full cursor-pointer transition-colors inline-flex items-center gap-0.5" title="클릭 시 서울외국환중개(SMBS) 오늘의 고시환율 공식 페이지 열기">SMBS 고시 ↗</a>
-            <span class="text-[9px] sm:text-[10px] font-semibold text-indigo-300 bg-indigo-900/50 border border-indigo-500/30 px-1.5 py-0.2 rounded-full">실시간 FX</span>
+        <div class="text-right shrink-0 ml-auto md:ml-0">
+          <div class="flex items-center justify-end gap-1 whitespace-nowrap">
+            <a id="fxSourceBadge" href="http://www.smbs.biz/ExRate/TodayExRate.jsp" target="_blank" rel="noopener noreferrer" class="text-[9px] sm:text-[10px] font-semibold text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/40 px-1.5 py-0.2 rounded-full cursor-pointer transition-colors inline-flex items-center gap-0.5 whitespace-nowrap" title="클릭 시 서울외국환중개(SMBS) 오늘의 고시환율 공식 페이지 열기">SMBS 고시 ↗</a>
+            <span class="text-[9px] sm:text-[10px] font-semibold text-indigo-300 bg-indigo-900/50 border border-indigo-500/30 px-1.5 py-0.2 rounded-full whitespace-nowrap">실시간 FX</span>
           </div>
-          <div class="flex items-baseline justify-end gap-1 mt-0.5">
+          <div class="flex items-baseline justify-end gap-1 mt-0.5 whitespace-nowrap">
             <div id="liveFx" class="text-base sm:text-xl font-black text-white leading-tight">$1.00 = -</div>
             <span id="liveFxDiff" class="text-[10px] sm:text-xs font-bold text-slate-300 hidden"></span>
           </div>
@@ -713,12 +720,14 @@
     <div class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-2.5 sm:space-y-4">
       <div class="flex flex-row flex-wrap items-center sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-2.5">
         <div>
-          <h2 class="font-black text-xs sm:text-base tracking-wide text-slate-900">Inventory &amp; Fulfillment Master</h2>
+          <div class="flex items-center gap-1.5">
+            <h2 class="font-black text-xs sm:text-base tracking-wide text-slate-900">Inventory &amp; Fulfillment Master</h2>
+            <span id="selectedQuoteCountBadge" class="hidden text-[10px] bg-amber-400 text-slate-900 font-bold px-1.5 py-0.5 rounded-full">0</span>
+          </div>
           <span id="lockStatusBadge" class="text-[9px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full inline-block mt-0.5">🔒 로그인 필요</span>
         </div>
 
         <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 w-full sm:w-auto sm:justify-end">
-          <span id="selectedQuoteCountBadge" class="hidden text-[10px] bg-amber-400 text-slate-900 font-bold px-1.5 py-0.5 rounded-full">0</span>
           <button type="button" id="openPoModalBtn" onclick="window.openPurchaseOrdersModal && window.openPurchaseOrdersModal('PO')" class="text-[11px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap" title="국내외 매입처 발주 및 입고예정일(CRD/ETA) 조회">
             <span>🚢</span> 발주·입고예정
             <span id="poPendingBadge" class="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full hidden">0</span>
@@ -763,12 +772,12 @@
 
       <div id="unlockedContent" class="hidden space-y-2.5">
         <div class="bg-slate-50 p-2 rounded-xl border border-slate-200/80 flex flex-wrap lg:flex-nowrap gap-1.5 items-center">
-          <div class="flex-1 min-w-[200px] relative">
+          <div class="w-full sm:w-auto sm:flex-1 sm:min-w-[200px] relative">
             <input type="text" id="searchInput" style="min-height: 38px;" placeholder="Part, D/C, 세일즈, 고객사, 송장 검색..." class="w-full pl-7 pr-2.5 py-1.5 border rounded-lg bg-white text-xs outline-none">
             <span class="absolute left-2 top-2.5 text-slate-400 text-xs">🔍</span>
           </div>
 
-          <div class="w-[130px] sm:w-[140px] shrink-0">
+          <div class="flex-1 min-w-[110px] sm:flex-none sm:w-[140px]">
             <select id="filterMaker" class="w-full p-2 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none cursor-pointer">
               <option value="ALL">라인 전체</option>
               <option value="SST">SST</option>
@@ -796,7 +805,7 @@
             </select>
           </div>
 
-          <div class="w-[130px] sm:w-[150px] shrink-0">
+          <div class="flex-1 min-w-[110px] sm:flex-none sm:w-[150px]">
             <select id="filterOwner" class="w-full p-2 border rounded-lg bg-white text-[11px] font-semibold text-slate-700 outline-none">
               <option value="ALL">Sales 전체</option>
               <option value="본사 일반재고">본사 일반재고</option>
@@ -814,18 +823,23 @@
           </div>
 
           <!-- 🚚 출하일자 기간 검색 필터 (가로 1열 완벽 결합) -->
-          <div id="shippedDateFilterWrapper" class="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs shrink-0 shadow-xs">
+          <div id="shippedDateFilterWrapper" class="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs shrink-0 shadow-xs">
             <span class="text-slate-600 font-bold whitespace-nowrap text-[11px]">🚚 출하일:</span>
-            <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
-            <span class="text-slate-400">~</span>
-            <input type="date" id="filterShipDateEnd" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer">
-            <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-100 rounded text-[10px] ml-0.5">✕</button>
+            <div class="flex items-center gap-1 min-w-0">
+              <input type="date" id="filterShipDateStart" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer w-[105px] sm:w-auto">
+              <span class="text-slate-400">~</span>
+              <input type="date" id="filterShipDateEnd" class="bg-transparent border-0 font-mono text-[11px] text-slate-700 outline-none p-0 cursor-pointer w-[105px] sm:w-auto">
+            </div>
+            <button type="button" id="resetShipDateBtn" title="출하일 필터 초기화" class="text-slate-400 hover:text-slate-700 font-bold px-1 hover:bg-slate-100 rounded text-[10px] ml-0.5 shrink-0">✕</button>
           </div>
         </div>
 
-        <div class="flex justify-between items-center text-[10px] sm:text-[11px] text-slate-500 px-1">
-          <span>※ 카드를 터치하면 상세 정보 확인 가능</span>
-          <label class="inline-flex items-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg px-2 py-0.5 select-none transition-colors mr-2"><input type="checkbox" id="togglePrecisionBtn" onchange="window.togglePrecisionMode && window.togglePrecisionMode(this.checked)" class="rounded text-indigo-600 cursor-pointer"><span class="text-[10px] font-bold text-slate-700">소수점 정밀보기 (.00)</span></label><span id="itemCount" class="font-bold text-indigo-700">총 0건</span>
+        <div class="flex flex-wrap justify-between items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-500 px-1">
+          <span class="whitespace-nowrap">※ 카드 터치 시 상세/계산기 연동</span>
+          <div class="flex items-center gap-2 ml-auto">
+            <label class="inline-flex items-center gap-1 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg px-2 py-0.5 select-none transition-colors whitespace-nowrap"><input type="checkbox" id="togglePrecisionBtn" onchange="window.togglePrecisionMode && window.togglePrecisionMode(this.checked)" class="rounded text-indigo-600 cursor-pointer"><span class="text-[10px] font-bold text-slate-700">정밀보기 (.00)</span></label>
+            <span id="itemCount" class="font-bold text-indigo-700 whitespace-nowrap">총 0건</span>
+          </div>
         </div>
 
         <!-- 모바일 카드 내부 스크롤 뷰 -->
@@ -844,7 +858,7 @@
             <div>총 매입액: <span id="sumTotalAmount" class="text-rose-700 font-black">$0.00</span></div>
           </div>
         </div>
-    <div id="inventoryCardContainer" class="block md:hidden space-y-2 max-h-[65vh] overflow-y-auto pr-1"></div>
+    <div id="inventoryCardContainer" class="block md:hidden space-y-2"></div>
 
         <!-- 데스크탑 테이블 내부 스크롤 뷰 (헤더 sticky 고정) -->
         <div class="hidden md:block overflow-x-hidden max-h-[65vh] pr-0.5 overflow-y-auto border border-slate-200 rounded-xl shadow-xs">
