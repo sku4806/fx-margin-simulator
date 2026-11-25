@@ -1621,8 +1621,6 @@ def register_crud_routes(app):
         comm_rows = legacy_mssql.query_shipped_info(
             start_date=start_date, end_date=end_date, search_query=target, biz_type="COMMISSION", limit=limit
         )
-        for it in (bundle_ships if not comm_rows else []):
-            pass
         if not comm_rows:
             bundle_ships = legacy_mssql._load_phase1_bundle("shipped_info.json") or []
             s_dt = (start_date or "")[:10]
