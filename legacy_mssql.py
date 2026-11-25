@@ -642,6 +642,12 @@ def query_unpaid_list(
         {order_clause}
     """
 
+    cache_key = (sales_rep, customer, mfg, aging_filter, search_query, min_out_date, sort_by, int(limit))
+    now_ts = time.time()
+    cached_entry = _CACHED_UNPAID_QUERIES.get(cache_key)
+    if cached_entry and (now_ts - cached_entry["ts"] < 45):
+        return cached_entry["data"]
+
     try:
         conn = get_db_connection()
         cur = conn.cursor(as_dict=True)
@@ -673,6 +679,7 @@ def query_unpaid_list(
                 "sales": normalize_sales_rep(r["sales_rep"]),
                 "color_code": int(r["gubun_color"])
             })
+        _CACHED_UNPAID_QUERIES[cache_key] = {"ts": now_ts, "data": results}
         return results
     except Exception as e:
         print(f"[ERROR] query_unpaid_list 에러: {e}")
@@ -1825,6 +1832,9 @@ def get_part_price_history(part_no: str) -> Dict[str, Any]:
 # 🚚 세일즈 마스터 [Sales Daily Report - FrmShippedInfo] 공식 출하 원장 모듈
 # ========================================================
 _CACHED_SHIPPED_FILTERS = {"makers": [], "supplies": [], "updated_at": 0}
+_CACHED_SHIPPED_QUERIES: Dict[tuple, Dict[str, Any]] = {}
+_CACHED_UNPAID_QUERIES: Dict[tuple, Dict[str, Any]] = {}
+_CACHED_SUB_LEDGERS: Dict[tuple, Dict[str, Any]] = {}
 
 def get_shipped_info_filters() -> Dict[str, Any]:
     """출하 원장의 고유 제조사(MFG) 및 공급사(SUPPLY) 목록 반환 (캐싱 적용)"""
@@ -1968,6 +1978,12 @@ def query_shipped_info(
         ORDER BY s.SHIPDT DESC, s.IDX DESC
     """
 
+    cache_key = (start_date, end_date, mfg, supply, search_query, biz_type, comm_status, int(limit))
+    now_ts = time.time()
+    cached_entry = _CACHED_SHIPPED_QUERIES.get(cache_key)
+    if cached_entry and (now_ts - cached_entry["ts"] < 45):
+        return cached_entry["data"]
+
     try:
         conn = get_db_connection()
         cur = conn.cursor(as_dict=True)
@@ -2026,6 +2042,7 @@ def query_shipped_info(
                 "sales_rep": normalize_sales_rep(r["sales_rep"]),
                 "file_no": clean_val(r["file_no"])
             })
+        _CACHED_SHIPPED_QUERIES[cache_key] = {"ts": now_ts, "data": results}
         return results
     except Exception as e:
         print(f"[ERROR] query_shipped_info 에러: {e}")

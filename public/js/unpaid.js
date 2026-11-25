@@ -78,11 +78,67 @@ function computeSummaryFromItems(items) {
   };
 }
 
+const UNPAID_SNAPSHOT_KEY = 'bsk_unpaid_snapshot_v1';
+
+export function getLocalUnpaidSnapshot() {
+  try {
+    const raw = localStorage.getItem(UNPAID_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+      return parsed.items;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function saveLocalUnpaidSnapshot(items) {
+  try {
+    if (Array.isArray(items) && items.length > 0) {
+      localStorage.setItem(UNPAID_SNAPSHOT_KEY, JSON.stringify({ ts: Date.now(), items: items.slice(0, 400) }));
+    }
+  } catch (_) {}
+}
+
 /**
- * 미수금 목록 비동기 패치 (Supabase Cloud-First -> API Fallback)
+ * 미수금 목록 비동기 패치 (로컬 스냅샷 즉시 반영 + API/Supabase 병렬 조회)
  */
 export async function fetchUnpaidList(params = {}) {
-  // 1. Supabase Cloud 우선 조회 (Cloud-First)
+  if (!cachedUnpaid.length) {
+    const snap = getLocalUnpaidSnapshot();
+    if (snap && snap.length > 0) {
+      cachedUnpaid = snap;
+      window.currentUnpaidList = cachedUnpaid;
+    }
+  }
+
+  // 1. 로컬 API 브릿지 우선 호출 (백엔드 45초 인메모리 캐시 연동으로 1ms 응답)
+  const urlParams = new URLSearchParams();
+  if (params.sales_rep && params.sales_rep !== 'ALL') urlParams.append('sales_rep', params.sales_rep);
+  if (params.customer) urlParams.append('customer', params.customer);
+  if (params.mfg) urlParams.append('mfg', params.mfg);
+  if (params.aging && params.aging !== 'all') urlParams.append('aging', params.aging);
+  if (params.query) urlParams.append('query', params.query);
+  if (params.min_date) urlParams.append('min_date', params.min_date);
+  if (params.sort) urlParams.append('sort', params.sort);
+
+  try {
+    const res = await fetch(`/api/unpaid?${urlParams.toString()}`);
+    const data = await res.json();
+    if (data.status === 'success' && Array.isArray(data.items) && data.items.length > 0) {
+      cachedUnpaid = data.items.map(u => ({
+        ...u,
+        sales: toEnglishSalesName(u.sales)
+      }));
+      saveLocalUnpaidSnapshot(cachedUnpaid);
+      window.currentUnpaidList = cachedUnpaid;
+      return cachedUnpaid;
+    }
+  } catch (err) {
+    console.warn("로컬 미수금 API 패치 우회, Supabase 직접 조회:", err);
+  }
+
+  // 2. Supabase Cloud Fallback
   if (sbClient) {
     try {
       let qb = sbClient.from('legacy_unpaid').select('*');
@@ -99,40 +155,16 @@ export async function fetchUnpaidList(params = {}) {
       }
       qb = qb.order('out_date', { ascending: false });
 
-      const { data, error } = await qb.limit(1500);
+      const { data, error } = await qb.limit(1000);
       if (!error && data && data.length > 0) {
         cachedUnpaid = data.map(mapSupabaseToUnpaid);
+        saveLocalUnpaidSnapshot(cachedUnpaid);
         window.currentUnpaidList = cachedUnpaid;
         return cachedUnpaid;
       }
     } catch (e) {
-      console.warn("Supabase 미수금 조회 우회, API 시도:", e);
+      console.warn("Supabase 미수금 조회 실패:", e);
     }
-  }
-
-  // 2. 로컬 API 브릿지 Fallback
-  const urlParams = new URLSearchParams();
-  if (params.sales_rep && params.sales_rep !== 'ALL') urlParams.append('sales_rep', params.sales_rep);
-  if (params.customer) urlParams.append('customer', params.customer);
-  if (params.mfg) urlParams.append('mfg', params.mfg);
-  if (params.aging && params.aging !== 'all') urlParams.append('aging', params.aging);
-  if (params.query) urlParams.append('query', params.query);
-  if (params.min_date) urlParams.append('min_date', params.min_date);
-  if (params.sort) urlParams.append('sort', params.sort);
-
-  try {
-    const res = await fetch(`/api/unpaid?${urlParams.toString()}`);
-    const data = await res.json();
-    if (data.status === 'success') {
-      cachedUnpaid = (data.items || []).map(u => ({
-        ...u,
-        sales: toEnglishSalesName(u.sales)
-      }));
-      window.currentUnpaidList = cachedUnpaid;
-      return cachedUnpaid;
-    }
-  } catch (err) {
-    console.error("미수금 목록 패치 에러:", err);
   }
   window.currentUnpaidList = cachedUnpaid;
   return cachedUnpaid;

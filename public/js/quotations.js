@@ -86,8 +86,10 @@ function mapSupabaseToQuotation(q) {
   };
 }
 
+const QUOTATIONS_SNAPSHOT_KEY = 'bsk_quotations_snapshot_v1';
+
 /**
- * 서버/클라우드로부터 견적 목록 로드 (Supabase 우선 조회 ➔ 로컬 MS-SQL Fallback)
+ * 서버/클라우드로부터 견적 목록 로드 (로컬 스냅샷 0.01초 즉시 반영 + 로컬 API 우선 ➔ Supabase Fallback)
  */
 export async function fetchQuotations(params = {}) {
   const start = params.startDate !== undefined ? params.startDate : currentStartDate;
@@ -99,7 +101,46 @@ export async function fetchQuotations(params = {}) {
   currentEndDate = end;
   currentMfg = mfg;
 
-  // 1. Supabase Cloud 우선 조회 (Cloud-First)
+  if (!cachedQuotations.length && !mfg && !query) {
+    try {
+      const raw = localStorage.getItem(QUOTATIONS_SNAPSHOT_KEY);
+      if (raw) {
+        const snap = JSON.parse(raw);
+        if (snap && Array.isArray(snap.items) && snap.items.length > 0) {
+          cachedQuotations = snap.items;
+          renderQuotationsView('quotationsSection');
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 1. 로컬 API 브릿지 우선 조회 (해외 Supabase 왕복 없이 빠른 응답)
+  const urlParams = new URLSearchParams();
+  if (start) urlParams.append('start_date', start);
+  if (end) urlParams.append('end_date', end);
+  if (mfg) urlParams.append('mfg', mfg);
+  if (query) urlParams.append('query', query);
+
+  try {
+    const res = await fetch(`/api/quotations?${urlParams.toString()}`);
+    const data = await res.json();
+    if (data.status === 'success' && Array.isArray(data.quotations) && data.quotations.length > 0) {
+      cachedQuotations = data.quotations.map(q => ({
+        ...q,
+        sales: toEnglishSalesName(q.sales)
+      }));
+      if (!mfg && !query) {
+        try {
+          localStorage.setItem(QUOTATIONS_SNAPSHOT_KEY, JSON.stringify({ ts: Date.now(), items: cachedQuotations.slice(0, 200) }));
+        } catch (_) {}
+      }
+      return cachedQuotations;
+    }
+  } catch (err) {
+    console.warn("로컬 견적 API 우회, Supabase 직접 조회:", err);
+  }
+
+  // 2. Supabase Cloud Fallback
   if (sbClient) {
     try {
       let qb = sbClient.from('legacy_quotations').select('*');
@@ -126,37 +167,19 @@ export async function fetchQuotations(params = {}) {
       }
       qb = qb.order('quote_date', { ascending: false }).order('quote_no', { ascending: true }).order('line_no', { ascending: true });
 
-      const { data, error } = await qb.limit(500);
+      const { data, error } = await qb.limit(400);
       if (!error && data && data.length > 0) {
         cachedQuotations = data.map(mapSupabaseToQuotation);
+        if (!mfg && !query) {
+          try {
+            localStorage.setItem(QUOTATIONS_SNAPSHOT_KEY, JSON.stringify({ ts: Date.now(), items: cachedQuotations.slice(0, 200) }));
+          } catch (_) {}
+        }
         return cachedQuotations;
       }
     } catch (e) {
-      console.warn("Supabase 견적 조회 우회, 로컬 브릿지 시도:", e);
+      console.warn("Supabase 견적 조회 실패:", e);
     }
-  }
-
-  // 2. 로컬 MS-SQL 브릿지 Fallback (사내망 및 로컬 서버 환경)
-  const urlParams = new URLSearchParams();
-  if (start) urlParams.append('start_date', start);
-  if (end) urlParams.append('end_date', end);
-  if (mfg) urlParams.append('mfg', mfg);
-  if (query) urlParams.append('query', query);
-
-  try {
-    const res = await fetch(`/api/quotations?${urlParams.toString()}`);
-    const data = await res.json();
-    if (data.status === 'success') {
-      cachedQuotations = (data.quotations || []).map(q => ({
-        ...q,
-        sales: toEnglishSalesName(q.sales)
-      }));
-      return cachedQuotations;
-    } else {
-      console.warn("견적 목록 조회 경고:", data.message);
-    }
-  } catch (err) {
-    console.error("견적 API 호출 실패:", err);
   }
 
   return cachedQuotations;

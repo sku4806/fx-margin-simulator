@@ -11,6 +11,7 @@ erp_crud.py
 
 import os
 import json
+import time
 import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, List, Dict, Any
@@ -1419,6 +1420,9 @@ def merge_cloud_price_history(base_data: Dict[str, Any], part_no: str) -> Dict[s
     return base_data
 
 
+_CACHED_ACTION_INBOX: Dict[tuple, Dict[str, Any]] = {}
+
+
 # ========================================================
 # 🔌 FastAPI 라우트 통합 등록 (main.py & api/index.py 공통 호출)
 # ========================================================
@@ -1813,8 +1817,16 @@ def register_crud_routes(app):
     def api_action_inbox(sales_rep: Optional[str] = None, include_archive: bool = False):
         import legacy_mssql
         target_rep = legacy_mssql.normalize_sales_rep(sales_rep) if (sales_rep and sales_rep.upper() != "ALL") else ""
+        cache_key = (target_rep or "ALL", bool(include_archive))
+        now_ts = time.time()
+        cached_box = _CACHED_ACTION_INBOX.get(cache_key)
+        if cached_box and (now_ts - cached_box["ts"] < 45):
+            return cached_box["data"]
+
         today_str = datetime.date.today().isoformat()
+        # 핵심 알림 모드(기본): 2026년 당해 연도 핵심 중점 관리 건만 선별 / 전체 모드: 2010년 이후 전체
         min_active_date = "2010-01-01" if include_archive else "2025-01-01"
+        min_comm_date = "2010-01-01" if include_archive else "2026-06-01"
 
         # 1) Domestic 연체 미수금 (만기일 경과 건)
         overdue_dom = []
@@ -1872,11 +1884,11 @@ def register_crud_routes(app):
                 })
         overdue_dom.sort(key=lambda x: (x["overdue_days"], x["amount_krw"]), reverse=True)
 
-        # 2) 해외 Commission 미입금 (45일 이상 경과)
+        # 2) 해외 Commission 미입금 (핵심 모드: 2026-06 이후 선적 + 60일 이상 경과 + 커미션 $300 이상 중점 회수 대상)
         overdue_comm = []
         try:
             comm_list = legacy_mssql.query_unpaid_commissions(
-                sales_rep=target_rep or None, status="UNPAID", min_date=min_active_date, limit=800
+                sales_rep=target_rep or None, status="UNPAID", min_date=min_comm_date, limit=800
             ) or []
         except Exception:
             comm_list = []
@@ -1890,12 +1902,17 @@ def register_crud_routes(app):
                 comm_list.append(it)
 
         today_dt = datetime.date.today()
+        min_comm_days = 45 if include_archive else 60
+        min_comm_usd = 0.0 if include_archive else 300.0
         for c in comm_list:
             rep = legacy_mssql.normalize_sales_rep(c.get("sales_rep"))
             if target_rep and rep != target_rep:
                 continue
             sdt = (c.get("ship_date") or "")[:10]
-            if not include_archive and sdt and sdt < min_active_date:
+            if not include_archive and sdt and sdt < min_comm_date:
+                continue
+            c_usd = round(float(c.get("comm_amt") or 0.0), 2)
+            if c_usd < min_comm_usd:
                 continue
             eff_cust = legacy_mssql.resolve_effective_customer(c.get("customer"), c.get("real_cust"), fallback="본사 입고(BSK)")
             if not include_archive and (legacy_mssql.is_self_company_name(eff_cust) or eff_cust == "본사 입고(BSK)"):
@@ -1906,20 +1923,20 @@ def register_crud_routes(app):
                     elapsed = max(0, (today_dt - datetime.date.fromisoformat(sdt)).days)
                 except Exception:
                     elapsed = 0
-            if elapsed >= 45:
+            if elapsed >= min_comm_days:
                 overdue_comm.append({
                     "idx": c.get("idx"),
                     "customer": eff_cust,
                     "part_no": c.get("part_no") or "-",
                     "maker": c.get("maker") or "OTHERS",
-                    "comm_usd": round(float(c.get("comm_amt") or 0.0), 2),
+                    "comm_usd": c_usd,
                     "ship_date": sdt,
                     "elapsed_days": elapsed,
                     "sales_rep": rep,
                 })
-        overdue_comm.sort(key=lambda x: (x["elapsed_days"], x["comm_usd"]), reverse=True)
+        overdue_comm.sort(key=lambda x: (x["comm_usd"], x["elapsed_days"]), reverse=True)
 
-        # 3) 대여(Borrow) 미반납 / 반납기한 경과 건 (DBRWFile + 클라우드 대여)
+        # 3) 대여(Borrow) 미반납 / 반납기한 경과 건 (핵심 모드: 무상샘플 RDT='FREE' 및 Gubun='SAM' 제외, 유상/실제 대여 Gubun='BRW' 미반납만 선별)
         overdue_borrows = []
         try:
             cloud_brw = list_cloud_sub_ledgers("borrow", limit=150)
@@ -1930,8 +1947,14 @@ def register_crud_routes(app):
 
         for b in all_brw:
             res_st = (b.get("result") or "").strip().upper()
-            if res_st in ("RTN", "RETURN", "반납", "반납완료", "DONE", "IN"):
+            if res_st in ("RTN", "RETURN", "반납", "반납완료", "DONE", "IN", "CNL", "REQ"):
                 continue
+            rdt_str = (b.get("rdt") or "").strip().upper()
+            gubun_str = (b.get("gubun") or "").strip().upper()
+            if not include_archive:
+                # 무상 제공 샘플(FREE / SAMPLE / SAM)은 반납 대상이 아니므로 핵심 알림에서 제외
+                if rdt_str in ("FREE", "SAMPLE") or gubun_str == "SAM":
+                    continue
             rep = legacy_mssql.normalize_sales_rep(b.get("sales"))
             if target_rep and rep != target_rep:
                 continue
@@ -1942,6 +1965,8 @@ def register_crud_routes(app):
             if not include_archive and legacy_mssql.is_self_company_name(cust_b):
                 continue
             rtn_dt = (b.get("rtn_date") or "")[:10]
+            if not rtn_dt and rdt_str and len(rdt_str) == 10 and rdt_str.startswith("20"):
+                rtn_dt = rdt_str
             elapsed = 0
             if b_dt and len(b_dt) == 10:
                 try:
@@ -1988,7 +2013,7 @@ def register_crud_routes(app):
                     "sales_rep": rep,
                 })
 
-        return {
+        result_payload = {
             "status": "success",
             "sales_rep": target_rep or "ALL",
             "overdue_domestic": overdue_dom[:60],
@@ -2002,6 +2027,8 @@ def register_crud_routes(app):
             "delayed_pos": delayed_pos[:50],
             "delayed_pos_total_count": len(delayed_pos),
         }
+        _CACHED_ACTION_INBOX[cache_key] = {"ts": now_ts, "data": result_payload}
+        return result_payload
 
     # 8. Phase 2 확장 조회 API (수입 통관·B/L·부대비용 DchargeFile & 해외 송금 FinanceFile)
     @app.get("/api/import-charges")

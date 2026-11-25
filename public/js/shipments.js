@@ -26,7 +26,7 @@ let subLedgerQuery = '';            // 서브탭 검색어
 let availableMakers = [];
 let availableSupplies = [];
 
-// 기본 조회 기간: 최근 4개월 (세일즈 마스터 기본 뷰 규격)
+// 기본 조회 기간: 최근 2개월 (초기 목록 로딩 속도 2배 단축)
 const initDates = getDefaultDateRange();
 let currentStartDate = initDates.start;
 let currentEndDate = initDates.end;
@@ -37,6 +37,8 @@ let currentCommStatus = '';  // '' | 'UNPAID' | 'PAID'
 let currentSearchQuery = '';
 let currentFxRate = 1350;
 
+const SHIPMENTS_SNAPSHOT_KEY = 'bsk_shipments_snapshot_v1';
+
 // 페이지네이션
 let shipmentPage = 1;
 let shipmentPageSize = 50;
@@ -46,13 +48,13 @@ let lastHealTime = 0;
 const HEAL_INTERVAL_MS = 10 * 60 * 1000;
 
 /**
- * 기본 날짜 계산 (종료일: 오늘, 시작일: 4달 전)
+ * 기본 날짜 계산 (종료일: 오늘, 시작일: 2달 전)
  */
 function getDefaultDateRange() {
   const now = new Date();
   const end = now.toISOString().slice(0, 10);
   const startDateObj = new Date();
-  startDateObj.setMonth(startDateObj.getMonth() - 4);
+  startDateObj.setMonth(startDateObj.getMonth() - 2);
   const start = startDateObj.toISOString().slice(0, 10);
   return { start, end };
 }
@@ -138,13 +140,23 @@ export async function fetchLedgerShipments(params = {}) {
   if (bizType) urlParams.append('biz_type', bizType);
   if (commStatus) urlParams.append('comm_status', commStatus);
   if (query) urlParams.append('query', query);
-  urlParams.append('limit', '2000');
+  urlParams.append('limit', '800');
 
   try {
     const res = await fetch(`/api/shipped-info?${urlParams.toString()}`);
     const data = await res.json();
     if (data.status === 'success') {
       cachedLedgerShipments = data.items || [];
+      if (!mfg && !supply && !bizType && !commStatus && !query && cachedLedgerShipments.length > 0) {
+        try {
+          localStorage.setItem(SHIPMENTS_SNAPSHOT_KEY, JSON.stringify({
+            ts: Date.now(),
+            start,
+            end,
+            items: cachedLedgerShipments.slice(0, 200)
+          }));
+        } catch (_) {}
+      }
       return cachedLedgerShipments;
     } else {
       console.warn("출하 원장 조회 경고:", data.message);
@@ -261,7 +273,22 @@ export async function fetchShipments() {
     }
   }
 
-  // 2. 필터 목록, 공식 출하 원장, 웹 출하 데이터를 병렬(Promise.all)로 동시 로드 후 통합
+  // 2. 로컬 스냅샷이 있으면 즉시 1차 렌더링(0.01초) 후 백그라운드 최신화 (Stale-While-Revalidate)
+  if (!cachedLedgerShipments.length) {
+    try {
+      const raw = localStorage.getItem(SHIPMENTS_SNAPSHOT_KEY);
+      if (raw) {
+        const snap = JSON.parse(raw);
+        if (snap && Array.isArray(snap.items) && snap.items.length > 0) {
+          cachedLedgerShipments = snap.items;
+          lastFilteredShipments = getMergedLedgerShipments();
+          renderShipmentsView('shipmentsSection');
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. 필터 목록, 공식 출하 원장, 웹 출하 데이터를 병렬(Promise.all)로 동시 로드 후 통합
   await Promise.all([fetchShippedFilters(), fetchLedgerShipments(), fetchWebShipments()]);
   lastFilteredShipments = getMergedLedgerShipments();
   return lastFilteredShipments;

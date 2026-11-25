@@ -1,7 +1,7 @@
-import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261125_v55';
-import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
-import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261125_v55';
-import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261125_v55';
+import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261125_v56';
+import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js?v=20261125_v56';
+import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261125_v56';
+import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261125_v56';
 const initSamplesTab = async (...args) => (await import('./samples.js?v=20261119_opt')).initSamplesTab(...args);
 import { toEnglishSalesName, isSelfCompanyName, resolveCustomerName } from './modules/utils.js?v=20261125_v54';
 window.toEnglishSalesName = toEnglishSalesName;
@@ -878,8 +878,8 @@ function bindTabSwitch() {
             <div class="font-bold text-sm text-slate-700">미수금 및 결제예정일 데이터를 불러오는 중입니다...</div>
           </div>
         `;
-        await fetchUnpaidList({ min_date: '2010-01-01' });
         await Promise.all([
+          fetchUnpaidList({ min_date: '2010-01-01' }),
           fetchUnpaidSummary('2010-01-01'),
           fetchUnpaidSalesReps()
         ]);
@@ -3412,7 +3412,7 @@ const actionInboxState = {
   data: null,
 };
 
-function getAgingInventoryList(salesRep = 'ALL') {
+function getAgingInventoryList(salesRep = 'ALL', includeArchive = false) {
   const allInv = Array.isArray(window.cachedItems) ? window.cachedItems : [];
   const todayMs = Date.now();
   const repTarget = (salesRep && salesRep !== 'ALL') ? toEnglishSalesName(salesRep) : 'ALL';
@@ -3425,9 +3425,13 @@ function getAgingInventoryList(salesRep = 'ALL') {
       if (repTarget !== 'ALL' && owner !== repTarget) return null;
       const eDate = (it.entryDate || it.entry_date || '').slice(0, 10);
       if (!eDate || eDate.length < 10) return null;
+      // 핵심 알림 모드(기본): 2026년 당해 연도 입고분 중 90일+ 경과 & $2,000 이상 중점 재고만 선별
+      if (!includeArchive && eDate < '2026-01-01') return null;
       const ageDays = Math.max(0, Math.floor((todayMs - new Date(eDate).getTime()) / 86400000));
       if (ageDays < 90) return null;
       const uUsd = Number(it.unitUsd ?? it.unit_usd) || 0;
+      const amtUsd = stk * uUsd;
+      if (!includeArchive && amtUsd < 2000) return null;
       const sFx = Number(it.shipFx ?? it.ship_fx) || appliedFxRate || 1350;
       const rawArr = Number(it.arrangedQty ?? it.arranged_qty) || 0;
       const isExp = it.orderStatus === '배정완료' || it.orderStatus === '배정요청';
@@ -3442,8 +3446,8 @@ function getAgingInventoryList(salesRep = 'ALL') {
         stock: stk,
         avail_qty: avail,
         unit_usd: uUsd,
-        amount_usd: stk * uUsd,
-        amount_krw: Math.round(stk * uUsd * sFx),
+        amount_usd: amtUsd,
+        amount_krw: Math.round(amtUsd * sFx),
         entry_date: eDate,
         age_days: ageDays,
       };
@@ -3469,7 +3473,7 @@ window.refreshActionInboxBadge = async function(forceFetch = false) {
       }
     }
     const d = actionInboxState.data || {};
-    const agingStocks = getAgingInventoryList(actionInboxState.salesRep);
+    const agingStocks = getAgingInventoryList(actionInboxState.salesRep, actionInboxState.includeArchive);
     const totalActions =
       (Number(d.overdue_domestic_total_count) || 0) +
       (Number(d.overdue_commission_total_count) || 0) +
@@ -3541,7 +3545,7 @@ function renderActionInboxModal() {
   const commList = Array.isArray(d.overdue_commission) ? d.overdue_commission : [];
   const brwList = Array.isArray(d.overdue_borrows) ? d.overdue_borrows : [];
   const poList = Array.isArray(d.delayed_pos) ? d.delayed_pos : [];
-  const agingStocks = getAgingInventoryList(salesRep);
+  const agingStocks = getAgingInventoryList(salesRep, actionInboxState.includeArchive);
 
   const domTotalCnt = Number(d.overdue_domestic_total_count) || domList.length;
   const domTotalKrw = Number(d.overdue_domestic_total_krw) || domList.reduce((s, r) => s + (r.amount_krw || 0), 0);
