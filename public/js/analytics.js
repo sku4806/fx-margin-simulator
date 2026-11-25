@@ -1324,7 +1324,40 @@ function renderSalesRepPortfolioModal() {
           </div>
         </div>
 
-        ${loading ? `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ [${escRep(rep)}] 담당 Domestic 매출·마진 및 Commission 원장을 불러오는 중입니다...</div>` : filteredBiz.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">조회된 비즈니스 내역이 없습니다.</div>` : `
+        ${loading ? `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ [${escRep(rep)}] 담당 Domestic 매출·마진 및 Commission 원장을 불러오는 중입니다...</div>` : filteredBiz.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">조회된 비즈니스 내역이 없습니다.</div>` : window.innerWidth < 768 ? `
+          <div class="space-y-2.5">
+            ${filteredBiz.slice(0, 300).map(r => {
+              const isComm = r.biz_type === 'COMMISSION';
+              return `
+                <div class="bg-white rounded-xl border ${isComm ? 'border-violet-200' : 'border-slate-200'} p-3 shadow-2xs space-y-1.5 text-xs">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-1.5">
+                      ${isComm
+                        ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-violet-100 text-violet-800 border border-violet-200">💎 COMM</span>`
+                        : `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">🏢 DOM</span>`}
+                      <span class="font-mono text-[10px] text-slate-500">${escRep(r.date)}</span>
+                    </div>
+                    <span class="font-bold text-indigo-900 text-[11px]">${escRep(r.maker)}</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="font-black text-sm text-slate-900 truncate">${escRep(r.customer)}</div>
+                      <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${escRep(r.part_no)}')" class="font-mono font-bold text-[11px] text-indigo-900 hover:underline text-left truncate max-w-full">📈 ${escRep(r.part_no)}</button>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <div class="font-mono font-black text-sm text-slate-900">${escRep(r.amt_str)}</div>
+                      <div class="font-mono text-[10px] font-bold ${isComm ? 'text-violet-700' : 'text-emerald-700'}">${escRep(r.profit_str)} (${escRep(r.rate_str)})</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
+                    <span class="font-mono">${r.qty.toLocaleString()} EA · ${escRep(r.unit_str)}</span>
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.status_str === '미입금' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-slate-100 text-slate-700'}">${escRep(r.status_str)}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        ` : `
           <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-100 text-slate-700 font-bold text-[11px] border-b border-slate-200 sticky top-0 z-10">
@@ -1393,7 +1426,47 @@ function renderSalesRepPortfolioModal() {
     });
     const todayMs = Date.now();
 
-    tabBodyHtml = filteredStocks.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">[${escRep(rep)}] 담당으로 보유 중인 재고가 없습니다.</div>` : `
+    tabBodyHtml = filteredStocks.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">[${escRep(rep)}] 담당으로 보유 중인 재고가 없습니다.</div>` : window.innerWidth < 768 ? `
+      <div class="space-y-2.5">
+        ${filteredStocks.map(it => {
+          const stk = Number(it.stock) || 0;
+          const rawArr = Number(it.arrangedQty ?? it.arranged_qty) || 0;
+          const isExp = it.orderStatus === '배정완료' || it.orderStatus === '배정요청';
+          const arr = rawArr > 0 ? Math.min(stk, rawArr) : (isExp ? stk : 0);
+          const avail = Math.max(0, stk - arr);
+          const uUsd = Number(it.unitUsd ?? it.unit_usd) || 0;
+          const sFx = Number(it.shipFx ?? it.ship_fx) || fx;
+          const amtUsd = stk * uUsd;
+          const amtKrw = Math.round(amtUsd * sFx);
+          const eDate = (it.entryDate || it.entry_date || '').slice(0, 10);
+          const ageDays = eDate ? Math.max(0, Math.floor((todayMs - new Date(eDate).getTime()) / 86400000)) : 0;
+          const part = it.partName || it.part_name || '-';
+          const cust = (it.customer && it.customer !== '-') ? it.customer : (it.memo || '-');
+          return `
+            <div class="bg-white rounded-xl border border-emerald-200 p-3 shadow-2xs space-y-1.5 text-xs">
+              <div class="flex items-center justify-between gap-2">
+                <span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold ${isExp ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">${escRep(it.orderStatus || '보유')}</span>
+                <span class="font-mono text-[10px] ${ageDays >= 90 ? 'text-rose-600 font-bold' : 'text-slate-500'}">${escRep(eDate || '-')} (${ageDays}일)</span>
+              </div>
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${escRep(part)}')" class="font-mono font-black text-sm text-indigo-950 hover:underline text-left truncate max-w-full">📈 ${escRep(part)}</button>
+                  <div class="text-[11px] font-bold text-slate-600 truncate">${escRep(it.maker)} · ${escRep(cust)}</div>
+                </div>
+                <div class="text-right shrink-0">
+                  <div class="font-mono font-black text-sm text-slate-900">$${amtUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div class="font-mono text-[10px] text-rose-600 font-bold">₩${amtKrw.toLocaleString()}</div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
+                <span class="font-mono">보유 <strong>${stk.toLocaleString()}</strong> · <span class="text-emerald-700 font-bold">가용 ${avail.toLocaleString()}</span> ($${uUsd.toFixed(4)})</span>
+                <button type="button" onclick="window.jumpFromRepModalToInventory('${escRep(rep)}', '${escRep(it.id)}')" class="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded font-bold cursor-pointer">상세/배정 ↗</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : `
       <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
         <table class="w-full text-left text-xs border-collapse">
           <thead class="bg-emerald-50 text-emerald-950 font-bold text-[11px] border-b border-emerald-200 sticky top-0 z-10">
@@ -1527,7 +1600,7 @@ function renderSalesRepPortfolioModal() {
   }
 
   modal.innerHTML = `
-    <div class="bg-white w-[96vw] max-w-[1560px] h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+    <div class="bg-white w-full sm:w-[96vw] max-w-[1560px] h-[94dvh] sm:h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
       <!-- 헤더 -->
       <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-violet-950 text-white px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div class="flex items-center gap-3">

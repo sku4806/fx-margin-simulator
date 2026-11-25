@@ -86,7 +86,7 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
 
   modal.classList.remove('hidden');
   modal.innerHTML = `
-    <div class="bg-white w-[96vw] max-w-[1640px] h-[93dvh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+    <div class="bg-white w-full sm:w-[96vw] max-w-[1640px] h-[94dvh] sm:h-[93dvh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
       
       <!-- 상단 헤더 (모바일·데스크톱 완벽 대응) -->
       <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-md shrink-0">

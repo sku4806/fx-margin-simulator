@@ -300,7 +300,28 @@ async function loadCommissionCustomersTab(query = '') {
     return;
   }
 
-  body.innerHTML = `
+  body.innerHTML = window.innerWidth < 768 ? `
+    <div class="p-3 space-y-2.5">
+      ${list.map(c => `
+        <div class="bg-white rounded-xl border border-violet-200 p-3 shadow-2xs space-y-1.5 text-xs">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${escHtml(c.customer).replace(/'/g, "\\'")}')" class="font-black text-sm text-slate-900 hover:text-indigo-700 hover:underline text-left truncate max-w-full">🏢 ${escHtml(c.customer)}</button>
+              <div class="text-[11px] font-bold text-indigo-800 truncate">${escHtml(c.makers || '-')} · ${c.count.toLocaleString()}건</div>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="font-mono font-black text-sm text-violet-800">$${c.comm_amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div class="font-mono text-[10px] font-bold ${c.unpaid_amt > 0 ? 'text-rose-600' : 'text-emerald-600'}">미입금 $${c.unpaid_amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
+            <span>선적액 $${Math.round(c.ship_amt).toLocaleString()} · 최근 ${escHtml(c.last_date || '-')}</span>
+            <span class="font-bold text-indigo-900">${escHtml(c.sales || '-')}</span>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  ` : `
     <div class="overflow-x-auto">
       <table class="w-full text-left text-xs border-collapse">
         <thead class="bg-violet-50 text-violet-950 font-bold text-[11px] border-b border-violet-200 sticky top-0 z-10">
@@ -1038,7 +1059,43 @@ function renderCustomer360Modal() {
           </div>
         </div>
 
-        ${loading ? `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ [${escHtml(customerName)}] 360° 통합 비즈니스 원장을 불러오는 중입니다...</div>` : filtered.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">조회된 출하·매출 내역이 없습니다.</div>` : `
+        ${loading ? `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ [${escHtml(customerName)}] 360° 통합 비즈니스 원장을 불러오는 중입니다...</div>` : filtered.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">조회된 출하·매출 내역이 없습니다.</div>` : window.innerWidth < 768 ? `
+          <div class="space-y-2.5">
+            ${filtered.slice(0, 250).map(r => {
+              const isComm = r.biz_type === 'COMMISSION';
+              return `
+                <div class="bg-white rounded-xl border ${isComm ? 'border-violet-200' : 'border-slate-200'} p-3 shadow-2xs space-y-1.5 text-xs">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-1.5">
+                      ${isComm
+                        ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-violet-100 text-violet-800 border border-violet-200">💎 COMM</span>`
+                        : `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">🏢 DOM</span>`}
+                      <span class="font-mono text-[10px] text-slate-500">${escHtml(r.date)}</span>
+                    </div>
+                    <span class="font-bold text-indigo-900 text-[11px]">${escHtml(r.sales_rep || '-')}</span>
+                  </div>
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${escHtml(r.part_no).replace(/'/g, "\\'")}')" class="font-mono font-black text-sm text-slate-900 hover:text-indigo-700 text-left truncate max-w-full">📈 ${escHtml(r.part_no)}</button>
+                      <div class="text-[11px] text-slate-500 font-mono truncate">${escHtml(r.maker)} · ${escHtml(r.po_no || '-')}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <div class="font-mono font-black text-sm text-slate-900">${escHtml(r.amt_str)}</div>
+                      <div class="font-mono text-[10px] font-bold ${isComm ? 'text-violet-700' : 'text-emerald-700'}">${escHtml(r.profit_str)} (${escHtml(r.rate_str)})</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
+                    <span class="font-mono text-slate-600">${r.qty.toLocaleString()} EA · ${escHtml(r.unit_str)}</span>
+                    <div class="flex items-center gap-1">
+                      <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.status_str === '미입금' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-slate-100 text-slate-700'}">${escHtml(r.status_str)}</span>
+                      ${r.awb_no ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escHtml(r.awb_no).replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-sky-50 text-sky-700 border border-sky-200 rounded text-[9px] font-bold cursor-pointer">🚚</button>` : ''}
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        ` : `
           <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-100 text-slate-700 font-bold text-[11px] border-b border-slate-200 sticky top-0 z-10">
@@ -1281,7 +1338,7 @@ function renderCustomer360Modal() {
   }
 
   modal.innerHTML = `
-    <div class="bg-white w-[96vw] max-w-[1560px] h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+    <div class="bg-white w-full sm:w-[96vw] max-w-[1560px] h-[94dvh] sm:h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
       <!-- 헤더 -->
       <div class="bg-gradient-to-r from-slate-900 via-teal-950 to-indigo-950 text-white px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div class="flex items-center gap-3 min-w-0">
