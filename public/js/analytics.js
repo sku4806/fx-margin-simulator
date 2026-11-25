@@ -6,7 +6,7 @@
  * 특정 월 필터 (당월 보기 / 연간 누적 YTD 보기) 완벽 지원
  */
 
-import { toEnglishSalesName, escapeHtml as escRep } from './modules/utils.js';
+import { toEnglishSalesName, escapeHtml as escRep, isSelfCompanyName, resolveCustomerName } from './modules/utils.js';
 
 let cachedAnalytics = null;
 let lastMergedSalesReps = [];
@@ -1237,7 +1237,7 @@ function renderSalesRepPortfolioModal() {
     ...commShipments.map(c => ({
       biz_type: 'COMMISSION',
       date: c.ship_date || '',
-      customer: c.customer || '기타',
+      customer: resolveCustomerName(c.customer, c.real_cust, '본사 입고(BSK)'),
       maker: c.maker || 'OTHERS',
       part_no: c.part_no || '-',
       po_no: c.po_no || c.invoice_no || '',
@@ -1271,10 +1271,11 @@ function renderSalesRepPortfolioModal() {
   const unpaidDomKrw = unpaidDom.reduce((s, u) => s + (Number(u.amount_vat ?? u.out_amt) || 0), 0);
   const unpaidCommUsd = commShipments.filter(s => s.comm_status === '미입금').reduce((s, r) => s + (Number(r.comm_amt) || 0), 0);
 
-  // 고객사별 통합 집계 (Domestic 매출/마진 + Commission)
+  // 고객사별 통합 집계 (Domestic 매출/마진 + Commission, 자사 BIGSHINE 명의는 실수요처로 치환 및 순수 본사입고 제외)
   const custMap = {};
   domesticSales.forEach(d => {
-    const c = (d.customer || '기타').trim();
+    const c = resolveCustomerName(d.customer, d.real_cust, '');
+    if (!c || isSelfCompanyName(c) || c === '기타') return;
     if (!custMap[c]) custMap[c] = { customer: c, count: 0, dom_krw: 0, mgn_krw: 0, comm_usd: 0, makers: new Set() };
     custMap[c].count += 1;
     custMap[c].dom_krw += Number(d.out_amt_krw) || 0;
@@ -1282,7 +1283,8 @@ function renderSalesRepPortfolioModal() {
     if (d.maker) custMap[c].makers.add(d.maker);
   });
   commShipments.forEach(s => {
-    const c = (s.customer || '기타').trim();
+    const c = resolveCustomerName(s.customer, s.real_cust, '');
+    if (!c || isSelfCompanyName(c) || c === '기타') return;
     if (!custMap[c]) custMap[c] = { customer: c, count: 0, dom_krw: 0, mgn_krw: 0, comm_usd: 0, makers: new Set() };
     custMap[c].count += 1;
     custMap[c].comm_usd += Number(s.comm_amt) || 0;
@@ -1352,7 +1354,9 @@ function renderSalesRepPortfolioModal() {
                       </td>
                       <td class="py-1.5 px-2 text-center font-mono text-slate-600 whitespace-nowrap">${escRep(r.date)}</td>
                       <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[160px]" title="${escRep(r.customer)}">
-                        <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${escRep(r.customer).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full text-left" title="클릭하여 고객사 360° 통합 브리핑 열기">${escRep(r.customer)}</button>
+                        ${!isSelfCompanyName(r.customer) && r.customer !== '-' && r.customer !== '기타'
+                          ? `<button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${escRep(r.customer).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full text-left" title="클릭하여 고객사 360° 통합 브리핑 열기">${escRep(r.customer)}</button>`
+                          : `<span class="text-slate-500">${escRep(r.customer)}</span>`}
                       </td>
                       <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escRep(r.maker)}</td>
                       <td class="py-1.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">

@@ -176,3 +176,28 @@ export function toEnglishSalesName(val, fallback = '') {
 if (typeof window !== 'undefined') {
   window.toEnglishSalesName = toEnglishSalesName;
 }
+
+const SELF_COMPANY_RE = /(big\s*shine|빅샤인|본사\s*일반재고|본사\s*입고\(bsk\))/i;
+
+export function isSelfCompanyName(name) {
+  const s = String(name ?? '').trim();
+  if (!s || s === '-' || s === '기타') return false;
+  return SELF_COMPANY_RE.test(s);
+}
+
+export function resolveCustomerName(customer, realCust = '', fallback = '본사 입고(BSK)') {
+  const c = String(customer ?? '').trim();
+  const rc = String(realCust ?? '').trim();
+  if (!c || c === '-' || isSelfCompanyName(c)) {
+    if (rc && rc !== '-' && rc !== '.' && !isSelfCompanyName(rc)) {
+      return rc;
+    }
+    return isSelfCompanyName(c) ? fallback : (c || fallback);
+  }
+  return c;
+}
+
+if (typeof window !== 'undefined') {
+  window.isSelfCompanyName = isSelfCompanyName;
+  window.resolveCustomerName = resolveCustomerName;
+}

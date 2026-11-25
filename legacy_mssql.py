@@ -187,6 +187,31 @@ def normalize_sales_rep(v: Any) -> str:
         return " / ".join(seen)
     return _normalize_single_rep(raw)
 
+
+_SELF_COMPANY_RE = _re.compile(r"(big\s*shine|빅샤인|본사\s*일반재고)", _re.IGNORECASE)
+
+def is_self_company_name(name: Any) -> bool:
+    """고객사명이 자사(BIGSHINE KOREA / 빅샤인코리아 / 본사 일반재고)인지 판별"""
+    s = clean_val(name)
+    if not s or not isinstance(s, str):
+        return False
+    return bool(_SELF_COMPANY_RE.search(s))
+
+
+def resolve_effective_customer(customer: Any, real_cust: Any = "", fallback: str = "본사 입고(BSK)") -> str:
+    """
+    고객사(CUSTOMER)가 BIGSHINE KOREA(자사 입고분)인 경우:
+    - REALCUST(실수요처)가 있으면 REALCUST를 실제 고객사명으로 반환
+    - REALCUST도 없거나 자사명이면 fallback('본사 입고(BSK)') 반환
+    """
+    c = clean_val(customer) if customer is not None else ""
+    rc = clean_val(real_cust) if real_cust is not None else ""
+    if is_self_company_name(c):
+        if rc and rc not in ("-", ".", "0") and not is_self_company_name(rc):
+            return rc
+        return fallback
+    return c or (rc if (rc and not is_self_company_name(rc)) else "기타")
+
 class _SafeConnection:
     """예외 발생 시에도 MS-SQL 소켓 누수를 원천 차단하는 자동 해제 커넥션 래퍼"""
     __slots__ = ("_conn", "_closed")
@@ -847,9 +872,9 @@ def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dic
             except Exception as ex:
                 print(f"[WARN] month parsing failed: {ex}")
 
-        # 2. Top 10 고객사 (선택된 기간 기준)
+        # 2. Top 10 고객사 (선택된 기간 기준, 자사 BIGSHINE KOREA 명의 내부 입고건 제외)
         cur.execute("""
-            SELECT TOP 10
+            SELECT TOP 15
                 COALESCE(B.KNAME, B.CNAME, '기타') as customer_name,
                 SUM(A.OutAmt) as total_billing,
                 COUNT(*) as order_count
@@ -865,8 +890,10 @@ def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dic
                 "customer_name": clean_val(r["customer_name"]),
                 "billing": float(r["total_billing"] or 0.0),
                 "order_count": int(r["order_count"] or 0)
-            } for r in top_cust_raw
-        ]
+            }
+            for r in top_cust_raw
+            if not is_self_company_name(r.get("customer_name"))
+        ][:10]
 
         # 3. Top 제조사 (Maker) (선택된 기간 기준)
         cur.execute("""
@@ -947,7 +974,8 @@ def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dic
             SELECT
                 LTRIM(RTRIM(ISNULL(m.Mfg, ''))) as maker,
                 LTRIM(RTRIM(ISNULL(m.Sales, ''))) as sales_rep,
-                COALESCE(c.CNAME, c.KNAME, m.RealCust, '기타') as customer,
+                COALESCE(c.CNAME, c.KNAME, '기타') as customer,
+                COALESCE(sub.RealCust, m.RealCust, '') as real_cust,
                 ISNULL(s.ShipAmt, 0) as ship_amt,
                 ISNULL(s.CommAmt, 0) as comm_amt,
                 ISNULL(s.Rate, 0) as comm_rate,
@@ -997,11 +1025,12 @@ def get_sales_analytics(year: str = "2026", month: Optional[str] = "all") -> Dic
                 sslot["unpaid_amt"] += c_amt
             sslot["count"] += 1
 
-            cu = clean_val(r["customer"]) or "기타"
-            cslot = cust_comm_map.setdefault(cu, {"customer": cu, "comm_amt": 0.0, "ship_amt": 0.0, "count": 0})
-            cslot["comm_amt"] += c_amt
-            cslot["ship_amt"] += s_amt
-            cslot["count"] += 1
+            cu = resolve_effective_customer(r.get("customer"), r.get("real_cust"), fallback="본사 입고(BSK)")
+            if cu != "본사 입고(BSK)":
+                cslot = cust_comm_map.setdefault(cu, {"customer": cu, "comm_amt": 0.0, "ship_amt": 0.0, "count": 0})
+                cslot["comm_amt"] += c_amt
+                cslot["ship_amt"] += s_amt
+                cslot["count"] += 1
 
         commission_summary = {
             "total_comm_amt": round(comm_total_amt, 2),
@@ -1963,10 +1992,17 @@ def query_shipped_info(
                 biz_t = "DIRECT"
                 c_status = ""
 
+            raw_cust = clean_val(r["customer"])
+            raw_rc = clean_val(r["real_cust"])
+            eff_cust = resolve_effective_customer(raw_cust, raw_rc, fallback="본사 입고(BSK)")
+            is_bsk_import = is_self_company_name(raw_cust)
+
             results.append({
                 "idx": r["idx"],
-                "customer": clean_val(r["customer"]),
-                "real_cust": clean_val(r["real_cust"]),
+                "customer": eff_cust,
+                "raw_customer": raw_cust,
+                "real_cust": raw_rc,
+                "is_bsk_import": is_bsk_import,
                 "po_no": clean_val(r["po_no"]),
                 "part_no": clean_val(r["part_no"]),
                 "ship_date": clean_val(r["ship_date"]),

@@ -1,7 +1,7 @@
 // public/js/unpaid.js
 // 레거시 세일즈 마스터 [FrmUnpaidCustList] 미수금 및 결제예정일 관리 대시보드 모듈
 import { sbClient } from './supabase.js';
-import { toEnglishSalesName, debounce } from './modules/utils.js';
+import { toEnglishSalesName, debounce, isSelfCompanyName, resolveCustomerName } from './modules/utils.js';
 
 let cachedUnpaid = [];
 let cachedSummary = null;
@@ -635,8 +635,13 @@ function renderCommissionUnpaidBody() {
                 <td class="py-1.5 px-2 text-center font-mono text-slate-700 whitespace-nowrap">${esc(r.ship_date)}</td>
                 <td class="py-1.5 px-2 text-center whitespace-nowrap">${statusBadge}</td>
                 <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${esc(r.maker)}</td>
-                <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[165px]" title="${esc(r.customer)}">
-                  <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${esc(r.customer).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full text-left" title="클릭하여 360° 고객사 통합 브리핑 열기">${esc(r.customer)}</button>
+                <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[165px]" title="${esc(resolveCustomerName(r.customer, r.real_cust, '본사 입고(BSK)'))}">
+                  ${(() => {
+                    const effCust = resolveCustomerName(r.customer, r.real_cust, '본사 입고(BSK)');
+                    return !isSelfCompanyName(effCust)
+                      ? `<button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${esc(effCust).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full text-left" title="클릭하여 360° 고객사 통합 브리핑 열기">${esc(effCust)}</button>`
+                      : `<span class="text-slate-500">${esc(effCust)}</span>`;
+                  })()}
                 </td>
                 <td class="py-1.5 px-2 font-mono font-bold text-slate-900 truncate max-w-[175px]" title="${esc(r.part_no)}">
                   <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${esc(r.part_no)}')" class="text-left hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full" title="클릭하여 과거 단가·커미션 이력 보기">${esc(r.part_no)}</button>

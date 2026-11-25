@@ -1,12 +1,14 @@
-import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261125_v53';
+import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261125_v54';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
-import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261125_v53';
-import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261125_v53';
+import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261125_v54';
+import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261125_v54';
 const initSamplesTab = async (...args) => (await import('./samples.js?v=20261119_opt')).initSamplesTab(...args);
-import { toEnglishSalesName } from './modules/utils.js';
+import { toEnglishSalesName, isSelfCompanyName, resolveCustomerName } from './modules/utils.js?v=20261125_v54';
 window.toEnglishSalesName = toEnglishSalesName;
+window.isSelfCompanyName = isSelfCompanyName;
+window.resolveCustomerName = resolveCustomerName;
 import { supabase, sbClient } from './supabase.js';
-import * as InventoryModule from './inventory.js?v=20261125_v53';
+import * as InventoryModule from './inventory.js?v=20261125_v54';
 import { initAuth, isCsOrAdminUser, isPaymentApprovalAdmin, getCurrentUserEmail, APPROVAL_ADMIN_EMAILS } from './modules/auth.js';
 window.isCsOrAdminUser = isCsOrAdminUser;
 window.isPaymentApprovalAdmin = isPaymentApprovalAdmin;
@@ -37,8 +39,8 @@ window.openPurchaseOrdersModal = openPurchaseOrdersModal;
 window.fetchPurchaseOrdersSummary = fetchPurchaseOrdersSummary;
 window.refreshPoHeaderBadge = fetchPurchaseOrdersSummary;
 
-window.openCustomerMasterModal = async (...args) => (await import('./customers.js?v=20261125_v53')).openCustomerMasterModal(...args);
-window.openCustomer360Modal = async (...args) => (await import('./customers.js?v=20261125_v53')).openCustomer360Modal(...args);
+window.openCustomerMasterModal = async (...args) => (await import('./customers.js?v=20261125_v54')).openCustomerMasterModal(...args);
+window.openCustomer360Modal = async (...args) => (await import('./customers.js?v=20261125_v54')).openCustomer360Modal(...args);
 window.openPriceHistoryModal = async (...args) => (await import('./price-history.js?v=20261119_opt')).openPriceHistoryModal(...args);
 
 import { initPaymentModule, updatePaymentPendingBadge, switchPaymentSubTab } from './expense-approval.js';

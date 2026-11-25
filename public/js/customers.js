@@ -3,7 +3,7 @@
  * 거래처·담당자(복수)·매입처(CustomerBFile)·지정 포워더(CustForwarder) 통합 마스터 모달
  */
 
-import { toEnglishSalesName, escapeHtml as escHtml } from './modules/utils.js';
+import { toEnglishSalesName, escapeHtml as escHtml, isSelfCompanyName, resolveCustomerName } from './modules/utils.js';
 
 let activeMasterTab = 'customers'; // 'customers' | 'suppliers' | 'forwarders'
 let custPage = 1;
@@ -262,7 +262,8 @@ async function loadCommissionCustomersTab(query = '') {
       const rows = (data.status === 'success' && Array.isArray(data.items)) ? data.items : [];
       const map = {};
       rows.forEach(r => {
-        const name = (r.customer || '기타').trim();
+        const name = resolveCustomerName(r.customer, r.real_cust, '');
+        if (!name || isSelfCompanyName(name) || name === '기타') return;
         if (!map[name]) {
           map[name] = { customer: name, count: 0, ship_amt: 0, comm_amt: 0, unpaid_amt: 0, makers: new Set(), sales: new Set(), last_date: '' };
         }
@@ -854,7 +855,7 @@ const cust360State = {
 
 export async function openCustomer360Modal(customerName, cid = null) {
   const cleanName = (customerName || '').trim();
-  if (!cleanName || cleanName === '-' || cleanName === '기타' || /본사 일반재고/i.test(cleanName)) return;
+  if (!cleanName || cleanName === '-' || cleanName === '기타' || isSelfCompanyName(cleanName)) return;
 
   cust360State.customerName = cleanName;
   cust360State.cid = cid;

@@ -10,7 +10,7 @@
 
 import { sbClient } from './supabase.js';
 import { openInvoiceModal, openPackingListModal } from './trade-documents.js';
-import { toEnglishSalesName, debounce, escapeHtml as escSub } from './modules/utils.js';
+import { toEnglishSalesName, debounce, escapeHtml as escSub, isSelfCompanyName, resolveCustomerName } from './modules/utils.js';
 
 // 상태 관리
 let activeShipmentMode = 'ledger'; // 'ledger' | 'web' | 'borrow' | 'rma' | 'loss'
@@ -1002,10 +1002,23 @@ function generateTableRows(items) {
         <!-- 거래구분 (COMM / DOM) -->
         <td class="py-2 px-2 text-center whitespace-nowrap">${bizBadge}</td>
         
-        <!-- CUSTOMER -->
-        <td class="py-2 px-2 font-bold text-slate-900 truncate max-w-[140px]" title="${item.customer || '-'}">
-          ${item.customer && item.customer !== '-' ? `<button type="button" onclick="event.stopPropagation(); window.openCustomer360Modal && window.openCustomer360Modal('${String(item.customer).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline truncate max-w-full text-left cursor-pointer" title="클릭하여 [${item.customer}] 360° 고객사 통합 브리핑 열기">${item.customer}</button>` : '-'}
-        </td>
+        <!-- CUSTOMER (자사 BIGSHINE 명의 수입건은 실수요처 REALCUST를 고객사로 우선 표기) -->
+        ${(() => {
+          const effCust = resolveCustomerName(item.customer, item.real_cust, '본사 입고(BSK)');
+          const isBskImport = Boolean(item.is_bsk_import || isSelfCompanyName(item.raw_customer || item.customer));
+          const canOpen360 = effCust && effCust !== '-' && !isSelfCompanyName(effCust);
+          const safeCust = String(effCust).replace(/'/g, "\\'");
+          return `
+            <td class="py-2 px-2 font-bold text-slate-900 truncate max-w-[155px]" title="${effCust}${isBskImport ? ' (1차 수입: BIGSHINE KOREA)' : ''}">
+              <div class="flex items-center gap-1 min-w-0">
+                ${canOpen360
+                  ? `<button type="button" onclick="event.stopPropagation(); window.openCustomer360Modal && window.openCustomer360Modal('${safeCust}')" class="hover:text-indigo-700 hover:underline truncate text-left cursor-pointer" title="클릭하여 [${effCust}] 360° 고객사 통합 브리핑 열기">${effCust}</button>`
+                  : `<span class="text-slate-500 font-semibold truncate">${effCust}</span>`}
+                ${isBskImport && canOpen360 ? `<span class="shrink-0 px-1 py-0.2 rounded text-[8px] font-bold bg-slate-100 text-slate-500 border border-slate-200" title="B/L 1차 수하인: BIGSHINE KOREA / 실수요처: ${effCust}">BSK입고</span>` : ''}
+              </div>
+            </td>
+          `;
+        })()}
 
         <!-- REALCUST -->
         <td class="py-2 px-2 font-semibold text-indigo-900 truncate max-w-[120px]" title="${item.real_cust || '-'}">
@@ -1123,7 +1136,7 @@ function generateShipmentMobileCards(items) {
             <h4 class="font-black text-xs text-slate-900 mt-1 truncate" title="${cleanPart}">
               ${cleanPart}
             </h4>
-            <div class="text-[10px] text-slate-500 font-bold truncate mt-0.5">${item.customer || '-'}${item.real_cust ? ` · ${item.real_cust}` : ''}</div>
+            <div class="text-[10px] text-slate-500 font-bold truncate mt-0.5">${resolveCustomerName(item.customer, item.real_cust, '본사 입고(BSK)')}</div>
           </div>
           <div class="text-right shrink-0">
             <span class="text-[9px] text-slate-400 block font-semibold">출하금액(USD)</span>

@@ -1617,6 +1617,8 @@ def register_crud_routes(app):
         comm_rows = legacy_mssql.query_shipped_info(
             start_date=start_date, end_date=end_date, search_query=target, biz_type="COMMISSION", limit=limit
         )
+        for it in (bundle_ships if not comm_rows else []):
+            pass
         if not comm_rows:
             bundle_ships = legacy_mssql._load_phase1_bundle("shipped_info.json") or []
             s_dt = (start_date or "")[:10]
@@ -1631,7 +1633,11 @@ def register_crud_routes(app):
                     continue
                 if e_dt and dt and dt > e_dt:
                     continue
-                comm_rows.append(it)
+                row_copy = dict(it)
+                row_copy["customer"] = legacy_mssql.resolve_effective_customer(
+                    it.get("customer"), it.get("real_cust"), fallback="본사 입고(BSK)"
+                )
+                comm_rows.append(row_copy)
         else:
             comm_rows = [it for it in comm_rows if legacy_mssql.normalize_sales_rep(it.get("sales_rep")) == target]
         return {
@@ -1652,8 +1658,8 @@ def register_crud_routes(app):
     ):
         import legacy_mssql
         c_name = (customer_name or "").strip()
-        if not c_name:
-            raise HTTPException(status_code=400, detail="고객사명(customer_name)이 필요합니다.")
+        if not c_name or legacy_mssql.is_self_company_name(c_name) or c_name == "본사 입고(BSK)":
+            raise HTTPException(status_code=400, detail="자사(BIGSHINE KOREA)가 아닌 실제 거래 고객사명을 선택해 주세요.")
 
         # 1) 고객 마스터 검색 (CID 확보)
         cust_info = list_customers_cloud(q=c_name, page=1, limit=15)
@@ -1696,7 +1702,7 @@ def register_crud_routes(app):
             s_dt = (start_date or "")[:10]
             e_dt = (end_date or "")[:10]
             for it in bundle_ships:
-                cust_hay = f"{it.get('customer','')} {it.get('customer_ename','')}".lower()
+                cust_hay = f"{it.get('customer','')} {it.get('customer_ename','')} {it.get('real_cust','')}".lower()
                 if c_low not in cust_hay:
                     continue
                 if (it.get("comm_amt") or 0) <= 0 and it.get("biz_type") != "COMMISSION":
@@ -1706,11 +1712,15 @@ def register_crud_routes(app):
                     continue
                 if e_dt and dt and dt > e_dt:
                     continue
-                comm_rows.append(it)
+                row_copy = dict(it)
+                row_copy["customer"] = legacy_mssql.resolve_effective_customer(
+                    it.get("customer"), it.get("real_cust"), fallback=c_name
+                )
+                comm_rows.append(row_copy)
         else:
             comm_rows = [
                 it for it in comm_rows
-                if c_low in f"{it.get('customer','')} {it.get('customer_ename','')}".lower()
+                if c_low in f"{it.get('customer','')} {it.get('customer_ename','')} {it.get('real_cust','')}".lower()
             ]
 
         # 4) 미수금 (Domestic 미수 + Commission 미입금)
