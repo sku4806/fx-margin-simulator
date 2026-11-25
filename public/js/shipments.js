@@ -1004,7 +1004,7 @@ function generateTableRows(items) {
         
         <!-- CUSTOMER -->
         <td class="py-2 px-2 font-bold text-slate-900 truncate max-w-[140px]" title="${item.customer || '-'}">
-          ${item.customer || '-'}
+          ${item.customer && item.customer !== '-' ? `<button type="button" onclick="event.stopPropagation(); window.openCustomer360Modal && window.openCustomer360Modal('${String(item.customer).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline truncate max-w-full text-left cursor-pointer" title="클릭하여 [${item.customer}] 360° 고객사 통합 브리핑 열기">${item.customer}</button>` : '-'}
         </td>
 
         <!-- REALCUST -->

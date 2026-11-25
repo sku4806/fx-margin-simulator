@@ -1641,6 +1641,340 @@ def register_crud_routes(app):
             "commission_shipments": comm_rows,
         }
 
+    # 🏢 고객사 360° 통합 브리핑 조회 (고객 마스터 + 복수 담당자 + 지정 포워더 + Domestic 매출·마진 + Commission + 미수금 + 견적 + 샘플/프로젝트)
+    @app.get("/api/customers/360")
+    def api_customer_360_briefing(
+        customer_name: str,
+        cid: Optional[int] = None,
+        start_date: Optional[str] = "2024-01-01",
+        end_date: Optional[str] = "2026-12-31",
+        limit: int = 300
+    ):
+        import legacy_mssql
+        c_name = (customer_name or "").strip()
+        if not c_name:
+            raise HTTPException(status_code=400, detail="고객사명(customer_name)이 필요합니다.")
+
+        # 1) 고객 마스터 검색 (CID 확보)
+        cust_info = list_customers_cloud(q=c_name, page=1, limit=15)
+        matched_customers = cust_info.get("customers") or []
+        primary_cust = None
+        c_low = c_name.lower()
+        for mc in matched_customers:
+            kn = (mc.get("kname") or "").strip().lower()
+            cn = (mc.get("cname") or "").strip().lower()
+            if kn == c_low or cn == c_low or (cid and str(mc.get("cid")) == str(cid)):
+                primary_cust = mc
+                break
+        if not primary_cust and matched_customers:
+            primary_cust = matched_customers[0]
+
+        resolved_cid = cid or (primary_cust.get("cid") if primary_cust else None)
+
+        # 2) 복수 담당자 (ContactFile) & 지정 포워더 (CustForwarder)
+        contacts = []
+        if resolved_cid:
+            contacts = legacy_mssql.query_customer_contacts(cid=int(resolved_cid), limit=100)
+        if not contacts:
+            contacts = legacy_mssql.query_customer_contacts(query=c_name, limit=50)
+
+        forwarders = []
+        if resolved_cid:
+            forwarders = legacy_mssql.query_forwarders(cid=int(resolved_cid), limit=50)
+        if not forwarders:
+            forwarders = legacy_mssql.query_forwarders(query=c_name, limit=30)
+
+        # 3) Domestic 매출·마진 (DReportFile) & Commission 출하 (ShippingFile)
+        dom_sales = legacy_mssql.query_customer_domestic_sales(
+            customer_name=c_name, start_date=start_date, end_date=end_date, limit=limit
+        )
+        comm_rows = legacy_mssql.query_shipped_info(
+            start_date=start_date, end_date=end_date, search_query=c_name, biz_type="COMMISSION", limit=limit
+        )
+        if not comm_rows:
+            bundle_ships = legacy_mssql._load_phase1_bundle("shipped_info.json") or []
+            s_dt = (start_date or "")[:10]
+            e_dt = (end_date or "")[:10]
+            for it in bundle_ships:
+                cust_hay = f"{it.get('customer','')} {it.get('customer_ename','')}".lower()
+                if c_low not in cust_hay:
+                    continue
+                if (it.get("comm_amt") or 0) <= 0 and it.get("biz_type") != "COMMISSION":
+                    continue
+                dt = (it.get("ship_date") or "")[:10]
+                if s_dt and dt and dt < s_dt:
+                    continue
+                if e_dt and dt and dt > e_dt:
+                    continue
+                comm_rows.append(it)
+        else:
+            comm_rows = [
+                it for it in comm_rows
+                if c_low in f"{it.get('customer','')} {it.get('customer_ename','')}".lower()
+            ]
+
+        # 4) 미수금 (Domestic 미수 + Commission 미입금)
+        unpaid_dom = []
+        try:
+            unpaid_dom = legacy_mssql.query_unpaid_list(customer=c_name, limit=100) or []
+        except Exception:
+            pass
+        if not unpaid_dom:
+            try:
+                r_up = requests.get(
+                    _sb_url("legacy_unpaid"),
+                    headers=_sb_headers(prefer=""),
+                    params=[("customer_name", f"ilike.%{c_name}%"), ("limit", "100")],
+                    timeout=4,
+                )
+                if r_up.status_code == 200:
+                    for u in r_up.json() or []:
+                        if u.get("pay_status") == "수금완료":
+                            continue
+                        unpaid_dom.append({
+                            "idx": u.get("legacy_idx") or u.get("id"),
+                            "cname": u.get("customer_name"),
+                            "out_dt": u.get("out_date"),
+                            "due_date": u.get("due_date"),
+                            "po_no": u.get("po_no"),
+                            "part_no": u.get("part_name"),
+                            "mfg": u.get("maker"),
+                            "qty": u.get("qty") or 0,
+                            "amount_vat": float(u.get("amount_vat") or 0.0),
+                            "overdue_days": int(u.get("overdue_days") or 0),
+                            "pay_status": u.get("pay_status") or "미결제",
+                            "sales": legacy_mssql.normalize_sales_rep(u.get("sales_rep")),
+                        })
+            except Exception:
+                pass
+
+        # 5) 최근 견적 이력 (legacy_quotations)
+        quotations = []
+        try:
+            r_qt = requests.get(
+                _sb_url("legacy_quotations"),
+                headers=_sb_headers(prefer=""),
+                params=[
+                    ("customer_name", f"ilike.%{c_name}%"),
+                    ("order", "quote_date.desc,quote_no.desc"),
+                    ("limit", "80"),
+                ],
+                timeout=4,
+            )
+            if r_qt.status_code == 200:
+                for q in r_qt.json() or []:
+                    quotations.append({
+                        "quote_dt": q.get("quote_date"),
+                        "quote_no": q.get("quote_no"),
+                        "cname": q.get("customer_name"),
+                        "mfg": q.get("maker"),
+                        "part_no": q.get("part_name"),
+                        "qty": q.get("qty_int") or q.get("qty_str") or 0,
+                        "qunit": q.get("currency_unit") or "US$",
+                        "qp": float(q.get("quote_price") or 0.0),
+                        "amount": float(q.get("amount") or 0.0),
+                        "sales": legacy_mssql.normalize_sales_rep(q.get("sales_rep")),
+                        "remark": q.get("remark") or "",
+                    })
+        except Exception:
+            pass
+
+        # 6) Design-In 샘플 프로젝트 트래킹 & 샘플 출고
+        samples_tracking = legacy_mssql.query_sample_tracking(query=c_name, limit=80)
+        samples_out = legacy_mssql.query_sample_outflows(query=c_name, limit=80)
+
+        return {
+            "status": "success",
+            "customer_name": c_name,
+            "cid": resolved_cid,
+            "profile": primary_cust or {"kname": c_name, "cname": c_name},
+            "contacts": contacts,
+            "forwarders": forwarders,
+            "domestic_sales": dom_sales,
+            "commission_shipments": comm_rows,
+            "unpaid_domestic": unpaid_dom,
+            "quotations": quotations,
+            "sample_projects": samples_tracking,
+            "sample_outflows": samples_out,
+        }
+
+    # 🔔 상단 헤더 '오늘의 액션 알림 센터 (Action Inbox)' 통합 집계 API
+    @app.get("/api/notifications/action-inbox")
+    def api_action_inbox(sales_rep: Optional[str] = None):
+        import legacy_mssql
+        target_rep = legacy_mssql.normalize_sales_rep(sales_rep) if (sales_rep and sales_rep.upper() != "ALL") else ""
+        today_str = datetime.date.today().isoformat()
+
+        # 1) Domestic 연체 미수금 (30일 이상 또는 입금약속일 도래)
+        overdue_dom = []
+        try:
+            raw_unpaid = legacy_mssql.query_unpaid_list(sales_rep=target_rep or None, limit=600) or []
+        except Exception:
+            raw_unpaid = []
+        if not raw_unpaid:
+            try:
+                params = [("select", "*"), ("limit", "600")]
+                if target_rep:
+                    params.append(("sales_rep", f"eq.{target_rep}"))
+                r_u = requests.get(_sb_url("legacy_unpaid"), headers=_sb_headers(prefer=""), params=params, timeout=4)
+                if r_u.status_code == 200:
+                    for u in r_u.json() or []:
+                        raw_unpaid.append({
+                            "idx": u.get("legacy_idx") or u.get("id"),
+                            "cname": u.get("customer_name"),
+                            "out_dt": u.get("out_date"),
+                            "due_date": u.get("due_date"),
+                            "part_no": u.get("part_name"),
+                            "mfg": u.get("maker"),
+                            "amount_vat": float(u.get("amount_vat") or 0.0),
+                            "overdue_days": int(u.get("overdue_days") or 0),
+                            "pay_status": u.get("pay_status") or "미결제",
+                            "sales": legacy_mssql.normalize_sales_rep(u.get("sales_rep")),
+                        })
+            except Exception:
+                pass
+
+        for u in raw_unpaid:
+            if u.get("pay_status") == "수금완료":
+                continue
+            rep = legacy_mssql.normalize_sales_rep(u.get("sales") or u.get("sales_rep"))
+            if target_rep and rep != target_rep:
+                continue
+            ov = int(u.get("overdue_days") or 0)
+            if ov >= 14:
+                overdue_dom.append({
+                    "customer": u.get("cname") or u.get("customer_name") or "-",
+                    "part_no": u.get("part_no") or u.get("part_name") or "-",
+                    "maker": u.get("mfg") or u.get("maker") or "",
+                    "amount_krw": round(float(u.get("amount_vat") or 0.0)),
+                    "overdue_days": ov,
+                    "due_date": (u.get("due_date") or "")[:10],
+                    "out_date": (u.get("out_dt") or u.get("out_date") or "")[:10],
+                    "sales_rep": rep,
+                })
+        overdue_dom.sort(key=lambda x: (x["overdue_days"], x["amount_krw"]), reverse=True)
+
+        # 2) 해외 Commission 미입금 (45일 이상 경과)
+        overdue_comm = []
+        try:
+            comm_list = legacy_mssql.query_commission_unpaid(
+                sales_rep=target_rep or None, status="UNPAID", min_date="2024-01-01", limit=400
+            ) or []
+        except Exception:
+            comm_list = []
+        if not comm_list:
+            bundle_ships = legacy_mssql._load_phase1_bundle("shipped_info.json") or []
+            for it in bundle_ships:
+                if (it.get("comm_amt") or 0) <= 0:
+                    continue
+                if it.get("comm_status") == "정산완료" or it.get("bank_dt") or it.get("comm_dt"):
+                    continue
+                comm_list.append(it)
+
+        today_dt = datetime.date.today()
+        for c in comm_list:
+            rep = legacy_mssql.normalize_sales_rep(c.get("sales_rep"))
+            if target_rep and rep != target_rep:
+                continue
+            sdt = (c.get("ship_date") or "")[:10]
+            elapsed = int(c.get("elapsed_days") or 0)
+            if not elapsed and sdt and len(sdt) == 10:
+                try:
+                    elapsed = max(0, (today_dt - datetime.date.fromisoformat(sdt)).days)
+                except Exception:
+                    elapsed = 0
+            if elapsed >= 45:
+                overdue_comm.append({
+                    "idx": c.get("idx"),
+                    "customer": c.get("customer") or "-",
+                    "part_no": c.get("part_no") or "-",
+                    "maker": c.get("maker") or "OTHERS",
+                    "comm_usd": round(float(c.get("comm_amt") or 0.0), 2),
+                    "ship_date": sdt,
+                    "elapsed_days": elapsed,
+                    "sales_rep": rep,
+                })
+        overdue_comm.sort(key=lambda x: (x["elapsed_days"], x["comm_usd"]), reverse=True)
+
+        # 3) 대여(Borrow) 미반납 / 반납기한 경과 건 (DBRWFile + 클라우드 대여)
+        overdue_borrows = []
+        try:
+            cloud_brw = list_cloud_sub_ledgers("borrow", limit=150)
+            legacy_brw = legacy_mssql.query_borrows(limit=250)
+            all_brw = cloud_brw + legacy_brw
+        except Exception:
+            all_brw = []
+
+        for b in all_brw:
+            res_st = (b.get("result") or "").strip().upper()
+            if res_st in ("RTN", "RETURN", "반납", "반납완료", "DONE", "IN"):
+                continue
+            rep = legacy_mssql.normalize_sales_rep(b.get("sales"))
+            if target_rep and rep != target_rep:
+                continue
+            b_dt = (b.get("date") or "")[:10]
+            rtn_dt = (b.get("rtn_date") or "")[:10]
+            elapsed = 0
+            if b_dt and len(b_dt) == 10:
+                try:
+                    elapsed = max(0, (today_dt - datetime.date.fromisoformat(b_dt)).days)
+                except Exception:
+                    elapsed = 0
+            is_due_passed = bool(rtn_dt and len(rtn_dt) == 10 and rtn_dt < today_str)
+            if is_due_passed or elapsed >= 21:
+                overdue_borrows.append({
+                    "idx": b.get("idx"),
+                    "customer": b.get("customer_name") or "-",
+                    "part_no": b.get("part_no") or "-",
+                    "maker": b.get("maker") or "OTHERS",
+                    "qty": int(b.get("qty") or 0),
+                    "borrow_date": b_dt,
+                    "rtn_plan_date": rtn_dt,
+                    "elapsed_days": elapsed,
+                    "sales_rep": rep,
+                    "source": b.get("source") or "LEGACY",
+                })
+
+        # 4) 납기(ETA/CRD) 경과 미입고 발주 (DPOFile status='PO')
+        delayed_pos = []
+        try:
+            po_sum = legacy_mssql.get_purchase_orders_summary() or {}
+            pending_pos = po_sum.get("recent_pending_orders") or []
+        except Exception:
+            pending_pos = []
+        for po in pending_pos:
+            rep = legacy_mssql.normalize_sales_rep(po.get("sales_rep"))
+            if target_rep and rep != target_rep:
+                continue
+            eta = (po.get("eta_date") or "")[:10]
+            po_dt = (po.get("po_dt") or "")[:10]
+            if (eta and len(eta) == 10 and eta < today_str) or (po_dt and len(po_dt) == 10 and po_dt < (today_dt - datetime.timedelta(days=45)).isoformat()):
+                delayed_pos.append({
+                    "po_no": po.get("po_no") or "-",
+                    "part_no": po.get("part_no") or "-",
+                    "maker": po.get("maker") or "OTHERS",
+                    "qty": int(po.get("qty") or 0),
+                    "po_dt": po_dt,
+                    "eta_date": eta or "-",
+                    "real_cust": po.get("real_cust") or po.get("supplier_name") or "-",
+                    "sales_rep": rep,
+                })
+
+        return {
+            "status": "success",
+            "sales_rep": target_rep or "ALL",
+            "overdue_domestic": overdue_dom[:60],
+            "overdue_domestic_total_count": len(overdue_dom),
+            "overdue_domestic_total_krw": sum(x["amount_krw"] for x in overdue_dom),
+            "overdue_commission": overdue_comm[:60],
+            "overdue_commission_total_count": len(overdue_comm),
+            "overdue_commission_total_usd": round(sum(x["comm_usd"] for x in overdue_comm), 2),
+            "overdue_borrows": overdue_borrows[:50],
+            "overdue_borrows_total_count": len(overdue_borrows),
+            "delayed_pos": delayed_pos[:50],
+            "delayed_pos_total_count": len(delayed_pos),
+        }
+
     # 8. Phase 2 확장 조회 API (수입 통관·B/L·부대비용 DchargeFile & 해외 송금 FinanceFile)
     @app.get("/api/import-charges")
     def api_list_import_charges(query: Optional[str] = None, supp: Optional[str] = None, limit: int = 300):

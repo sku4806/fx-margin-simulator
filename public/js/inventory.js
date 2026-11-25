@@ -484,7 +484,7 @@ function generateLegacyMasterRow(item, canEdit) {
         ${getKindBadge(kind)}
       </td>
       <td class="py-2.5 px-2 align-middle">
-        <div class="font-bold text-slate-800 truncate max-w-[150px]" title="${cname}">${cname}</div>
+        ${cname !== '-' ? `<button type="button" onclick="event.stopPropagation(); window.openCustomer360Modal && window.openCustomer360Modal('${cname.replace(/'/g, "\\'")}')" class="font-bold text-slate-800 hover:text-indigo-700 hover:underline truncate max-w-[150px] block text-left cursor-pointer" title="클릭하여 [${cname}] 360° 고객사 통합 브리핑 보기">${cname}</button>` : `<div class="font-bold text-slate-400">-</div>`}
         <div class="text-[10px] text-slate-400 font-mono mt-0.5">입고: ${entryDate}</div>
       </td>
       <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
@@ -585,7 +585,7 @@ function generateFulfillmentRow(item, canEdit) {
       </td>
       <!-- 2. 계약처 -->
       <td class="py-2.5 px-2 align-middle">
-        <div class="font-bold text-slate-800 truncate max-w-[130px]" title="${cname}">${cname}</div>
+        ${cname !== '-' ? `<button type="button" onclick="event.stopPropagation(); window.openCustomer360Modal && window.openCustomer360Modal('${cname.replace(/'/g, "\\'")}')" class="font-bold text-slate-800 hover:text-indigo-700 hover:underline truncate max-w-[130px] block text-left cursor-pointer" title="클릭하여 [${cname}] 360° 고객사 통합 브리핑 보기">${cname}</button>` : `<div class="font-bold text-slate-400">-</div>`}
         ${(realCust && realCust !== '-' && realCust !== cname) ? `<div class="text-[9px] text-indigo-700 font-normal truncate">↳ ${realCust}</div>` : ''}
       </td>
       <!-- 3. PART NO / MFG -->

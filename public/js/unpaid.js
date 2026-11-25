@@ -635,7 +635,9 @@ function renderCommissionUnpaidBody() {
                 <td class="py-1.5 px-2 text-center font-mono text-slate-700 whitespace-nowrap">${esc(r.ship_date)}</td>
                 <td class="py-1.5 px-2 text-center whitespace-nowrap">${statusBadge}</td>
                 <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${esc(r.maker)}</td>
-                <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[165px]" title="${esc(r.customer)}">${esc(r.customer)}</td>
+                <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[165px]" title="${esc(r.customer)}">
+                  <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${esc(r.customer).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full text-left" title="클릭하여 360° 고객사 통합 브리핑 열기">${esc(r.customer)}</button>
+                </td>
                 <td class="py-1.5 px-2 font-mono font-bold text-slate-900 truncate max-w-[175px]" title="${esc(r.part_no)}">
                   <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${esc(r.part_no)}')" class="text-left hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full" title="클릭하여 과거 단가·커미션 이력 보기">${esc(r.part_no)}</button>
                 </td>
@@ -937,7 +939,9 @@ function generateUnpaidTableRows(items, offset = 0) {
         <td class="py-1.5 px-1.5 text-center font-mono text-slate-400">${realIdx + 1}</td>
         <td class="py-1.5 px-2 text-center whitespace-nowrap">${badgeHtml}</td>
         <td class="py-1.5 px-2 text-center font-mono font-bold text-slate-700 whitespace-nowrap">${u.due_date || '-'}</td>
-        <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[155px]" title="${u.cname || '-'}">${u.cname || '-'}</td>
+        <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[155px]" title="${u.cname || '-'}">
+          ${u.cname ? `<button type="button" onclick="event.stopPropagation(); window.openCustomer360Modal && window.openCustomer360Modal('${String(u.cname).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full text-left" title="클릭하여 [${u.cname}] 360° 고객사 통합 브리핑 열기">${u.cname}</button>` : '-'}
+        </td>
         <td class="py-1.5 px-2 text-slate-700 truncate max-w-[80px]" title="${u.contact || '-'}">${u.contact || '-'}</td>
         <td class="py-1.5 px-1.5 text-center font-bold text-indigo-950 whitespace-nowrap">${u.sales || '-'}</td>
         <td class="py-1.5 px-2 text-right font-mono font-black text-slate-950 whitespace-nowrap">₩ ${amtDisplay}</td>

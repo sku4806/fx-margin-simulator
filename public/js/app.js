@@ -1,12 +1,12 @@
-import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261123_opt2';
+import { fetchShipments, renderShipmentsView, syncShipmentLifecycle } from './shipments.js?v=20261125_v53';
 import { fetchQuotations, renderQuotationsView, fetchQuotationMfgs } from './quotations.js';
-import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261123_opt2';
-import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261123_opt2';
+import { fetchUnpaidList, fetchUnpaidSummary, fetchUnpaidSalesReps, renderUnpaidView } from './unpaid.js?v=20261125_v53';
+import { fetchSalesAnalytics, renderAnalyticsView } from './analytics.js?v=20261125_v53';
 const initSamplesTab = async (...args) => (await import('./samples.js?v=20261119_opt')).initSamplesTab(...args);
 import { toEnglishSalesName } from './modules/utils.js';
 window.toEnglishSalesName = toEnglishSalesName;
 import { supabase, sbClient } from './supabase.js';
-import * as InventoryModule from './inventory.js?v=20261119_fast';
+import * as InventoryModule from './inventory.js?v=20261125_v53';
 import { initAuth, isCsOrAdminUser, isPaymentApprovalAdmin, getCurrentUserEmail, APPROVAL_ADMIN_EMAILS } from './modules/auth.js';
 window.isCsOrAdminUser = isCsOrAdminUser;
 window.isPaymentApprovalAdmin = isPaymentApprovalAdmin;
@@ -37,7 +37,8 @@ window.openPurchaseOrdersModal = openPurchaseOrdersModal;
 window.fetchPurchaseOrdersSummary = fetchPurchaseOrdersSummary;
 window.refreshPoHeaderBadge = fetchPurchaseOrdersSummary;
 
-window.openCustomerMasterModal = async (...args) => (await import('./customers.js?v=20261119_opt')).openCustomerMasterModal(...args);
+window.openCustomerMasterModal = async (...args) => (await import('./customers.js?v=20261125_v53')).openCustomerMasterModal(...args);
+window.openCustomer360Modal = async (...args) => (await import('./customers.js?v=20261125_v53')).openCustomer360Modal(...args);
 window.openPriceHistoryModal = async (...args) => (await import('./price-history.js?v=20261119_opt')).openPriceHistoryModal(...args);
 
 import { initPaymentModule, updatePaymentPendingBadge, switchPaymentSubTab } from './expense-approval.js';
@@ -1405,7 +1406,12 @@ function renderSelectedStockCard(item) {
   const cardCustomer = document.getElementById('salesCardCustomer');
   if (cardCustomer) {
     const cust = item.customer || '-';
-    cardCustomer.innerText = cust;
+    if (cust !== '-' && !/bigshine|본사 일반재고/i.test(cust)) {
+      const safeCust = String(cust).replace(/'/g, "\\'");
+      cardCustomer.innerHTML = `<button type="button" onclick="event.stopPropagation(); window.openCustomer360Modal && window.openCustomer360Modal('${safeCust}')" class="hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full text-left" title="클릭하여 [${cust}] 360° 통합 브리핑 열기">${cust}</button>`;
+    } else {
+      cardCustomer.innerText = cust;
+    }
     cardCustomer.title = cust;
   }
 
@@ -1509,14 +1515,165 @@ function renderSelectedStockCard(item) {
       clearSelectedStockCard();
     };
   }
+
+  // 💡 6. 과거 실거래 단가 · 마진 AI 가이드 배지 비동기 자동 로드
+  loadSalesPriceGuideBanner(partName, unitUsd, shipFx);
 }
+
+const _priceGuideCache = new Map();
+
+async function loadSalesPriceGuideBanner(partName, unitUsd, shipFx) {
+  const banner = document.getElementById('salesPriceGuideBanner');
+  const content = document.getElementById('salesPriceGuideContent');
+  if (!banner || !content) return;
+
+  const cleanPart = (partName || '').trim();
+  if (!cleanPart || cleanPart === '-') {
+    banner.classList.add('hidden');
+    return;
+  }
+
+  banner.classList.remove('hidden');
+  content.innerHTML = `<div class="text-[11px] text-slate-500 font-semibold flex items-center gap-1.5"><span>⏳</span><span><strong>[${cleanPart}]</strong> 과거 실거래 단가·마진 및 커미션 가이드를 분석하고 있습니다...</span></div>`;
+
+  try {
+    let hist = _priceGuideCache.get(cleanPart);
+    if (!hist) {
+      const [phRes, commRes] = await Promise.all([
+        fetch(`/api/price-history?part_no=${encodeURIComponent(cleanPart)}`).then(r => r.json()).catch(() => ({})),
+        fetch(`/api/shipped-info?biz_type=COMMISSION&query=${encodeURIComponent(cleanPart)}&limit=40`).then(r => r.json()).catch(() => ({}))
+      ]);
+      const phData = (phRes && phRes.status === 'success' && phRes.data) ? phRes.data : {};
+      const needle = cleanPart.toLowerCase();
+      const commItems = Array.isArray(commRes?.items)
+        ? commRes.items.filter(it => (it.part_no || '').toLowerCase().includes(needle))
+        : [];
+      hist = { ...phData, commissions: commItems };
+      _priceGuideCache.set(cleanPart, hist);
+    }
+
+    // 현재 선택된 부품이 바뀌었으면 중단
+    const currPart = selectedStockItem ? (selectedStockItem.partName || selectedStockItem.part_name || '').trim() : '';
+    if (currPart && currPart !== cleanPart) return;
+
+    const sales = Array.isArray(hist.sales) ? hist.sales.filter(s => (Number(s.out_up) || 0) > 0) : [];
+    const quotes = Array.isArray(hist.quotations) ? hist.quotations.filter(q => (Number(q.qp) || 0) > 0) : [];
+    const comms = Array.isArray(hist.commissions) ? hist.commissions : [];
+    const fx = appliedFxRate || shipFx || 1380;
+
+    if (sales.length === 0 && quotes.length === 0 && comms.length === 0) {
+      content.innerHTML = `
+        <div class="flex items-center justify-between w-full gap-2">
+          <div class="text-[11px] text-slate-600 flex items-center gap-1.5">
+            <span>💡</span>
+            <span><strong>[${cleanPart}]</strong> 과거 실납품·견적 이력이 없는 신규/희소 품번입니다. 표준 권장 마진율(<strong>20%~25%</strong>) 적용을 권장합니다.</span>
+          </div>
+          <button type="button" onclick="window.applySuggestedMarginRate && window.applySuggestedMarginRate(20)" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg cursor-pointer shrink-0">표준 20% 적용</button>
+        </div>
+      `;
+      return;
+    }
+
+    // Domestic 판매 단가(KRW -> USD 환산 포함) 및 마진율 분석
+    let avgSaleKrw = 0, minSaleKrw = 0, maxSaleKrw = 0, avgMarginPct = 0, latestSale = null;
+    if (sales.length > 0) {
+      latestSale = sales[0];
+      const ups = sales.map(s => Number(s.out_up) || 0).filter(v => v > 0);
+      avgSaleKrw = ups.reduce((a, b) => a + b, 0) / ups.length;
+      minSaleKrw = Math.min(...ups);
+      maxSaleKrw = Math.max(...ups);
+      const mgns = sales.map(s => Number(s.mgn_rate)).filter(v => !isNaN(v) && v > -100 && v < 100);
+      avgMarginPct = mgns.length > 0 ? Number((mgns.reduce((a, b) => a + b, 0) / mgns.length).toFixed(1)) : 20.0;
+    }
+
+    const avgSaleUsd = avgSaleKrw > 0 ? (avgSaleKrw / fx) : 0;
+    const latestSaleUsd = latestSale ? ((Number(latestSale.out_up) || 0) / fx) : 0;
+    const latestCust = latestSale ? (latestSale.customer_name || '-') : (quotes[0]?.customer_name || comms[0]?.customer || '-');
+    const latestDate = latestSale ? (latestSale.out_date || '').slice(0, 10) : ((quotes[0]?.quote_date || comms[0]?.ship_date || '').slice(0, 10));
+
+    // 커미션 요약
+    let commBadgeHtml = '';
+    if (comms.length > 0) {
+      const avgCommRate = comms.reduce((s, c) => s + (Number(c.comm_rate) || 0), 0) / comms.length;
+      const latestNetUp = Number(comms[0].net_up) || 0;
+      commBadgeHtml = `<span class="px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200 font-bold text-[10px]">💎 커미션 ${comms.length}건 (최근 $${latestNetUp.toFixed(4)} · 평균요율 ${avgCommRate.toFixed(1)}%)</span>`;
+    }
+
+    const safePart = cleanPart.replace(/'/g, "\\'");
+    const safeCust = String(latestCust || '').replace(/'/g, "\\'");
+
+    content.innerHTML = `
+      <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-slate-800 min-w-0">
+        <span class="px-2 py-0.5 rounded-md bg-amber-500 text-white font-black text-[10px] shrink-0 flex items-center gap-1">
+          <span>💡</span> 실거래 AI 가이드
+        </span>
+        ${sales.length > 0 ? `
+          <span>실납품 <strong>${sales.length}건</strong></span>
+          <span class="text-slate-300">|</span>
+          <span>평균 판매가: <strong class="font-mono text-indigo-900">₩${Math.round(avgSaleKrw).toLocaleString()}</strong> <span class="font-mono text-slate-500">(≈$${avgSaleUsd.toFixed(4)})</span></span>
+          <span class="text-slate-300">|</span>
+          <span>평균 실현마진: <strong class="font-mono text-emerald-700">${avgMarginPct}%</strong> <span class="text-[10px] text-slate-500">(범위 ₩${Math.round(minSaleKrw).toLocaleString()}~₩${Math.round(maxSaleKrw).toLocaleString()})</span></span>
+          <span class="text-slate-300">|</span>
+          <span>최근 납품: <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${safeCust}')" class="font-bold text-indigo-700 hover:underline cursor-pointer">${latestCust}</button> <span class="font-mono text-slate-500">(₩${Math.round(Number(latestSale.out_up) || 0).toLocaleString()} · ${latestDate})</span></span>
+        ` : quotes.length > 0 ? `
+          <span>과거 견적 <strong>${quotes.length}건</strong> · 최근 견적가: <strong class="font-mono text-indigo-900">${quotes[0].qunit || '$'} ${Number(quotes[0].qp || 0).toFixed(4)}</strong> (${latestCust} · ${latestDate})</span>
+        ` : ''}
+        ${commBadgeHtml}
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0 flex-wrap">
+        ${sales.length > 0 && avgMarginPct > 0 ? `
+          <button type="button" onclick="window.applySuggestedMarginRate(${avgMarginPct})" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] rounded-lg shadow-2xs cursor-pointer transition-colors whitespace-nowrap" title="과거 평균 실현 마진율(${avgMarginPct}%)을 계산기 목표 마진율에 즉시 적용">
+            ⚡ 평균마진(${avgMarginPct}%) 적용
+          </button>
+        ` : ''}
+        ${latestSaleUsd > 0 ? `
+          <button type="button" onclick="window.applySuggestedTargetOffer(${latestSaleUsd.toFixed(4)})" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] rounded-lg shadow-2xs cursor-pointer transition-colors whitespace-nowrap" title="최근 실판매가($${latestSaleUsd.toFixed(4)})를 고객 희망단가 시뮬레이터에 즉시 입력">
+            🎯 최근판매가($${latestSaleUsd.toFixed(3)}) 대조
+          </button>
+        ` : ''}
+        <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${safePart}')" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-[10px] rounded-lg cursor-pointer whitespace-nowrap">
+          📈 5대 원장 상세
+        </button>
+      </div>
+    `;
+  } catch (err) {
+    console.warn('단가 가이드 로드 실패:', err);
+    banner.classList.add('hidden');
+  }
+}
+
+window.applySuggestedMarginRate = function(marginPct) {
+  const pct = Number(marginPct);
+  if (isNaN(pct) || pct <= 0 || pct >= 99) return;
+  currentPricingMode = 'margin';
+  currentTargetMarginRate = pct / 100.0;
+  currentTargetMultiplier = Math.round((1 / (1 - currentTargetMarginRate)) * 100) / 100;
+  const customInp = document.getElementById('inputCustomMargin');
+  if (customInp) customInp.value = pct;
+  if (typeof renderPricingPresets === 'function') renderPricingPresets();
+  if (typeof updatePricingUI === 'function') updatePricingUI();
+  runEngine();
+};
+
+window.applySuggestedTargetOffer = function(usdPrice) {
+  const val = Number(usdPrice);
+  if (isNaN(val) || val <= 0) return;
+  const targetInp = document.getElementById('inputTargetOffer');
+  if (targetInp) {
+    targetInp.value = val.toFixed(4);
+    targetInp.dispatchEvent(new Event('input', { bubbles: true }));
+    runEngine();
+  }
+};
 
 function clearSelectedStockCard() {
   selectedStockItem = null;
   const emptyState = document.getElementById('salesStockEmptyState');
   const detailCard = document.getElementById('salesStockDetailCard');
+  const guideBanner = document.getElementById('salesPriceGuideBanner');
   if (emptyState) emptyState.classList.remove('hidden');
   if (detailCard) detailCard.classList.add('hidden');
+  if (guideBanner) guideBanner.classList.add('hidden');
 
   // Reset margin/pricing controls to 20% default
   currentPricingMode = 'margin';
@@ -2569,6 +2726,9 @@ window.setCachedItems = (items) => {
   updateSalesFilterCounts(cachedItems);
   callRenderInventoryHeaders(activeTab);
   applyFilters();
+  if (typeof window.refreshActionInboxBadge === 'function') {
+    window.refreshActionInboxBadge();
+  }
 };
 
 function handleOpenSplitModal(itemOrId) {
@@ -3240,9 +3400,421 @@ window.deleteDrawerItem = async function() {
 };
 
 // ========================================================
+// 🔔 오늘의 액션 알림 센터 (Action Inbox Notification Center)
+// ========================================================
+const actionInboxState = {
+  tab: 'unpaid_dom', // 'unpaid_dom' | 'unpaid_comm' | 'aging_stock' | 'borrows_po'
+  salesRep: 'ALL',
+  loading: false,
+  data: null,
+};
+
+function getAgingInventoryList(salesRep = 'ALL') {
+  const allInv = Array.isArray(window.cachedItems) ? window.cachedItems : [];
+  const todayMs = Date.now();
+  const repTarget = (salesRep && salesRep !== 'ALL') ? toEnglishSalesName(salesRep) : 'ALL';
+
+  return allInv
+    .map(it => {
+      const stk = Number(it.stock) || 0;
+      if (stk <= 0) return null;
+      const owner = toEnglishSalesName(it.owner || it.sales || 'BSK');
+      if (repTarget !== 'ALL' && owner !== repTarget) return null;
+      const eDate = (it.entryDate || it.entry_date || '').slice(0, 10);
+      if (!eDate || eDate.length < 10) return null;
+      const ageDays = Math.max(0, Math.floor((todayMs - new Date(eDate).getTime()) / 86400000));
+      if (ageDays < 90) return null;
+      const uUsd = Number(it.unitUsd ?? it.unit_usd) || 0;
+      const sFx = Number(it.shipFx ?? it.ship_fx) || appliedFxRate || 1350;
+      const rawArr = Number(it.arrangedQty ?? it.arranged_qty) || 0;
+      const isExp = it.orderStatus === '배정완료' || it.orderStatus === '배정요청';
+      const arr = rawArr > 0 ? Math.min(stk, rawArr) : (isExp ? stk : 0);
+      const avail = Math.max(0, stk - arr);
+      return {
+        id: it.id,
+        part_no: it.partName || it.part_name || '-',
+        maker: it.maker || 'OTHERS',
+        customer: (it.customer && it.customer !== '-') ? it.customer : (it.memo || '본사 일반재고'),
+        sales_rep: owner,
+        stock: stk,
+        avail_qty: avail,
+        unit_usd: uUsd,
+        amount_usd: stk * uUsd,
+        amount_krw: Math.round(stk * uUsd * sFx),
+        entry_date: eDate,
+        age_days: ageDays,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.amount_usd - a.amount_usd);
+}
+
+window.refreshActionInboxBadge = async function(forceFetch = false) {
+  const badge = document.getElementById('actionInboxCountBadge');
+  if (!badge) return;
+
+  try {
+    if (!actionInboxState.data || forceFetch) {
+      const repParam = actionInboxState.salesRep !== 'ALL' ? `?sales_rep=${encodeURIComponent(actionInboxState.salesRep)}` : '';
+      const res = await fetch(`/api/notifications/action-inbox${repParam}`);
+      const json = await res.json();
+      if (json && json.status === 'success') {
+        actionInboxState.data = json;
+      }
+    }
+    const d = actionInboxState.data || {};
+    const agingStocks = getAgingInventoryList(actionInboxState.salesRep);
+    const totalActions =
+      (Number(d.overdue_domestic_total_count) || 0) +
+      (Number(d.overdue_commission_total_count) || 0) +
+      agingStocks.length +
+      (Number(d.overdue_borrows_total_count) || 0) +
+      (Number(d.delayed_pos_total_count) || 0);
+
+    badge.textContent = `${totalActions.toLocaleString()}건`;
+  } catch (e) {
+    console.warn('Action Inbox 배지 갱신 실패:', e);
+  }
+};
+
+window.openActionInboxModal = async function() {
+  let modal = document.getElementById('actionInboxModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'actionInboxModal';
+    modal.className = 'fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[99994] flex items-center justify-center p-2 sm:p-4 overflow-y-auto';
+    modal.onclick = (e) => {
+      if (e.target === modal) modal.classList.add('hidden');
+    };
+    document.body.appendChild(modal);
+  }
+
+  // 로그인한 영업담당자가 있으면 첫 오픈 시 자동 체크 옵션 제공 (기본은 ALL 또는 로그인 사용자)
+  modal.classList.remove('hidden');
+  actionInboxState.loading = true;
+  renderActionInboxModal();
+
+  try {
+    await window.refreshActionInboxBadge(true);
+  } finally {
+    actionInboxState.loading = false;
+    renderActionInboxModal();
+  }
+};
+
+window.switchActionInboxTab = function(tab) {
+  actionInboxState.tab = tab;
+  renderActionInboxModal();
+};
+
+window.switchActionInboxRep = async function(rep) {
+  actionInboxState.salesRep = rep || 'ALL';
+  actionInboxState.loading = true;
+  renderActionInboxModal();
+  await window.refreshActionInboxBadge(true);
+  actionInboxState.loading = false;
+  renderActionInboxModal();
+};
+
+function renderActionInboxModal() {
+  const modal = document.getElementById('actionInboxModal');
+  if (!modal) return;
+
+  const { tab, salesRep, loading, data } = actionInboxState;
+  const d = data || {};
+  const domList = Array.isArray(d.overdue_domestic) ? d.overdue_domestic : [];
+  const commList = Array.isArray(d.overdue_commission) ? d.overdue_commission : [];
+  const brwList = Array.isArray(d.overdue_borrows) ? d.overdue_borrows : [];
+  const poList = Array.isArray(d.delayed_pos) ? d.delayed_pos : [];
+  const agingStocks = getAgingInventoryList(salesRep);
+
+  const domTotalCnt = Number(d.overdue_domestic_total_count) || domList.length;
+  const domTotalKrw = Number(d.overdue_domestic_total_krw) || domList.reduce((s, r) => s + (r.amount_krw || 0), 0);
+  const commTotalCnt = Number(d.overdue_commission_total_count) || commList.length;
+  const commTotalUsd = Number(d.overdue_commission_total_usd) || commList.reduce((s, r) => s + (r.comm_usd || 0), 0);
+  const agingTotalUsd = agingStocks.reduce((s, r) => s + (r.amount_usd || 0), 0);
+  const agingTotalKrw = agingStocks.reduce((s, r) => s + (r.amount_krw || 0), 0);
+  const brwPoCnt = (Number(d.overdue_borrows_total_count) || brwList.length) + (Number(d.delayed_pos_total_count) || poList.length);
+
+  const allReps = ['ALL', 'KELLY', 'ALLEN', 'WILLIAM', 'ERIC', 'STEVE', 'PAUL', 'JOEY', 'DUSTIN', 'LOGAN', 'NATHAN', 'TIMOTHY', 'TONY'];
+  const myProfile = typeof window.getCurrentUserProfile === 'function' ? window.getCurrentUserProfile() : null;
+  const myRepName = myProfile?.name ? toEnglishSalesName(myProfile.name) : '';
+
+  let bodyHtml = '';
+  if (loading) {
+    bodyHtml = `<div class="py-16 text-center text-slate-400 font-bold text-xs">⏳ 전사 미수금·커미션·장기재고·대여 미반납 알림을 실시간 점검하고 있습니다...</div>`;
+  } else if (tab === 'unpaid_dom') {
+    bodyHtml = domList.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">14일 이상 연체된 Domestic 미수금이 없습니다. ✅</div>` : `
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-rose-50 text-rose-950 font-bold text-[11px] border-b border-rose-200 sticky top-0 z-10">
+            <tr>
+              <th class="py-2 px-2.5 text-center w-24">연체상태</th>
+              <th class="py-2 px-2.5">고객사 (클릭 시 360°)</th>
+              <th class="py-2 px-2.5 text-center w-20">제조사</th>
+              <th class="py-2 px-2.5">품번 (PartNo)</th>
+              <th class="py-2 px-2.5 text-right">미수금액(VAT)</th>
+              <th class="py-2 px-2.5 text-center">출하일 / 만기일</th>
+              <th class="py-2 px-2.5 text-center">담당</th>
+              <th class="py-2 px-2.5 text-center">즉시 조치</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-[11px]">
+            ${domList.map(u => {
+              const safeCust = String(u.customer || '').replace(/'/g, "\\'");
+              return `
+                <tr class="hover:bg-rose-50/30">
+                  <td class="py-1.5 px-2.5 text-center whitespace-nowrap">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${u.overdue_days >= 60 ? 'bg-red-200 text-red-950 border border-red-400' : 'bg-rose-100 text-rose-900 border border-rose-300'}">+${u.overdue_days}일 연체</span>
+                  </td>
+                  <td class="py-1.5 px-2.5 font-black text-slate-900">
+                    <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${safeCust}')" class="hover:text-indigo-700 hover:underline cursor-pointer text-left">${u.customer}</button>
+                  </td>
+                  <td class="py-1.5 px-2.5 text-center font-bold text-indigo-900">${u.maker || '-'}</td>
+                  <td class="py-1.5 px-2.5 font-mono font-bold text-slate-800">${u.part_no}</td>
+                  <td class="py-1.5 px-2.5 text-right font-mono font-black text-rose-700">₩${Math.round(u.amount_krw).toLocaleString()}</td>
+                  <td class="py-1.5 px-2.5 text-center font-mono text-[10px] text-slate-500">${u.out_date} → <strong class="text-slate-800">${u.due_date || '-'}</strong></td>
+                  <td class="py-1.5 px-2.5 text-center font-bold text-indigo-900">${u.sales_rep}</td>
+                  <td class="py-1.5 px-2.5 text-center whitespace-nowrap">
+                    <button type="button" onclick="document.getElementById('actionInboxModal').classList.add('hidden'); document.getElementById('tabUnpaid')?.click(); setTimeout(() => window.filterUnpaidByCustomer && window.filterUnpaidByCustomer('${safeCust}'), 120);" class="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold cursor-pointer">수금/청구 ↗</button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else if (tab === 'unpaid_comm') {
+    bodyHtml = commList.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">45일 이상 경과된 해외 Commission 미입금 건이 없습니다. ✅</div>` : `
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-violet-50 text-violet-950 font-bold text-[11px] border-b border-violet-200 sticky top-0 z-10">
+            <tr>
+              <th class="py-2 px-2.5 text-center w-24">경과일수</th>
+              <th class="py-2 px-2.5 text-center w-24">선적일</th>
+              <th class="py-2 px-2.5 text-center w-24">제조사(Line)</th>
+              <th class="py-2 px-2.5">고객사</th>
+              <th class="py-2 px-2.5">품번 (PartNo)</th>
+              <th class="py-2 px-2.5 text-right">💎 미입금 커미션($)</th>
+              <th class="py-2 px-2.5 text-center">담당</th>
+              <th class="py-2 px-2.5 text-center">즉시 조치</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-[11px]">
+            ${commList.map(c => {
+              const safeCust = String(c.customer || '').replace(/'/g, "\\'");
+              return `
+                <tr class="hover:bg-violet-50/30">
+                  <td class="py-1.5 px-2.5 text-center whitespace-nowrap">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${c.elapsed_days >= 90 ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-amber-100 text-amber-900 border border-amber-300'}">+${c.elapsed_days}일 경과</span>
+                  </td>
+                  <td class="py-1.5 px-2.5 text-center font-mono text-slate-600">${c.ship_date}</td>
+                  <td class="py-1.5 px-2.5 text-center font-black text-indigo-900">${c.maker}</td>
+                  <td class="py-1.5 px-2.5 font-bold text-slate-900">
+                    <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${safeCust}')" class="hover:text-indigo-700 hover:underline cursor-pointer text-left">${c.customer}</button>
+                  </td>
+                  <td class="py-1.5 px-2.5 font-mono font-bold text-slate-800">${c.part_no}</td>
+                  <td class="py-1.5 px-2.5 text-right font-mono font-black text-violet-800">$${c.comm_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td class="py-1.5 px-2.5 text-center font-bold text-indigo-900">${c.sales_rep}</td>
+                  <td class="py-1.5 px-2.5 text-center whitespace-nowrap">
+                    <button type="button" onclick="document.getElementById('actionInboxModal').classList.add('hidden'); document.getElementById('tabUnpaid')?.click(); setTimeout(() => window.switchUnpaidMode && window.switchUnpaidMode('commission'), 120);" class="px-2 py-0.5 bg-violet-600 hover:bg-violet-700 text-white rounded text-[10px] font-bold cursor-pointer">커미션 정산 ↗</button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else if (tab === 'aging_stock') {
+    bodyHtml = agingStocks.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">90일 이상 경과된 장기 재고가 없습니다. ✅</div>` : `
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-amber-50 text-amber-950 font-bold text-[11px] border-b border-amber-200 sticky top-0 z-10">
+            <tr>
+              <th class="py-2 px-2.5 text-center w-24">보유 경과일</th>
+              <th class="py-2 px-2.5 text-center w-24">입고일</th>
+              <th class="py-2 px-2.5 text-center w-20">제조사</th>
+              <th class="py-2 px-2.5">품번 (PartNo)</th>
+              <th class="py-2 px-2.5">계약 고객사 / 비고</th>
+              <th class="py-2 px-2.5 text-right">보유 / 가용수량</th>
+              <th class="py-2 px-2.5 text-right">재고금액($ / ₩)</th>
+              <th class="py-2 px-2.5 text-center">담당</th>
+              <th class="py-2 px-2.5 text-center">즉시 조치</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-[11px]">
+            ${agingStocks.slice(0, 100).map(st => {
+              const safePart = String(st.part_no || '').replace(/'/g, "\\'");
+              return `
+                <tr class="hover:bg-amber-50/30">
+                  <td class="py-1.5 px-2.5 text-center whitespace-nowrap">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${st.age_days >= 180 ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-amber-100 text-amber-900 border border-amber-300'}">+${st.age_days}일</span>
+                  </td>
+                  <td class="py-1.5 px-2.5 text-center font-mono text-slate-600">${st.entry_date}</td>
+                  <td class="py-1.5 px-2.5 text-center font-bold text-indigo-900">${st.maker}</td>
+                  <td class="py-1.5 px-2.5 font-mono font-black text-slate-900">
+                    <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${safePart}')" class="hover:text-indigo-700 hover:underline cursor-pointer">📈 ${st.part_no}</button>
+                  </td>
+                  <td class="py-1.5 px-2.5 font-bold text-slate-700 truncate max-w-[160px]">${st.customer}</td>
+                  <td class="py-1.5 px-2.5 text-right font-mono">
+                    <strong>${st.stock.toLocaleString()} EA</strong> <span class="text-emerald-700 text-[10px]">(가용 ${st.avail_qty.toLocaleString()})</span>
+                  </td>
+                  <td class="py-1.5 px-2.5 text-right font-mono">
+                    <div class="font-black text-slate-900">$${st.amount_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div class="text-[9px] text-rose-600 font-bold">₩${st.amount_krw.toLocaleString()}</div>
+                  </td>
+                  <td class="py-1.5 px-2.5 text-center font-bold text-indigo-900">${st.sales_rep}</td>
+                  <td class="py-1.5 px-2.5 text-center whitespace-nowrap">
+                    <button type="button" onclick="document.getElementById('actionInboxModal').classList.add('hidden'); document.getElementById('tabSales')?.click(); setTimeout(() => window.loadFormFromItem && window.loadFormFromItem('${st.id}'), 120);" class="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-bold cursor-pointer">소진 견적 ↗</button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else {
+    bodyHtml = `
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- 1. 대여 미반납 / 기한경과 -->
+        <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h4 class="font-black text-xs text-teal-900">🔄 대여(Borrow) 장기 미반납 · 반납기한 경과 (${brwList.length}건)</h4>
+            <button type="button" onclick="document.getElementById('actionInboxModal').classList.add('hidden'); document.getElementById('tabShipments')?.click(); setTimeout(() => document.getElementById('btnModeBorrow')?.click(), 120);" class="text-[11px] font-bold text-teal-700 hover:underline cursor-pointer">대여/반납 원장 열기 ↗</button>
+          </div>
+          ${brwList.length === 0 ? `<div class="py-8 text-center text-slate-400 text-xs">기한이 경과된 미반납 대여 건이 없습니다. ✅</div>` : `
+            <div class="space-y-1.5 max-h-80 overflow-y-auto pr-1 text-[11px]">
+              ${brwList.map(b => `
+                <div class="p-2.5 rounded-lg bg-teal-50/40 border border-teal-200/80 flex items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="font-mono font-black text-slate-900 truncate">[${b.maker}] ${b.part_no} (${b.qty.toLocaleString()} EA)</div>
+                    <div class="text-[10px] text-slate-600">${b.customer} · 대여일: ${b.borrow_date} · <strong class="text-rose-700">+${b.elapsed_days}일 경과</strong></div>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-white border border-teal-200 font-bold text-indigo-900 text-[10px] shrink-0">${b.sales_rep}</span>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <!-- 2. 납기 경과 미입고 발주 (PO) -->
+        <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h4 class="font-black text-xs text-indigo-950">🚢 희망납기(CRD/ETA) 경과 미입고 발주 (${poList.length}건)</h4>
+            <button type="button" onclick="document.getElementById('actionInboxModal').classList.add('hidden'); window.openPurchaseOrdersModal && window.openPurchaseOrdersModal();" class="text-[11px] font-bold text-indigo-700 hover:underline cursor-pointer">발주·입고예정 모달 열기 ↗</button>
+          </div>
+          ${poList.length === 0 ? `<div class="py-8 text-center text-slate-400 text-xs">납기가 지연된 미입고 발주(PO)가 없습니다. ✅</div>` : `
+            <div class="space-y-1.5 max-h-80 overflow-y-auto pr-1 text-[11px]">
+              ${poList.map(p => `
+                <div class="p-2.5 rounded-lg bg-indigo-50/40 border border-indigo-200/80 flex items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="font-mono font-black text-slate-900 truncate">[${p.maker}] ${p.part_no} (${p.qty.toLocaleString()} EA)</div>
+                    <div class="text-[10px] text-slate-600 font-mono">PO: ${p.po_no} · 발주일: ${p.po_dt} · 예정납기: <strong class="text-rose-700">${p.eta_date}</strong></div>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-white border border-indigo-200 font-bold text-indigo-900 text-[10px] shrink-0">${p.sales_rep}</span>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  }
+
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+      <!-- 헤더 -->
+      <div class="bg-gradient-to-r from-slate-900 via-rose-950 to-indigo-950 text-white px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-rose-500/25 border border-rose-400/40 flex items-center justify-center text-xl font-black">🔔</div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="text-base sm:text-lg font-black tracking-wide">오늘의 액션 알림 센터 (Action Inbox)</h2>
+              <span class="text-[10px] bg-rose-500/30 border border-rose-300/40 text-rose-100 font-bold px-2 py-0.5 rounded-full">실시간 리스크 &amp; 후속조치 브리핑</span>
+            </div>
+            <p class="text-[11px] text-slate-300 mt-0.5">연체 미수금 · 해외 커미션 미입금 · 90일+ 장기 체화 재고 · 대여 미반납 및 입고지연 발주 통합 점검</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          ${myRepName ? `
+            <button type="button" onclick="window.switchActionInboxRep('${salesRep === myRepName ? 'ALL' : myRepName}')" class="px-2.5 py-1.5 rounded-lg text-xs font-black cursor-pointer border transition ${salesRep === myRepName ? 'bg-amber-400 text-slate-950 border-amber-300' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'}">
+              👤 내 담당(${myRepName})만 보기
+            </button>
+          ` : ''}
+          <select onchange="window.switchActionInboxRep(this.value)" class="bg-slate-800 text-amber-300 border border-slate-600 rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none cursor-pointer">
+            ${allReps.map(r => `<option value="${r}" ${salesRep === r ? 'selected' : ''}>${r === 'ALL' ? '전체 담당자 (ALL)' : r}</option>`).join('')}
+          </select>
+          <button type="button" onclick="document.getElementById('actionInboxModal').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center cursor-pointer">✕</button>
+        </div>
+      </div>
+
+      <!-- 4대 요약 카드 -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 p-3 sm:p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+        <div onclick="window.switchActionInboxTab('unpaid_dom')" class="bg-white border ${tab === 'unpaid_dom' ? 'border-rose-500 ring-2 ring-rose-200' : 'border-rose-200'} rounded-xl p-3 shadow-2xs cursor-pointer transition">
+          <div class="text-[11px] font-bold text-rose-900 flex items-center justify-between">
+            <span>🚨 Domestic 연체 미수금</span>
+            <span class="text-[10px] bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded font-black">${domTotalCnt}건</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-rose-700 font-mono mt-1">₩${Math.round(domTotalKrw).toLocaleString()}</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">만기 +14일 이상 경과 외상 채권</div>
+        </div>
+
+        <div onclick="window.switchActionInboxTab('unpaid_comm')" class="bg-white border ${tab === 'unpaid_comm' ? 'border-violet-500 ring-2 ring-violet-200' : 'border-violet-200'} rounded-xl p-3 shadow-2xs cursor-pointer transition">
+          <div class="text-[11px] font-bold text-violet-900 flex items-center justify-between">
+            <span>💎 커미션 장기 미입금</span>
+            <span class="text-[10px] bg-violet-100 text-violet-800 px-1.5 py-0.2 rounded font-black">${commTotalCnt}건</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-violet-800 font-mono mt-1">$${commTotalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">선적 후 45일 이상 미정산 커미션</div>
+        </div>
+
+        <div onclick="window.switchActionInboxTab('aging_stock')" class="bg-white border ${tab === 'aging_stock' ? 'border-amber-500 ring-2 ring-amber-200' : 'border-amber-200'} rounded-xl p-3 shadow-2xs cursor-pointer transition">
+          <div class="text-[11px] font-bold text-amber-900 flex items-center justify-between">
+            <span>📦 90일+ 장기 체화 재고</span>
+            <span class="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-black">${agingStocks.length}건</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-amber-900 font-mono mt-1">$${Math.round(agingTotalUsd).toLocaleString()}</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">≈ ₩${Math.round(agingTotalKrw / 10000).toLocaleString()}만원 소진 타겟</div>
+        </div>
+
+        <div onclick="window.switchActionInboxTab('borrows_po')" class="bg-white border ${tab === 'borrows_po' ? 'border-teal-500 ring-2 ring-teal-200' : 'border-teal-200'} rounded-xl p-3 shadow-2xs cursor-pointer transition">
+          <div class="text-[11px] font-bold text-teal-900 flex items-center justify-between">
+            <span>🔄 대여 미반납 &amp; 납기지연 PO</span>
+            <span class="text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded font-black">${brwPoCnt}건</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-teal-900 font-mono mt-1">대여 ${brwList.length} · 발주 ${poList.length}</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">21일+ 미반납 샘플 및 ETA 경과 PO</div>
+        </div>
+      </div>
+
+      <!-- 탭 바 -->
+      <div class="px-4 py-2 bg-white border-b border-slate-200 flex items-center gap-1.5 overflow-x-auto shrink-0">
+        <button type="button" onclick="window.switchActionInboxTab('unpaid_dom')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap transition ${tab === 'unpaid_dom' ? 'bg-rose-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">🚨 Domestic 연체 미수 (${domTotalCnt})</button>
+        <button type="button" onclick="window.switchActionInboxTab('unpaid_comm')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap transition ${tab === 'unpaid_comm' ? 'bg-violet-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">💎 Commission 미입금 (${commTotalCnt})</button>
+        <button type="button" onclick="window.switchActionInboxTab('aging_stock')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap transition ${tab === 'aging_stock' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">📦 90일+ 장기재고 (${agingStocks.length})</button>
+        <button type="button" onclick="window.switchActionInboxTab('borrows_po')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap transition ${tab === 'borrows_po' ? 'bg-teal-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">🔄 대여 미반납(${brwList.length}) · 🚢 지연 PO(${poList.length})</button>
+      </div>
+
+      <!-- 본문 -->
+      <div class="flex-1 overflow-y-auto p-3 sm:p-4 bg-slate-50/70">
+        ${bodyHtml}
+      </div>
+    </div>
+  `;
+}
+
+// ========================================================
 // 🚀 앱 부트스트랩 최초 실행 (모든 함수 및 모듈 바인딩 완료 후 실행)
 // ========================================================
 bootstrap();
+setTimeout(() => {
+  if (typeof window.refreshActionInboxBadge === 'function') {
+    window.refreshActionInboxBadge();
+  }
+}, 900);
 
 
 

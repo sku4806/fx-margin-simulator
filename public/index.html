@@ -93,7 +93,14 @@
         </button>
       </div>
 
-      <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-2 sm:gap-4 pt-2 md:pt-0 border-t md:border-t-0 border-slate-700/60">
+      <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-2 sm:gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-slate-700/60">
+        <!-- 🔔 오늘의 액션 알림 센터 (Action Inbox) 버튼 -->
+        <button id="openActionInboxBtn" type="button" onclick="window.openActionInboxModal && window.openActionInboxModal()" class="text-[11px] sm:text-xs bg-rose-600/90 hover:bg-rose-500 text-white font-black px-2.5 sm:px-3 py-1.5 rounded-xl border border-rose-400/50 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0" title="장기 미수금, 커미션 미입금, 대여 미반납, 장기 체화재고, 납기지연 발주 등 즉시 조치가 필요한 알림 센터 열기">
+          <span class="animate-pulse">🔔</span>
+          <span>액션 알림</span>
+          <span id="actionInboxCountBadge" class="bg-white text-rose-700 text-[10px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">...</span>
+        </button>
+
         <button id="openManualBtnDesktop" onclick="document.getElementById('openManualBtn').click()" class="hidden md:flex text-xs bg-indigo-600/80 hover:bg-indigo-600 text-white font-bold px-3 py-1.5 rounded-xl border border-indigo-400/40 items-center gap-1.5 transition-colors shadow-sm">
           <span>📖</span> 시스템 가이드북
         </button>
@@ -329,6 +336,11 @@
                 (원가 대비 1.25배)
               </div>
             </div>
+          </div>
+
+          <!-- 💡 3) 과거 실거래 단가 · 마진 AI 가이드 배지 (품목 선택 시 자동 조회) -->
+          <div id="salesPriceGuideBanner" class="hidden p-2.5 bg-gradient-to-r from-amber-50/90 via-white to-indigo-50/60 rounded-xl border border-amber-300/80 shadow-2xs text-xs">
+            <div id="salesPriceGuideContent" class="flex flex-col sm:flex-row sm:items-center justify-between gap-2"></div>
           </div>
         </div>
       </div>
@@ -2657,6 +2669,6 @@
 
   <!-- 스크립트 로드 (모든 모달 및 드로어 DOM 생성 후) -->
     <script src="/js/mask.js"></script>
-    <script type="module" src="/js/app.js?v=20261124_v52"></script>
+    <script type="module" src="/js/app.js?v=20261125_v53"></script>
 </body>
 </html>

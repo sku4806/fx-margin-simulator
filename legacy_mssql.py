@@ -1199,6 +1199,109 @@ def query_rep_domestic_sales(
                 break
         return out
 
+
+def query_customer_domestic_sales(
+    customer_name: str,
+    start_date: Optional[str] = "2024-01-01",
+    end_date: Optional[str] = "2026-12-31",
+    limit: int = 400
+) -> List[Dict[str, Any]]:
+    """고객사별 Domestic 실제 매출·마진 내역 조회 (DReportFile RESULT='OUT' + price_history.json Fallback)"""
+    c_clean = (customer_name or "").strip()
+    if not c_clean:
+        return []
+    s_dt = (start_date or "2024-01-01").strip()[:10]
+    e_dt = (end_date or "2026-12-31").strip()[:10]
+    term = f"%{c_clean}%"
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(as_dict=True)
+        cur.execute(f"""
+            SELECT TOP ({int(limit)})
+                r.IDX as idx,
+                CONVERT(VARCHAR(10), r.OUTDT, 120) as out_date,
+                COALESCE(c.Kname, c.CNAME, '기타') as customer,
+                r.Partno as part_no,
+                r.Mfg as maker,
+                r.PONO as po_no,
+                r.Qty as qty,
+                r.InUP as in_up,
+                r.OutUP as out_up,
+                r.OutAmt as out_amt,
+                COALESCE(r.MGN, 0) as mgn,
+                r.Sales as sales_rep,
+                r.Remark as remark
+            FROM DReportFile r
+            LEFT JOIN CustomerFile c ON r.Custid = c.CID
+            WHERE r.RESULT = 'OUT'
+              AND r.OUTDT >= %s AND r.OUTDT <= %s
+              AND (c.Kname LIKE %s OR c.CNAME LIKE %s)
+            ORDER BY r.OUTDT DESC, r.IDX DESC
+        """, (s_dt, e_dt + " 23:59:59", term, term))
+        rows = cur.fetchall()
+        conn.close()
+
+        out = []
+        for r in rows:
+            out_amt = float(r.get("out_amt") or 0.0)
+            mgn = float(r.get("mgn") or 0.0)
+            out.append({
+                "idx": r.get("idx"),
+                "biz_type": "DOMESTIC",
+                "ship_date": clean_val(r.get("out_date")),
+                "customer": clean_val(r.get("customer")) or c_clean,
+                "part_no": clean_val(r.get("part_no")),
+                "maker": clean_val(r.get("maker")) or "OTHERS",
+                "po_no": clean_val(r.get("po_no")),
+                "ship_qty": int(r.get("qty") or 0),
+                "in_up_krw": round(float(r.get("in_up") or 0.0), 2),
+                "out_up_krw": round(float(r.get("out_up") or 0.0), 2),
+                "out_amt_krw": round(out_amt),
+                "margin_krw": round(mgn),
+                "margin_rate": round((mgn / out_amt * 100), 1) if out_amt > 0 else 0.0,
+                "sales_rep": normalize_sales_rep(r.get("sales_rep")),
+                "remark": clean_val(r.get("remark")),
+            })
+        return out
+    except Exception as e:
+        print(f"[WARN] query_customer_domestic_sales fallback to price_history.json: {e}")
+        bundle = _load_phase1_bundle("price_history.json") or {}
+        sales = bundle.get("sales", []) if isinstance(bundle, dict) else []
+        c_low = c_clean.lower()
+        out = []
+        for r in sales:
+            cn = clean_val(r.get("customer_name")) or ""
+            if c_low not in cn.lower():
+                continue
+            dt = (r.get("out_date") or "")[:10]
+            if s_dt and dt and dt < s_dt:
+                continue
+            if e_dt and dt and dt > e_dt:
+                continue
+            out_amt = float(r.get("out_amt") or 0.0)
+            mgn = float(r.get("mgn") or 0.0)
+            out.append({
+                "idx": r.get("idx"),
+                "biz_type": "DOMESTIC",
+                "ship_date": dt,
+                "customer": cn or c_clean,
+                "part_no": clean_val(r.get("part_no")),
+                "maker": clean_val(r.get("maker")) or "OTHERS",
+                "po_no": "",
+                "ship_qty": int(r.get("qty") or 0),
+                "in_up_krw": round(float(r.get("in_up") or 0.0), 2),
+                "out_up_krw": round(float(r.get("out_up") or 0.0), 2),
+                "out_amt_krw": round(out_amt),
+                "margin_krw": round(mgn),
+                "margin_rate": round(float(r.get("mgn_rate") or ((mgn / out_amt * 100) if out_amt > 0 else 0.0)), 1),
+                "sales_rep": normalize_sales_rep(r.get("sales_rep")),
+                "remark": clean_val(r.get("remark")),
+            })
+            if len(out) >= limit:
+                break
+        return out
+
 # ========================================================
 # 📝 영업 메모 및 활동 일지 (T_SalesReport_Memo) 모듈
 # ========================================================

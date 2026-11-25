@@ -319,7 +319,11 @@ async function loadCommissionCustomersTab(query = '') {
           ${list.map((c, i) => `
             <tr class="hover:bg-violet-50/30">
               <td class="py-2 px-3 text-center font-mono text-slate-400">${i + 1}</td>
-              <td class="py-2 px-3 font-black text-slate-900">${escHtml(c.customer)}</td>
+              <td class="py-2 px-3 font-black text-slate-900">
+                <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${escHtml(c.customer).replace(/'/g, "\\'")}')" class="text-left hover:text-indigo-700 hover:underline cursor-pointer flex items-center gap-1" title="클릭하여 [${escHtml(c.customer)}] 360° 통합 브리핑 팝업 열기">
+                  <span>🏢</span><span>${escHtml(c.customer)}</span>
+                </button>
+              </td>
               <td class="py-2 px-3 text-indigo-800 font-bold">${escHtml(c.makers || '-')}</td>
               <td class="py-2 px-3 text-center font-mono font-bold text-slate-700">${c.count.toLocaleString()}건</td>
               <td class="py-2 px-3 text-right font-mono text-slate-700">$${Math.round(c.ship_amt).toLocaleString()}</td>
@@ -565,9 +569,10 @@ function renderCustomersTable() {
                 <span class="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">#${c.cid || '-'}</span>
                 ${isWeb ? '<span class="text-[9px] font-black text-teal-700 bg-teal-100 rounded px-1.5 py-0.5">WEB</span>' : ''}
                 ${c.sales_rep ? `<span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">${escHtml(c.sales_rep)}</span>` : ''}
+                <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${escHtml(c.kname || c.cname || '').replace(/'/g, "\\'")}', ${Number(c.cid) || 'null'})" class="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-600 text-white cursor-pointer">🔍 360° 브리핑</button>
                 ${cnt > 0 ? `<button type="button" onclick="window.toggleCustomerContacts(${c.cid}, '${panelId}')" class="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-teal-50 text-teal-700 border border-teal-200 cursor-pointer">👥 담당자 ${cnt}명 ▾</button>` : ''}
               </div>
-              <div class="font-black text-sm text-slate-900 mt-1 break-words">${escHtml(c.kname || c.cname || '-')}</div>
+              <div class="font-black text-sm text-slate-900 mt-1 break-words cursor-pointer hover:text-indigo-700" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${escHtml(c.kname || c.cname || '').replace(/'/g, "\\'")}', ${Number(c.cid) || 'null'})">${escHtml(c.kname || c.cname || '-')}</div>
               ${c.cname && c.cname !== c.kname ? `<div class="text-[11px] text-slate-400 break-words">${escHtml(c.cname)}</div>` : ''}
             </div>
             ${canEdit ? `
@@ -602,7 +607,10 @@ function renderCustomersTable() {
           ${isWeb ? '<span class="block text-[9px] font-black text-teal-700 bg-teal-100 rounded px-1 mt-0.5">WEB</span>' : ''}
         </td>
         <td class="py-2 px-3">
-          <div class="font-black text-slate-900">${escHtml(c.kname || c.cname || '-')}</div>
+          <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${escHtml(c.kname || c.cname || '').replace(/'/g, "\\'")}', ${Number(c.cid) || 'null'})" class="text-left font-black text-slate-900 hover:text-indigo-700 hover:underline cursor-pointer flex items-center gap-1" title="클릭하여 360° 고객사 통합 브리핑 열기">
+            <span>${escHtml(c.kname || c.cname || '-')}</span>
+            <span class="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 py-0.2 rounded font-bold shrink-0">360°</span>
+          </button>
           ${c.cname && c.cname !== c.kname ? `<div class="text-[10px] text-slate-400">${escHtml(c.cname)}</div>` : ''}
         </td>
         <td class="py-2 px-3 text-center">
@@ -830,3 +838,522 @@ window.deleteCustomerMasterByIdx = (idx) => {
   const c = custCache[idx];
   if (c) deleteCustomerMaster(c.id || c.cid, c.kname || c.cname || '거래처');
 };
+
+// ========================================================
+// 🏢 고객사 360° 통합 브리핑 모달 (Customer 360° Briefing Popup)
+// ========================================================
+const cust360State = {
+  customerName: '',
+  cid: null,
+  tab: 'biz', // 'biz' | 'pipeline' | 'contacts'
+  bizFilter: 'ALL', // 'ALL' | 'DOMESTIC' | 'COMMISSION'
+  search: '',
+  loading: false,
+  data: null,
+};
+
+export async function openCustomer360Modal(customerName, cid = null) {
+  const cleanName = (customerName || '').trim();
+  if (!cleanName || cleanName === '-' || cleanName === '기타' || /본사 일반재고/i.test(cleanName)) return;
+
+  cust360State.customerName = cleanName;
+  cust360State.cid = cid;
+  cust360State.tab = 'biz';
+  cust360State.bizFilter = 'ALL';
+  cust360State.search = '';
+  cust360State.loading = true;
+  cust360State.data = null;
+
+  let modal = document.getElementById('customer360Modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'customer360Modal';
+    modal.className = 'fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[99993] flex items-center justify-center p-2 sm:p-4 overflow-y-auto';
+    modal.onclick = (e) => {
+      if (e.target === modal) modal.classList.add('hidden');
+    };
+    document.body.appendChild(modal);
+  }
+  modal.classList.remove('hidden');
+  renderCustomer360Modal();
+
+  try {
+    const params = new URLSearchParams({
+      customer_name: cleanName,
+      start_date: '2024-01-01',
+      end_date: '2026-12-31',
+      limit: '400'
+    });
+    if (cid) params.set('cid', String(cid));
+    const res = await fetch(`/api/customers/360?${params.toString()}`);
+    const json = await res.json();
+    if (json && json.status === 'success') {
+      cust360State.data = json;
+    }
+  } catch (e) {
+    console.warn('Customer 360 조회 예외:', e);
+  } finally {
+    cust360State.loading = false;
+    renderCustomer360Modal();
+  }
+}
+
+window.openCustomer360Modal = openCustomer360Modal;
+
+window.switchCustomer360Tab = function(tab) {
+  cust360State.tab = tab;
+  renderCustomer360Modal();
+};
+
+window.setCustomer360BizFilter = function(f) {
+  cust360State.bizFilter = f;
+  renderCustomer360Modal();
+};
+
+window.setCustomer360Search = function(val) {
+  cust360State.search = val || '';
+  renderCustomer360Modal();
+  const inp = document.getElementById('cust360SearchInput');
+  if (inp) {
+    inp.focus();
+    const len = inp.value.length;
+    try { inp.setSelectionRange(len, len); } catch (_) {}
+  }
+};
+
+window.jumpFromCust360ToInventory = function(customerName, itemId = null) {
+  document.getElementById('customer360Modal')?.classList.add('hidden');
+  document.getElementById('customerMasterModal')?.classList.add('hidden');
+  document.getElementById('tabSales')?.click();
+  const searchInp = document.getElementById('searchInput');
+  if (searchInp) {
+    searchInp.value = customerName || '';
+    searchInp.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  if (itemId && typeof window.loadFormFromItem === 'function') {
+    setTimeout(() => window.loadFormFromItem(itemId), 120);
+  }
+};
+
+function renderCustomer360Modal() {
+  const modal = document.getElementById('customer360Modal');
+  if (!modal) return;
+
+  const { customerName, tab, bizFilter, search, loading, data } = cust360State;
+  const fx = (typeof window.getLiveFxRate === 'function' ? window.getLiveFxRate() : window.rawFxRate) || 1380;
+  const d = data || {};
+  const profile = d.profile || {};
+  const contacts = Array.isArray(d.contacts) ? d.contacts : [];
+  const forwarders = Array.isArray(d.forwarders) ? d.forwarders : [];
+  const domSales = Array.isArray(d.domestic_sales) ? d.domestic_sales : [];
+  const commShips = Array.isArray(d.commission_shipments) ? d.commission_shipments : [];
+  const unpaidDom = Array.isArray(d.unpaid_domestic) ? d.unpaid_domestic : [];
+  const quotations = Array.isArray(d.quotations) ? d.quotations : [];
+  const sampleProjects = Array.isArray(d.sample_projects) ? d.sample_projects : [];
+  const sampleOutflows = Array.isArray(d.sample_outflows) ? d.sample_outflows : [];
+
+  // 해당 고객사 앞으로 배정/계약된 실시간 재고 (window.cachedItems 연동)
+  const cLow = customerName.toLowerCase();
+  const allInv = Array.isArray(window.cachedItems) ? window.cachedItems : [];
+  const custStocks = allInv.filter(it => {
+    if ((Number(it.stock) || 0) <= 0) return false;
+    const hay = `${it.customer || ''} ${it.realCustomer || it.real_customer || ''} ${it.memo || ''}`.toLowerCase();
+    return hay.includes(cLow);
+  });
+
+  // 핵심 KPI 집계
+  const totalDomBillingKrw = domSales.reduce((s, r) => s + (Number(r.out_amt_krw) || 0), 0);
+  const totalDomMarginKrw = domSales.reduce((s, r) => s + (Number(r.margin_krw) || 0), 0);
+  const avgDomMarginRate = totalDomBillingKrw > 0 ? ((totalDomMarginKrw / totalDomBillingKrw) * 100).toFixed(1) : '0.0';
+  const totalCommUsd = commShips.reduce((s, r) => s + (Number(r.comm_amt) || 0), 0);
+  const totalCommKrw = Math.round(totalCommUsd * fx);
+  const totalProfitKrw = totalDomMarginKrw + totalCommKrw;
+
+  const totalStockQty = custStocks.reduce((s, it) => s + (Number(it.stock) || 0), 0);
+  const totalStockUsd = custStocks.reduce((s, it) => s + ((Number(it.stock) || 0) * (Number(it.unitUsd ?? it.unit_usd) || 0)), 0);
+
+  const unpaidDomKrw = unpaidDom.reduce((s, u) => s + (Number(u.amount_vat ?? u.out_amt) || 0), 0);
+  const unpaidCommUsd = commShips.filter(c => !(c.bank_dt || c.comm_dt || c.comm_status === '정산완료')).reduce((s, r) => s + (Number(r.comm_amt) || 0), 0);
+
+  // 통합 거래 내역 (Domestic + Commission)
+  const unifiedBiz = [
+    ...domSales.map(r => ({
+      biz_type: 'DOMESTIC',
+      date: r.ship_date || '',
+      maker: r.maker || 'OTHERS',
+      part_no: r.part_no || '-',
+      po_no: r.po_no || '',
+      qty: Number(r.ship_qty) || 0,
+      unit_str: `₩${Math.round(Number(r.out_up_krw) || 0).toLocaleString()}`,
+      amt_str: `₩${Math.round(Number(r.out_amt_krw) || 0).toLocaleString()}`,
+      profit_krw: Math.round(Number(r.margin_krw) || 0),
+      profit_str: `₩${Math.round(Number(r.margin_krw) || 0).toLocaleString()}`,
+      rate_str: `${Number(r.margin_rate || 0).toFixed(1)}%`,
+      sales_rep: toEnglishSalesName(r.sales_rep || ''),
+      status_str: '국내출고',
+      awb_no: ''
+    })),
+    ...commShips.map(c => ({
+      biz_type: 'COMMISSION',
+      date: c.ship_date || '',
+      maker: c.maker || 'OTHERS',
+      part_no: c.part_no || '-',
+      po_no: c.po_no || c.invoice_no || '',
+      qty: Number(c.ship_qty) || 0,
+      unit_str: `$${(Number(c.net_up) || 0).toFixed(4)}`,
+      amt_str: `$${(Number(c.ship_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      profit_krw: Math.round((Number(c.comm_amt) || 0) * fx),
+      profit_str: `$${(Number(c.comm_amt) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (≈₩${Math.round((Number(c.comm_amt) || 0) * fx).toLocaleString()})`,
+      rate_str: `${(Number(c.comm_rate) || 0).toFixed(2)}%`,
+      sales_rep: toEnglishSalesName(c.sales_rep || ''),
+      status_str: (c.bank_dt || c.comm_dt) ? '정산완료' : '미입금',
+      awb_no: c.awb_no || ''
+    }))
+  ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  const q = search.trim().toLowerCase();
+  let tabBodyHtml = '';
+
+  if (tab === 'biz') {
+    const filtered = unifiedBiz.filter(it => {
+      if (bizFilter === 'DOMESTIC' && it.biz_type !== 'DOMESTIC') return false;
+      if (bizFilter === 'COMMISSION' && it.biz_type !== 'COMMISSION') return false;
+      if (q && !`${it.part_no} ${it.maker} ${it.po_no} ${it.sales_rep}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const sumProfit = filtered.reduce((s, r) => s + (r.profit_krw || 0), 0);
+
+    tabBodyHtml = `
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-slate-200 text-xs">
+          <div class="flex items-center gap-1 flex-wrap">
+            <button type="button" onclick="window.setCustomer360BizFilter('ALL')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">전체 (${unifiedBiz.length})</button>
+            <button type="button" onclick="window.setCustomer360BizFilter('DOMESTIC')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'DOMESTIC' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">🏢 Domestic 매출·마진 (${domSales.length})</button>
+            <button type="button" onclick="window.setCustomer360BizFilter('COMMISSION')" class="px-2.5 py-1 rounded-lg font-bold cursor-pointer ${bizFilter === 'COMMISSION' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">💎 Commission 직송 (${commShips.length})</button>
+          </div>
+          <div class="flex items-center gap-3 text-[11px] font-mono font-bold text-slate-700">
+            <span>조회: <strong>${filtered.length.toLocaleString()}건</strong></span>
+            <span>🏆 수익합계(마진+커미션): <strong class="text-violet-800">₩${sumProfit.toLocaleString()}</strong></span>
+          </div>
+        </div>
+
+        ${loading ? `<div class="py-12 text-center text-slate-400 font-bold text-xs">⏳ [${escHtml(customerName)}] 360° 통합 비즈니스 원장을 불러오는 중입니다...</div>` : filtered.length === 0 ? `<div class="py-12 text-center text-slate-400 font-bold text-xs bg-white rounded-xl border border-slate-200">조회된 출하·매출 내역이 없습니다.</div>` : `
+          <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-100 text-slate-700 font-bold text-[11px] border-b border-slate-200 sticky top-0 z-10">
+                <tr>
+                  <th class="py-2 px-2 text-center w-16">구분</th>
+                  <th class="py-2 px-2 text-center w-24">출하일</th>
+                  <th class="py-2 px-2 text-center w-20">제조사</th>
+                  <th class="py-2 px-2">품번 (PartNo)</th>
+                  <th class="py-2 px-2">PO / 번호</th>
+                  <th class="py-2 px-2 text-right">수량</th>
+                  <th class="py-2 px-2 text-right">판매단가</th>
+                  <th class="py-2 px-2 text-right">매출/선적액</th>
+                  <th class="py-2 px-2 text-right">🏆 마진 / 💎 커미션</th>
+                  <th class="py-2 px-2 text-center">담당</th>
+                  <th class="py-2 px-2 text-center">상태/추적</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 text-[11px]">
+                ${filtered.slice(0, 250).map(r => {
+                  const isComm = r.biz_type === 'COMMISSION';
+                  return `
+                    <tr class="hover:bg-slate-50 ${isComm ? 'bg-violet-50/15' : ''}">
+                      <td class="py-1.5 px-2 text-center whitespace-nowrap">
+                        ${isComm
+                          ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-violet-100 text-violet-800 border border-violet-200">💎 COMM</span>`
+                          : `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">🏢 DOM</span>`}
+                      </td>
+                      <td class="py-1.5 px-2 text-center font-mono text-slate-600 whitespace-nowrap">${escHtml(r.date)}</td>
+                      <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escHtml(r.maker)}</td>
+                      <td class="py-1.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
+                        <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${escHtml(r.part_no).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline cursor-pointer">📈 ${escHtml(r.part_no)}</button>
+                      </td>
+                      <td class="py-1.5 px-2 font-mono text-[10px] text-slate-600 truncate max-w-[130px]">${escHtml(r.po_no || '-')}</td>
+                      <td class="py-1.5 px-2 text-right font-mono font-bold text-slate-900 whitespace-nowrap">${r.qty.toLocaleString()}</td>
+                      <td class="py-1.5 px-2 text-right font-mono text-blue-700 whitespace-nowrap">${escHtml(r.unit_str)}</td>
+                      <td class="py-1.5 px-2 text-right font-mono font-black text-slate-900 whitespace-nowrap">${escHtml(r.amt_str)}</td>
+                      <td class="py-1.5 px-2 text-right font-mono whitespace-nowrap">
+                        <div class="font-black ${isComm ? 'text-violet-700' : 'text-emerald-700'}">${escHtml(r.profit_str)}</div>
+                        <div class="text-[9px] ${isComm ? 'text-violet-500' : 'text-emerald-600'} font-bold">${escHtml(r.rate_str)}</div>
+                      </td>
+                      <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escHtml(r.sales_rep || '-')}</td>
+                      <td class="py-1.5 px-2 text-center whitespace-nowrap">
+                        <div class="inline-flex items-center gap-1">
+                          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.status_str === '미입금' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-slate-100 text-slate-700'}">${escHtml(r.status_str)}</span>
+                          ${r.awb_no ? `<button type="button" onclick="window.openTrackingModal && window.openTrackingModal('${escHtml(r.awb_no).replace(/'/g, "\\'")}')" class="px-1.5 py-0.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded text-[9px] font-bold cursor-pointer">🚚</button>` : ''}
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    `;
+  } else if (tab === 'pipeline') {
+    const filteredStocks = custStocks.filter(it => !q || `${it.partName || it.part_name || ''} ${it.maker || ''} ${it.poNo || it.po_no || ''}`.toLowerCase().includes(q));
+    const filteredQuotes = quotations.filter(qt => !q || `${qt.part_no || ''} ${qt.mfg || ''} ${qt.quote_no || ''}`.toLowerCase().includes(q));
+    const filteredProjects = sampleProjects.filter(sp => !q || `${sp.part_no || ''} ${sp.mfg || ''} ${sp.app || ''} ${sp.prj_model || ''}`.toLowerCase().includes(q));
+
+    tabBodyHtml = `
+      <div class="space-y-4">
+        <!-- 1. 고객사 배정/연관 보유 재고 -->
+        <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h4 class="font-black text-xs text-emerald-950 flex items-center gap-1.5">
+              <span>📦</span> 고객사 배정 / 계약 보유 재고 (${filteredStocks.length}건 · 총 ${totalStockQty.toLocaleString()} EA)
+            </h4>
+            <button type="button" onclick="window.jumpFromCust360ToInventory('${escHtml(customerName).replace(/'/g, "\\'")}')" class="text-[11px] font-bold text-indigo-700 hover:underline cursor-pointer">재고 탭에서 전체 보기 ↗</button>
+          </div>
+          ${filteredStocks.length === 0 ? `<div class="py-4 text-center text-slate-400 text-xs">현재 이 고객사 앞으로 배정된 보유 재고가 없습니다.</div>` : `
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead class="bg-emerald-50 text-emerald-950 font-bold text-[11px] border-b border-emerald-200">
+                  <tr>
+                    <th class="py-1.5 px-2 text-center">상태</th>
+                    <th class="py-1.5 px-2 text-center">제조사</th>
+                    <th class="py-1.5 px-2">품번 (PartNo)</th>
+                    <th class="py-1.5 px-2 text-right">보유수량</th>
+                    <th class="py-1.5 px-2 text-right">배정 / 가용</th>
+                    <th class="py-1.5 px-2 text-right">매입단가($)</th>
+                    <th class="py-1.5 px-2 text-center">담당 / 입고일</th>
+                    <th class="py-1.5 px-2 text-center">바로가기</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-[11px]">
+                  ${filteredStocks.map(it => {
+                    const stk = Number(it.stock) || 0;
+                    const rawArr = Number(it.arrangedQty ?? it.arranged_qty) || 0;
+                    const isExp = it.orderStatus === '배정완료' || it.orderStatus === '배정요청';
+                    const arr = rawArr > 0 ? Math.min(stk, rawArr) : (isExp ? stk : 0);
+                    const avail = Math.max(0, stk - arr);
+                    const part = it.partName || it.part_name || '-';
+                    return `
+                      <tr class="hover:bg-emerald-50/30">
+                        <td class="py-1.5 px-2 text-center"><span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800">${escHtml(it.orderStatus || '보유')}</span></td>
+                        <td class="py-1.5 px-2 text-center font-bold text-indigo-900">${escHtml(it.maker)}</td>
+                        <td class="py-1.5 px-2 font-mono font-black text-slate-900">
+                          <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${escHtml(part).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline cursor-pointer">📈 ${escHtml(part)}</button>
+                        </td>
+                        <td class="py-1.5 px-2 text-right font-mono font-black">${stk.toLocaleString()} EA</td>
+                        <td class="py-1.5 px-2 text-right font-mono"><span class="text-amber-700 font-bold">배정:${arr.toLocaleString()}</span> · <span class="text-emerald-700 font-bold">가용:${avail.toLocaleString()}</span></td>
+                        <td class="py-1.5 px-2 text-right font-mono">$${(Number(it.unitUsd ?? it.unit_usd) || 0).toFixed(4)}</td>
+                        <td class="py-1.5 px-2 text-center font-mono text-[10px]">${escHtml(toEnglishSalesName(it.owner || ''))} · ${escHtml((it.entryDate || it.entry_date || '').slice(0, 10))}</td>
+                        <td class="py-1.5 px-2 text-center">
+                          <button type="button" onclick="window.jumpFromCust360ToInventory('${escHtml(customerName).replace(/'/g, "\\'")}', '${escHtml(it.id)}')" class="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[10px] font-bold cursor-pointer">상세/견적 ↗</button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <!-- 2. Design-In 프로젝트 & 샘플 출고 -->
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2">
+            <h4 class="font-black text-xs text-indigo-950 border-b border-slate-100 pb-2">🧪 Design-In 프로젝트 (${filteredProjects.length}건) &amp; 샘플 출고 (${sampleOutflows.length}건)</h4>
+            ${(filteredProjects.length === 0 && sampleOutflows.length === 0) ? `<div class="py-6 text-center text-slate-400 text-xs">등록된 샘플·프로젝트 이력이 없습니다.</div>` : `
+              <div class="space-y-1.5 max-h-64 overflow-y-auto pr-1 text-[11px]">
+                ${filteredProjects.map(p => `
+                  <div class="p-2 rounded-lg bg-indigo-50/50 border border-indigo-100 space-y-0.5">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="font-mono font-black text-indigo-950">[${escHtml(p.mfg)}] ${escHtml(p.part_no)}</span>
+                      <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-100 text-indigo-800">${escHtml(p.sample_result_label || 'Working')} · ${escHtml(p.business_result_label || '')}</span>
+                    </div>
+                    <div class="text-[10px] text-slate-600">모델/APP: <strong>${escHtml(p.prj_model || p.app || '-')}</strong> · 예상물량: <strong>${(Number(p.volume) || 0).toLocaleString()} EA</strong> · 담당: <strong>${escHtml(p.sales || '-')}</strong></div>
+                  </div>
+                `).join('')}
+                ${sampleOutflows.slice(0, 15).map(so => `
+                  <div class="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="font-mono font-bold text-slate-900 truncate">[샘플출고] ${escHtml(so.part_no)} (${(Number(so.qty) || 0).toLocaleString()} EA)</div>
+                      <div class="text-[10px] text-slate-500">${escHtml(so.out_date || '-')} · 수신: ${escHtml(so.contact || '-')} · 담당: ${escHtml(so.sales || '-')}</div>
+                    </div>
+                    <span class="text-[10px] font-mono text-teal-700 font-bold shrink-0">${escHtml(so.so_no || '')}</span>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+
+          <!-- 3. 최근 견적 이력 -->
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2">
+            <h4 class="font-black text-xs text-slate-900 border-b border-slate-100 pb-2">📄 최근 발행 견적 이력 (${filteredQuotes.length}건)</h4>
+            ${filteredQuotes.length === 0 ? `<div class="py-6 text-center text-slate-400 text-xs">발행된 견적 이력이 없습니다.</div>` : `
+              <div class="space-y-1.5 max-h-64 overflow-y-auto pr-1 text-[11px]">
+                ${filteredQuotes.slice(0, 30).map(qt => `
+                  <div class="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="font-mono font-black text-slate-900 truncate">[${escHtml(qt.mfg)}] ${escHtml(qt.part_no)}</div>
+                      <div class="text-[10px] text-slate-500 font-mono">${escHtml((qt.quote_dt || '').slice(0, 10))} · ${escHtml(qt.quote_no)} · 담당: ${escHtml(qt.sales || '-')}</div>
+                    </div>
+                    <div class="text-right font-mono shrink-0">
+                      <div class="font-black text-indigo-700">${escHtml(qt.qunit || '$')} ${Number(qt.qp || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
+                      <div class="text-[10px] text-slate-500">수량: ${Number(qt.qty || 0).toLocaleString()}</div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    // 'contacts' 탭: 미수금 + 복수 담당자(ContactFile) + 지정 포워더(CustForwarder)
+    tabBodyHtml = `
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- 좌측: 복수 담당자 (ContactFile) & 지정 포워더 (CustForwarder) -->
+        <div class="space-y-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h4 class="font-black text-xs text-teal-900">👥 등록된 고객사 담당자 (${contacts.length}명 — ContactFile)</h4>
+              ${profile.tel ? `<span class="text-[11px] font-mono text-slate-600">대표 📞 ${escHtml(profile.tel)}</span>` : ''}
+            </div>
+            ${contacts.length === 0 ? `<div class="py-4 text-center text-slate-400 text-xs">등록된 세부 담당자 연락처가 없습니다. ${profile.contact_name ? `(대표: ${escHtml(profile.contact_name)})` : ''}</div>` : `
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
+                ${contacts.map(ct => `
+                  <div class="p-2.5 rounded-lg bg-teal-50/40 border border-teal-200/80 text-[11px] space-y-0.5">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="font-black text-slate-900">${escHtml(ct.name)} ${ct.title ? `<span class="text-slate-500 font-semibold">${escHtml(ct.title)}</span>` : ''}</span>
+                      ${ct.remark ? `<span class="text-[9px] bg-white text-teal-800 px-1.5 py-0.2 rounded border border-teal-200 font-bold">${escHtml(ct.remark)}</span>` : ''}
+                    </div>
+                    ${ct.mobile ? `<div class="font-mono text-indigo-700 font-bold">📱 ${escHtml(ct.mobile)}</div>` : ''}
+                    ${ct.tel ? `<div class="font-mono text-slate-600">📞 ${escHtml(ct.tel)}</div>` : ''}
+                    ${ct.email ? `<div class="font-mono text-slate-500 truncate" title="${escHtml(ct.email)}">✉️ ${escHtml(ct.email)}</div>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2">
+            <h4 class="font-black text-xs text-indigo-950 border-b border-slate-100 pb-2">🚚 지정 포워더 &amp; Account (${forwarders.length}건 — CustForwarder)</h4>
+            ${forwarders.length === 0 ? `<div class="py-4 text-center text-slate-400 text-xs">등록된 지정 포워더 Account가 없습니다.</div>` : `
+              <div class="space-y-1.5 max-h-44 overflow-y-auto pr-1 text-[11px]">
+                ${forwarders.map(f => `
+                  <div class="p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+                    <div>
+                      <div class="font-black text-indigo-900">${escHtml(f.fname)} ${f.chk === 'Y' ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-emerald-100 text-emerald-800">기본</span>' : ''}</div>
+                      <div class="text-[10px] text-slate-500">${escHtml([f.region, f.kinds, f.comment].filter(Boolean).join(' · ') || '-')}</div>
+                    </div>
+                    <span class="font-mono font-black text-slate-900 bg-white px-2 py-1 rounded border border-slate-200">${escHtml(f.account || '-')}</span>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        </div>
+
+        <!-- 우측: 미수금 채권 현황 (Domestic + Commission) -->
+        <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h4 class="font-black text-xs text-rose-900">💰 미회수 채권 현황 (국내 ${unpaidDom.length}건 / 커미션 미입금 $${unpaidCommUsd.toLocaleString()})</h4>
+            ${unpaidDom.length > 0 ? `<button type="button" onclick="window.openStatementOfAccount && window.openStatementOfAccount('${escHtml(customerName).replace(/'/g, "\\'")}')" class="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[10px] font-bold cursor-pointer">📄 잔액확인서 발행</button>` : ''}
+          </div>
+          ${unpaidDom.length === 0 ? `<div class="py-8 text-center text-slate-400 text-xs font-bold">미결제 Domestic 외상 채권이 없습니다. ✅</div>` : `
+            <div class="space-y-1.5 max-h-80 overflow-y-auto pr-1 text-[11px]">
+              ${unpaidDom.map(u => `
+                <div class="p-2 rounded-lg bg-rose-50/40 border border-rose-200/70 flex items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="font-mono font-black text-slate-900 truncate">[${escHtml(u.mfg)}] ${escHtml(u.part_no)}</div>
+                    <div class="text-[10px] text-slate-500 font-mono">출하: ${escHtml((u.out_dt || '').slice(0, 10))} · 만기: ${escHtml((u.due_date || '').slice(0, 10))} · ${Number(u.overdue_days) > 0 ? `<strong class="text-rose-700">+${u.overdue_days}일 연체</strong>` : '결제예정'}</div>
+                  </div>
+                  <div class="text-right font-mono shrink-0">
+                    <div class="font-black text-rose-700">₩${Math.round(Number(u.amount_vat) || 0).toLocaleString()}</div>
+                    <div class="text-[10px] text-slate-500">${escHtml(u.sales || '-')}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  }
+
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+      <!-- 헤더 -->
+      <div class="bg-gradient-to-r from-slate-900 via-teal-950 to-indigo-950 text-white px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 rounded-xl bg-teal-500/25 border border-teal-400/40 flex items-center justify-center text-xl font-black shrink-0">🏢</div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="text-base sm:text-lg font-black tracking-wide truncate">${escHtml(customerName)} — 360° 통합 브리핑</h2>
+              ${d.cid ? `<span class="text-[10px] bg-teal-500/30 border border-teal-300/40 text-teal-100 font-mono font-bold px-2 py-0.5 rounded-full">CID #${d.cid}</span>` : ''}
+              ${profile.sales_rep ? `<span class="text-[10px] bg-indigo-500/40 border border-indigo-300/40 text-indigo-100 font-bold px-2 py-0.5 rounded-full">담당: ${escHtml(toEnglishSalesName(profile.sales_rep))}</span>` : ''}
+            </div>
+            <p class="text-[11px] text-slate-300 mt-0.5 truncate">${escHtml(profile.address || '매출·마진 · 💎 커미션 · 배정 재고 · Design-In 샘플 · 견적 · 미수금 · 담당자 연락처 원스톱 뷰')}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button type="button" onclick="document.getElementById('customer360Modal').classList.add('hidden'); document.getElementById('customerMasterModal')?.classList.add('hidden'); window.jumpToShipmentsFiltered && window.jumpToShipmentsFiltered({ query: '${escHtml(customerName).replace(/'/g, "\\'")}', year: '2026' })" class="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold cursor-pointer transition">🚚 출하원장 ↗</button>
+          <button type="button" onclick="window.jumpFromCust360ToInventory('${escHtml(customerName).replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 bg-emerald-500/25 hover:bg-emerald-500/40 border border-emerald-400/40 text-emerald-100 rounded-lg text-xs font-bold cursor-pointer transition">📦 재고탭 ↗</button>
+          <button type="button" onclick="document.getElementById('customer360Modal').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center cursor-pointer">✕</button>
+        </div>
+      </div>
+
+      <!-- 4대 핵심 KPI 카드 -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 p-3 sm:p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+        <div class="bg-white border border-violet-200 rounded-xl p-3 shadow-2xs">
+          <div class="text-[11px] font-bold text-violet-900 flex items-center justify-between">
+            <span>🏆 누적 총수익 (마진+커미션)</span>
+            <span class="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-black">${avgDomMarginRate}%</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-slate-900 font-mono mt-1">₩${Math.round(totalProfitKrw).toLocaleString()}</div>
+          <div class="text-[10px] text-slate-600 mt-0.5">마진 <strong class="text-emerald-700">₩${Math.round(totalDomMarginKrw).toLocaleString()}</strong> + 💎 <strong class="text-violet-700">$${totalCommUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong></div>
+        </div>
+
+        <div class="bg-white border border-indigo-200 rounded-xl p-3 shadow-2xs">
+          <div class="text-[11px] font-bold text-indigo-900 flex items-center justify-between">
+            <span>📈 Domestic 누적 매출</span>
+            <span class="text-[10px] text-indigo-600 font-mono">BILLING</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-indigo-950 font-mono mt-1">₩${Math.round(totalDomBillingKrw).toLocaleString()}</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">국내출하 <strong>${domSales.length}건</strong> · 커미션 <strong>${commShips.length}건</strong></div>
+        </div>
+
+        <div class="bg-white border border-emerald-200 rounded-xl p-3 shadow-2xs cursor-pointer hover:border-emerald-400" onclick="window.switchCustomer360Tab('pipeline')">
+          <div class="text-[11px] font-bold text-emerald-900 flex items-center justify-between">
+            <span>📦 배정재고 · 프로젝트 · 견적</span>
+            <span class="text-[10px] text-emerald-700 font-bold">파이프라인 👉</span>
+          </div>
+          <div class="text-base sm:text-lg font-black text-emerald-950 font-mono mt-1">재고 ${custStocks.length}건 ($${Math.round(totalStockUsd).toLocaleString()})</div>
+          <div class="text-[10px] text-emerald-700 mt-0.5">프로젝트 <strong>${sampleProjects.length}건</strong> · 견적 <strong>${quotations.length}건</strong></div>
+        </div>
+
+        <div class="bg-white border border-rose-200 rounded-xl p-3 shadow-2xs cursor-pointer hover:border-rose-400" onclick="window.switchCustomer360Tab('contacts')">
+          <div class="text-[11px] font-bold text-rose-900 flex items-center justify-between">
+            <span>💰 미수 채권 &amp; 담당자(${contacts.length}명)</span>
+            <span class="text-[10px] text-rose-600 font-bold">연락처/채권 👉</span>
+          </div>
+          <div class="text-sm sm:text-base font-black text-rose-700 font-mono mt-1">₩${Math.round(unpaidDomKrw).toLocaleString()} <span class="text-xs text-violet-700">+ 💎$${Math.round(unpaidCommUsd).toLocaleString()}</span></div>
+          <div class="text-[10px] text-slate-500 mt-0.5">담당자 <strong>${contacts.length}명</strong> · 포워더 <strong>${forwarders.length}건</strong></div>
+        </div>
+      </div>
+
+      <!-- 서브탭 & 검색 바 -->
+      <div class="px-4 py-2 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-1 flex-wrap">
+          <button type="button" onclick="window.switchCustomer360Tab('biz')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'biz' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">🚚 매출·마진 &amp; 💎 커미션 (${unifiedBiz.length})</button>
+          <button type="button" onclick="window.switchCustomer360Tab('pipeline')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'pipeline' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">📦 배정재고(${custStocks.length}) · 🧪 샘플(${sampleProjects.length}) · 📄 견적(${quotations.length})</button>
+          <button type="button" onclick="window.switchCustomer360Tab('contacts')" class="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${tab === 'contacts' ? 'bg-teal-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">👥 담당자(${contacts.length}) · 🚚 포워더(${forwarders.length}) · 💰 미수(${unpaidDom.length})</button>
+        </div>
+        <input type="text" id="cust360SearchInput" value="${escHtml(search)}" oninput="window.setCustomer360Search(this.value)" placeholder="품번(PartNo), 제조사, PO, 견적번호 검색..." class="w-full sm:w-64 px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg outline-none focus:bg-white focus:border-indigo-500">
+      </div>
+
+      <!-- 본문 영역 -->
+      <div class="flex-1 overflow-y-auto p-3 sm:p-4 bg-slate-50/70">
+        ${tabBodyHtml}
+      </div>
+    </div>
+  `;
+}

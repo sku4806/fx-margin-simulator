@@ -785,10 +785,12 @@ export function renderAnalyticsView(containerId = "analyticsSection") {
               const pct = baseBilling > 0 ? ((c.billing / baseBilling) * 100).toFixed(1) : 0;
               const safeCust = String(c.customer_name || '').replace(/'/g, "\\'");
               return `
-                <div class="space-y-0.5 p-1 -mx-1 rounded-lg hover:bg-indigo-50/60 cursor-pointer transition-colors" onclick="window.jumpToShipmentsFiltered && window.jumpToShipmentsFiltered({ query: '${safeCust}', year: '${currentYear}' })" title="클릭하여 [${c.customer_name}] 출하 원장 바로 보기">
+                <div class="space-y-0.5 p-1 -mx-1 rounded-lg hover:bg-indigo-50/60 cursor-pointer transition-colors" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${safeCust}')" title="클릭하여 [${c.customer_name}] 360° 통합 브리핑 팝업 보기">
                   <div class="flex items-center justify-between text-[11px]">
-                    <span class="font-bold text-slate-800 truncate max-w-[150px]">
-                      <span class="text-indigo-600 font-mono font-black">${idx + 1}.</span> ${c.customer_name}
+                    <span class="font-bold text-slate-800 truncate max-w-[150px] flex items-center gap-1">
+                      <span class="text-indigo-600 font-mono font-black">${idx + 1}.</span>
+                      <span class="truncate">${c.customer_name}</span>
+                      <span class="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 rounded shrink-0">360°</span>
                     </span>
                     <span class="font-mono font-bold text-slate-900">₩${Math.round(c.billing).toLocaleString()}</span>
                   </div>
@@ -1349,7 +1351,9 @@ function renderSalesRepPortfolioModal() {
                           : `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">🏢 DOM</span>`}
                       </td>
                       <td class="py-1.5 px-2 text-center font-mono text-slate-600 whitespace-nowrap">${escRep(r.date)}</td>
-                      <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[160px]" title="${escRep(r.customer)}">${escRep(r.customer)}</td>
+                      <td class="py-1.5 px-2 font-bold text-slate-900 truncate max-w-[160px]" title="${escRep(r.customer)}">
+                        <button type="button" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${escRep(r.customer).replace(/'/g, "\\'")}')" class="hover:text-indigo-700 hover:underline cursor-pointer truncate max-w-full text-left" title="클릭하여 고객사 360° 통합 브리핑 열기">${escRep(r.customer)}</button>
+                      </td>
                       <td class="py-1.5 px-2 text-center font-bold text-indigo-900 whitespace-nowrap">${escRep(r.maker)}</td>
                       <td class="py-1.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
                         <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${escRep(r.part_no)}')" class="hover:text-indigo-700 hover:underline cursor-pointer" title="과거 단가·커미션 이력 보기">📈 ${escRep(r.part_no)}</button>
@@ -1463,9 +1467,9 @@ function renderSalesRepPortfolioModal() {
           ${topRepCustomers.length === 0 ? `<div class="py-8 text-center text-slate-400 text-xs font-bold">집계된 고객사 출하 내역이 없습니다.</div>` : `
             <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
               ${topRepCustomers.slice(0, 15).map((c, i) => `
-                <div class="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+                <div class="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50 hover:bg-indigo-50/60 border border-slate-100 text-xs cursor-pointer transition-colors" onclick="window.openCustomer360Modal && window.openCustomer360Modal('${escRep(c.customer).replace(/'/g, "\\'")}')" title="클릭하여 [${escRep(c.customer)}] 360° 통합 브리핑 열기">
                   <div class="min-w-0">
-                    <div class="font-black text-slate-900 truncate"><span class="text-indigo-600 font-mono">${i + 1}.</span> ${escRep(c.customer)}</div>
+                    <div class="font-black text-slate-900 truncate"><span class="text-indigo-600 font-mono">${i + 1}.</span> ${escRep(c.customer)} <span class="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 rounded">360°</span></div>
                     <div class="text-[10px] text-slate-500 truncate">${escRep(c.makers)} · ${c.count}건 출하</div>
                   </div>
                   <div class="text-right font-mono shrink-0">
