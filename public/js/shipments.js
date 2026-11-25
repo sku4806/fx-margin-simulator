@@ -196,6 +196,7 @@ export async function fetchWebShipments() {
         const parsedCommAmt = parseFloat(stParts[6] || '0') || 0;
         const parsedSalesRep = toEnglishSalesName(stParts[7] || '');
         const parsedAwbNo = (stParts[8] || '').trim();
+        const parsedFileNo = (stParts[9] || '').trim();
         const isCommWeb = parsedBizType === 'COMMISSION' || parsedCommAmt > 0;
         return {
           id: item.id,
@@ -222,6 +223,7 @@ export async function fetchWebShipments() {
           comm_status: isCommWeb ? '미입금' : '',
           sales_rep: parsedSalesRep,
           awb_no: parsedAwbNo,
+          file_no: parsedFileNo,
           is_web: true,
           status: baseStatus
         };
@@ -495,10 +497,10 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
             <tr>
               <th class="py-2.5 px-1.5 text-center whitespace-nowrap w-8">#</th>
               <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">구분</th>
-              <th class="py-2.5 px-2 text-left min-w-[115px]">CUSTOMER</th>
-              <th class="py-2.5 px-2 text-left min-w-[100px]">REALCUST</th>
-              <th class="py-2.5 px-2 text-left min-w-[115px]">PONO / 관리번호</th>
-              <th class="py-2.5 px-2 text-left min-w-[150px]">PARTNO</th>
+              <th class="py-2.5 px-2 text-left min-w-[100px]">CUSTOMER</th>
+              <th class="py-2.5 px-2 text-left min-w-[90px]">REALCUST</th>
+              <th class="py-2.5 px-2 text-left min-w-[105px]">PONO / 관리번호</th>
+              <th class="py-2.5 px-2 text-left min-w-[130px]">PARTNO</th>
               <th class="py-2.5 px-2 text-center whitespace-nowrap w-22">SHIP_DATE</th>
               <th class="py-2.5 px-2 text-right whitespace-nowrap w-20">SHIP_QTY</th>
               <th class="py-2.5 px-2 text-right whitespace-nowrap w-20">NET_UP($)</th>
@@ -1578,6 +1580,10 @@ export function openShipmentCrudModal(item = null) {
           <input type="text" id="shipCrudPoNo" value="${esc(item?.po_no)}" placeholder="PO 번호" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
         </div>
         <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">사내 관리번호 (FILE NO)</label>
+          <input type="text" id="shipCrudFileNo" value="${esc(item?.file_no || '')}" placeholder="예: LG2609-31, IS2611-01" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
+        </div>
+        <div>
           <label class="block text-[11px] font-bold text-slate-600 mb-1">출하일자 (SHIP_DATE) *</label>
           <input type="date" id="shipCrudDate" value="${esc(item?.ship_date && item.ship_date !== '-' ? item.ship_date.slice(0,10) : todayStr)}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-indigo-500">
         </div>
@@ -1674,6 +1680,7 @@ async function saveShipmentCrudForm() {
     comm_amt: bizType === 'COMMISSION' ? commAmt : 0,
     sales_rep: toEnglishSalesName(document.getElementById('shipCrudSalesRep')?.value.trim() || ''),
     awb_no: document.getElementById('shipCrudAwbNo')?.value.trim() || '',
+    file_no: document.getElementById('shipCrudFileNo')?.value.trim() || '',
     create_unpaid: bizType !== 'COMMISSION' && !!document.getElementById('shipCrudCreateUnpaid')?.checked
   };
 

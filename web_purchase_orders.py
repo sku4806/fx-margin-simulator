@@ -191,6 +191,8 @@ def _convert_approval_rows_to_pos(rows: List[Dict[str, Any]]) -> List[Dict[str, 
                     "sales_rep": drafter,
                     "supplier_name": vendor,
                     "real_cust": cust,
+                    "pay_terms": itm.get("pay_terms") or meta.get("pay_terms") or "",
+                    "inrate": float(itm.get("inrate") or meta.get("inrate") or doc_fx or 0.0),
                     "remark": f"[전자결재 승인 발주] {memo}".strip(),
                     "source": "WEB_APPROVAL"
                 })
@@ -228,6 +230,8 @@ def _convert_approval_rows_to_pos(rows: List[Dict[str, Any]]) -> List[Dict[str, 
                 "sales_rep": drafter,
                 "supplier_name": vendor,
                 "real_cust": cust,
+                "pay_terms": meta.get("pay_terms") or "",
+                "inrate": float(meta.get("inrate") or doc_fx or 0.0),
                 "remark": f"[전자결재 승인 발주] {memo}".strip(),
                 "source": "WEB_APPROVAL"
             })

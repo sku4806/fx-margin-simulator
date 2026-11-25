@@ -81,6 +81,7 @@ class ShipmentCrudInput(BaseModel):
     comm_rate: Optional[float] = 0.0         # 커미션 요율 (%)
     comm_amt: Optional[float] = 0.0          # 커미션 금액 (USD)
     awb_no: Optional[str] = ""               # 운송장 / AWB 번호
+    file_no: Optional[str] = ""              # 사내 관리번호 (FileNo)
 
 
 def _encode_shipment_status(
@@ -93,8 +94,9 @@ def _encode_shipment_status(
     comm_amt: float = 0.0,
     sales_rep: str = "",
     awb_no: str = "",
+    file_no: str = "",
 ) -> str:
-    """legacy_shipments 테이블 스키마를 보존하면서 거래처/실수요처/용도/커미션/담당자/송장 메타 저장"""
+    """legacy_shipments 테이블 스키마를 보존하면서 거래처/실수요처/용도/커미션/담당자/송장/관리번호 메타 저장"""
     clean_base = (base_status or "SHIPPED").split("||")[0].strip() or "SHIPPED"
     c = (customer or "").replace("||", " ").strip()
     rc = (real_cust or "").replace("||", " ").strip()
@@ -104,8 +106,9 @@ def _encode_shipment_status(
     ca = round(float(comm_amt or 0.0), 2)
     sr = (sales_rep or "").replace("||", " ").strip().upper()
     awb = (awb_no or "").replace("||", " ").strip()
-    if bt != "DOMESTIC" or cr > 0 or ca > 0 or sr or awb:
-        return f"{clean_base}||{c}||{rc}||{a}||{bt}||{cr}||{ca}||{sr}||{awb}"
+    fno = (file_no or "").replace("||", " ").strip()
+    if bt != "DOMESTIC" or cr > 0 or ca > 0 or sr or awb or fno:
+        return f"{clean_base}||{c}||{rc}||{a}||{bt}||{cr}||{ca}||{sr}||{awb}||{fno}"
     if c or rc or a:
         return f"{clean_base}||{c}||{rc}||{a}"
     return clean_base
@@ -142,6 +145,7 @@ def create_shipment_record(data: ShipmentCrudInput) -> Dict[str, Any]:
         comm_amt=comm_amt,
         sales_rep=data.sales_rep or "",
         awb_no=data.awb_no or "",
+        file_no=data.file_no or "",
     )
 
     payload = {
@@ -214,6 +218,7 @@ def update_shipment_record(record_id: str, data: ShipmentCrudInput) -> Dict[str,
         comm_amt=comm_amt,
         sales_rep=data.sales_rep or "",
         awb_no=data.awb_no or "",
+        file_no=data.file_no or "",
     )
 
     payload = {
@@ -637,6 +642,8 @@ class WebPoCrudInput(BaseModel):
     real_cust: Optional[str] = ""
     sales_rep: Optional[str] = ""
     remark: Optional[str] = ""
+    pay_terms: Optional[str] = ""
+    inrate: Optional[float] = 0.0
 
 
 class PoReceiveInput(BaseModel):
@@ -669,7 +676,7 @@ def create_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
 
     qty = max(1, int(data.qty or 1))
     curr = (data.currency or "USD").upper().strip()
-    fx = float(data.fx_rate or 1350.0)
+    fx = float(data.inrate or data.fx_rate or 1350.0)
     up = float(data.unit_price or 0.0)
     is_usd = curr in ("USD", "US$", "$")
     up_krw = round(up * fx) if is_usd else round(up)
@@ -677,6 +684,8 @@ def create_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
     foreign_up = up if is_usd else (round(up / fx, 4) if fx > 0 else 0.0)
     foreign_amt = round(foreign_up * qty, 4)
     eta = (data.eta_date or "").strip() or today_str
+    pay_terms = (data.pay_terms or "").strip()
+    inrate = float(data.inrate or 0.0) or fx
 
     meta = {
         "part_name": part,
@@ -685,6 +694,8 @@ def create_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
         "unit_price": up,
         "currency": "USD" if is_usd else "KRW",
         "fx_rate": fx,
+        "inrate": inrate,
+        "pay_terms": pay_terms,
         "vendor": (data.supplier_name or "").strip(),
         "customer": (data.real_cust or "").strip(),
         "memo": (data.remark or "").strip(),
@@ -694,6 +705,8 @@ def create_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
             "qty": qty,
             "unit_price": up,
             "currency": "USD" if is_usd else "KRW",
+            "inrate": inrate,
+            "pay_terms": pay_terms,
             "vendor": (data.supplier_name or "").strip(),
             "customer": (data.real_cust or "").strip(),
             "memo": (data.remark or "").strip(),
@@ -741,6 +754,8 @@ def create_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
         "sales_rep": (data.sales_rep or "ERP 담당자").strip(),
         "supplier_name": (data.supplier_name or "공급사 미지정").strip(),
         "real_cust": (data.real_cust or "").strip(),
+        "pay_terms": pay_terms,
+        "inrate": inrate,
         "remark": f"[웹 직접 발주] {(data.remark or '').strip()}".strip(),
         "source": "WEB_APPROVAL",
     }
@@ -760,7 +775,7 @@ def update_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
 
     qty = max(1, int(data.qty or 1))
     curr = (data.currency or "USD").upper().strip()
-    fx = float(data.fx_rate or 1350.0)
+    fx = float(data.inrate or data.fx_rate or 1350.0)
     up = float(data.unit_price or 0.0)
     is_usd = curr in ("USD", "US$", "$")
     up_krw = round(up * fx) if is_usd else round(up)
@@ -768,6 +783,8 @@ def update_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
     foreign_up = up if is_usd else (round(up / fx, 4) if fx > 0 else 0.0)
     foreign_amt = round(foreign_up * qty, 4)
     eta = (data.eta_date or "").strip() or datetime.date.today().isoformat()
+    pay_terms = (data.pay_terms or "").strip()
+    inrate = float(data.inrate or 0.0) or fx
 
     meta = {
         "part_name": (data.part_no or "").strip(),
@@ -776,6 +793,8 @@ def update_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
         "unit_price": up,
         "currency": "USD" if is_usd else "KRW",
         "fx_rate": fx,
+        "inrate": inrate,
+        "pay_terms": pay_terms,
         "vendor": (data.supplier_name or "").strip(),
         "customer": (data.real_cust or "").strip(),
         "memo": (data.remark or "").strip(),
@@ -785,6 +804,8 @@ def update_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
             "qty": qty,
             "unit_price": up,
             "currency": "USD" if is_usd else "KRW",
+            "inrate": inrate,
+            "pay_terms": pay_terms,
             "vendor": (data.supplier_name or "").strip(),
             "customer": (data.real_cust or "").strip(),
             "memo": (data.remark or "").strip(),
@@ -828,6 +849,8 @@ def update_direct_web_po(data: WebPoCrudInput) -> Dict[str, Any]:
                     "sales_rep": (data.sales_rep or o.get("sales_rep") or "").strip(),
                     "supplier_name": (data.supplier_name or "").strip(),
                     "real_cust": (data.real_cust or "").strip(),
+                    "pay_terms": pay_terms,
+                    "inrate": inrate,
                     "remark": (data.remark or "").strip(),
                 })
                 updated = True
@@ -936,7 +959,9 @@ class SampleTrackingCrudInput(BaseModel):
     chipset_vendor: Optional[str] = ""
     chipset_partno: Optional[str] = ""
     competitor: Optional[str] = ""
+    comp_price: Optional[float] = 0.0
     sample_qty: Optional[int] = 0
+    quote_qty: Optional[int] = 0
     sample_date: Optional[str] = ""
     sample_result: Optional[int] = 4   # 1:Design Win, 2:Design Fail, 3:Pending, 4:Working
     business_result: Optional[int] = 3 # 1:Taking P.O, 2:Fail, 3:Waiting
@@ -2077,7 +2102,9 @@ def register_crud_routes(app):
                             "chipset_vendor": d.get("chipset_vendor") or "",
                             "chipset_partno": d.get("chipset_partno") or "",
                             "competitor": d.get("competitor") or "",
+                            "comp_price": float(d.get("comp_price") or 0.0),
                             "sample_qty": int(d.get("sample_qty") or 0),
+                            "quote_qty": int(d.get("quote_qty") or 0),
                             "sample_date": d.get("sample_date") or (row.get("created_at") or "")[:10],
                             "sample_result": sr,
                             "sample_result_label": sr_map.get(sr, "Working"),

@@ -18,6 +18,8 @@ let cachedRequests = [];
 let cachedIncomes = [];
 let cachedOutflows = [];
 let editingTrackingId = null;
+let trackingPage = 1;
+const TRACKING_PAGE_SIZE = 50;
 
 function escSm(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -178,8 +180,18 @@ export function renderSamplesView(containerId = 'samplesSection') {
             <input type="text" id="smEditChipset" placeholder="예: Silicon Labs EFR32BG22" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg outline-none focus:border-teal-600">
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">경쟁사 (Competitor)</label>
-            <input type="text" id="smEditCompetitor" placeholder="예: STM, Macronix, TI" class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg outline-none focus:border-teal-600">
+            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">경쟁사 / 단가 ($, USD)</label>
+            <div class="grid grid-cols-3 gap-1">
+              <input type="text" id="smEditCompetitor" placeholder="STM, TI..." class="col-span-2 px-2 py-1.5 bg-white border border-slate-300 rounded-lg outline-none focus:border-teal-600">
+              <input type="number" step="0.0001" id="smEditCompPrice" placeholder="$단가" class="px-1.5 py-1.5 bg-white border border-slate-300 rounded-lg font-mono outline-none focus:border-teal-600">
+            </div>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">견적수량(EA) / 진행일</label>
+            <div class="grid grid-cols-2 gap-1">
+              <input type="number" id="smEditQuoteQty" placeholder="견적수량" class="px-2 py-1.5 bg-white border border-slate-300 rounded-lg font-mono outline-none focus:border-teal-600">
+              <input type="date" id="smEditSampleDate" class="px-1.5 py-1.5 bg-white border border-slate-300 rounded-lg text-[11px] font-mono outline-none focus:border-teal-600">
+            </div>
           </div>
           <div>
             <label class="block text-[10px] font-bold text-slate-600 mb-0.5">PP 일정 / MP 양산 일정</label>
@@ -344,9 +356,16 @@ function renderTrackingSubTab() {
     return `${chipsHtml}<div class="py-12 text-center text-slate-400 text-xs font-bold">조건에 일치하는 Design-In 프로젝트 트래킹 내역이 없습니다.</div>`;
   }
 
-  const mobileCards = `
+  const totalPages = Math.max(1, Math.ceil(cachedTracking.length / TRACKING_PAGE_SIZE));
+  if (trackingPage > totalPages) trackingPage = 1;
+  const startIdx = (trackingPage - 1) * TRACKING_PAGE_SIZE;
+  const pageItems = cachedTracking.slice(startIdx, startIdx + TRACKING_PAGE_SIZE);
+  const isMobile = window.innerWidth < 768;
+
+  const mobileCards = isMobile ? `
     <div class="block md:hidden space-y-2.5 max-h-[65vh] overflow-y-auto">
-      ${cachedTracking.map((t, idx) => {
+      ${pageItems.map((t, i) => {
+        const idx = startIdx + i;
         const { srHtml, brHtml } = getResultBadges(t);
         const isCloud = t.source === 'CLOUD';
         return `
@@ -390,9 +409,9 @@ function renderTrackingSubTab() {
         `;
       }).join('')}
     </div>
-  `;
+  ` : '';
 
-  const desktopTable = `
+  const desktopTable = !isMobile ? `
     <div class="hidden md:block overflow-x-auto max-h-[65vh] overflow-y-auto border border-slate-200 rounded-xl">
       <table class="w-full text-left text-xs border-collapse">
         <thead class="bg-slate-800 text-white sticky top-0 z-10 text-[11px] font-bold">
@@ -411,7 +430,8 @@ function renderTrackingSubTab() {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 bg-white text-[11px]">
-          ${cachedTracking.map((t, idx) => {
+          ${pageItems.map((t, i) => {
+            const idx = startIdx + i;
             const { srHtml, brHtml } = getResultBadges(t);
             const isCloud = t.source === 'CLOUD';
             return `
@@ -462,9 +482,20 @@ function renderTrackingSubTab() {
         </tbody>
       </table>
     </div>
-  `;
+  ` : '';
 
-  return `${chipsHtml}${mobileCards}${desktopTable}`;
+  const paginationHtml = totalPages > 1 ? `
+    <div class="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-slate-600">
+      <div>총 <strong class="text-teal-700">${cachedTracking.length.toLocaleString()}건</strong> 중 ${startIdx + 1} ~ ${Math.min(startIdx + TRACKING_PAGE_SIZE, cachedTracking.length)}건 표시</div>
+      <div class="flex items-center gap-1">
+        <button type="button" onclick="window.setSampleTrackingPage(${trackingPage - 1})" ${trackingPage <= 1 ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-slate-300 bg-white hover:bg-slate-100 font-bold disabled:opacity-40 cursor-pointer">이전</button>
+        <span class="px-2 font-mono font-bold">${trackingPage} / ${totalPages}</span>
+        <button type="button" onclick="window.setSampleTrackingPage(${trackingPage + 1})" ${trackingPage >= totalPages ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-slate-300 bg-white hover:bg-slate-100 font-bold disabled:opacity-40 cursor-pointer">다음</button>
+      </div>
+    </div>
+  ` : '';
+
+  return `${chipsHtml}${mobileCards}${desktopTable}${paginationHtml}`;
 }
 
 function renderStockSubTab() {
@@ -789,9 +820,12 @@ function openSampleTrackingEditor(item = null) {
   setV('smEditApp', item?.app);
   setV('smEditModel', item?.prj_model);
   setV('smEditVolume', item?.volume || '');
+  setV('smEditQuoteQty', item?.quote_qty || '');
   setV('smEditSampleQty', item?.sample_qty || '');
+  setV('smEditSampleDate', (item?.sample_date || new Date().toISOString().slice(0, 10)).slice(0, 10));
   setV('smEditChipset', [item?.chipset_vendor, item?.chipset_partno].filter(Boolean).join(' '));
   setV('smEditCompetitor', item?.competitor);
+  setV('smEditCompPrice', item?.comp_price || '');
   setV('smEditPpDate', item?.pp_date);
   setV('smEditMpDate', item?.mp_date);
   setV('smEditSampleResult', String(item?.sample_result || 4));
@@ -819,10 +853,13 @@ async function saveSampleTrackingForm(containerId = 'samplesSection') {
     app: document.getElementById('smEditApp')?.value.trim() || '',
     prj_model: document.getElementById('smEditModel')?.value.trim() || '',
     volume: parseInt(document.getElementById('smEditVolume')?.value || '0', 10) || 0,
+    quote_qty: parseInt(document.getElementById('smEditQuoteQty')?.value || '0', 10) || 0,
     sample_qty: parseInt(document.getElementById('smEditSampleQty')?.value || '0', 10) || 0,
+    sample_date: document.getElementById('smEditSampleDate')?.value || new Date().toISOString().slice(0, 10),
     chipset_vendor: chipsetRaw,
     chipset_partno: '',
     competitor: document.getElementById('smEditCompetitor')?.value.trim() || '',
+    comp_price: parseFloat(document.getElementById('smEditCompPrice')?.value || '0') || 0,
     pp_date: document.getElementById('smEditPpDate')?.value || '',
     mp_date: document.getElementById('smEditMpDate')?.value || '',
     sample_result: parseInt(document.getElementById('smEditSampleResult')?.value || '4', 10),
@@ -849,6 +886,11 @@ async function saveSampleTrackingForm(containerId = 'samplesSection') {
     alert('프로젝트 저장 오류: ' + err.message);
   }
 }
+
+window.setSampleTrackingPage = function(p) {
+  trackingPage = Math.max(1, p);
+  renderSamplesView('samplesSection');
+};
 
 window.editSampleTrackingByIdx = function(idx) {
   if (cachedTracking[idx]) openSampleTrackingEditor(cachedTracking[idx]);

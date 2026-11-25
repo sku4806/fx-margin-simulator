@@ -226,8 +226,8 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
               <th class="py-2.5 px-2 text-center w-10">#</th>
               <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">상태</th>
               <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">발주일자</th>
-              <th class="py-2.5 px-3 text-left min-w-[130px]">발주번호 (PO NO)</th>
-              <th class="py-2.5 px-3 text-left min-w-[200px]">품번 (Part#)</th>
+              <th class="py-2.5 px-3 text-left min-w-[115px]">발주번호 (PO NO)</th>
+              <th class="py-2.5 px-3 text-left min-w-[170px]">품번 (Part#)</th>
               <th class="py-2.5 px-2.5 text-left min-w-[80px]">제조사</th>
               <th class="py-2.5 px-2.5 text-right whitespace-nowrap w-20">수량</th>
               <th class="py-2.5 px-2.5 text-right whitespace-nowrap min-w-[85px]">발주단가</th>
@@ -298,8 +298,8 @@ async function switchPoMainTab(tab) {
               <th class="py-2.5 px-2 text-center w-10">#</th>
               <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">상태</th>
               <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">발주일자</th>
-              <th class="py-2.5 px-3 text-left min-w-[130px]">발주번호 (PO NO)</th>
-              <th class="py-2.5 px-3 text-left min-w-[200px]">품번 (Part#)</th>
+              <th class="py-2.5 px-3 text-left min-w-[115px]">발주번호 (PO NO)</th>
+              <th class="py-2.5 px-3 text-left min-w-[170px]">품번 (Part#)</th>
               <th class="py-2.5 px-2.5 text-left min-w-[80px]">제조사</th>
               <th class="py-2.5 px-2.5 text-right whitespace-nowrap w-20">수량</th>
               <th class="py-2.5 px-2.5 text-right whitespace-nowrap min-w-[85px]">발주단가</th>
@@ -596,7 +596,7 @@ function renderPoTable(orders) {
     if (tbody) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="15" class="py-16 text-center text-slate-400">
+          <td colspan="16" class="py-16 text-center text-slate-400">
             <div class="text-3xl mb-2">🔍</div>
             <div class="font-bold text-sm text-slate-600">조건에 일치하는 발주 내역이 없습니다.</div>
             <div class="text-xs text-slate-400 mt-1">검색어나 상태 필터를 변경해 보세요.</div>
@@ -624,7 +624,91 @@ function renderPoTable(orders) {
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const canEdit = (typeof window.isCsOrAdminUser === 'function') ? window.isCsOrAdminUser() : false;
-  const mobileCardsHtml = [];
+  const isMobile = window.innerWidth < 768;
+
+  if (isMobile) {
+    if (tbody) tbody.innerHTML = '';
+    if (mobileWrap) {
+      mobileWrap.innerHTML = pageItems.map((o, idx) => {
+        const isWebApproval = o.source === 'WEB_APPROVAL';
+        const isPending = o.status === 'PO';
+        const isArrived = o.status === 'IN';
+        let statusBadge = isWebApproval && isArrived
+          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center justify-center gap-1">✅ 입고완료(웹)</span>`
+          : isWebApproval
+            ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-900 border border-indigo-400 shadow-xs inline-flex items-center justify-center gap-1"><span>📑</span> 전자결재 승인</span>`
+            : isPending
+              ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300 inline-flex items-center justify-center gap-1">🚢 입고대기</span>`
+              : isArrived
+                ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center justify-center gap-1">✅ 입고완료</span>`
+                : `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center justify-center gap-1">취소</span>`;
+        let etaDisplay = o.eta_date || '-';
+        if (isPending && o.eta_date && /^\d{4}-\d{2}-\d{2}$/.test(o.eta_date)) {
+          const diffDays = Math.ceil((new Date(o.eta_date) - new Date(todayStr)) / (1000 * 60 * 60 * 24));
+          if (diffDays === 0) etaDisplay = `<span class="text-rose-600 font-bold">${o.eta_date} (오늘 입고)</span>`;
+          else if (diffDays > 0) etaDisplay = `<span class="text-blue-700 font-bold">${o.eta_date} (D-${diffDays})</span>`;
+          else etaDisplay = `<span class="text-red-700 font-bold">${o.eta_date} (+${Math.abs(diffDays)}일 지연)</span>`;
+        }
+        const curr = o.currency || 'KRW';
+        const isForeign = curr.includes('$') || curr.includes('US') || o.foreign_up > 0;
+        const upStr = isForeign ? `$${(o.foreign_up || o.unit_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : `₩${Math.round(o.unit_price).toLocaleString()}`;
+        const amtStr = isForeign ? `$${(o.foreign_amount || o.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `₩${Math.round(o.amount).toLocaleString()}`;
+        return `
+          <div class="bg-white rounded-xl border ${isWebApproval ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-slate-200'} p-3 shadow-2xs space-y-2 text-xs">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  ${statusBadge}
+                  <span class="font-mono text-[10px] text-slate-400">${o.po_dt || '-'}</span>
+                </div>
+                <div class="font-black text-sm text-slate-900 font-mono mt-1 break-all">${o.part_no || '-'}</div>
+                <div class="text-[11px] text-slate-500 font-semibold">${o.maker || '-'} · PO: <span class="font-mono text-slate-700">${o.po_no || '-'}</span></div>
+              </div>
+              <div class="text-right shrink-0">
+                <div class="font-black text-sm text-blue-700 font-mono">${amtStr}</div>
+                <div class="text-[10px] text-slate-500 font-mono">${Number(o.qty || 0).toLocaleString()} EA · ${upStr}</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px]">
+              <div><span class="text-[9px] text-slate-400 block font-semibold">입고예정 (ETA)</span><div class="font-mono">${etaDisplay}</div></div>
+              <div><span class="text-[9px] text-slate-400 block font-semibold">담당 영업</span><div class="font-bold text-slate-800">${o.sales_rep || '-'}</div></div>
+              <div><span class="text-[9px] text-slate-400 block font-semibold">매입처 (공급사)</span><div class="truncate text-slate-700">${o.supplier_name || '-'}</div></div>
+              <div><span class="text-[9px] text-slate-400 block font-semibold">실수요처</span><div class="truncate font-bold text-indigo-900">${o.real_cust || o.end_cust || '-'}</div></div>
+              <div><span class="text-[9px] text-slate-400 block font-semibold">결제조건</span><div class="truncate text-slate-700">${o.pay_terms || '-'}</div></div>
+              <div><span class="text-[9px] text-slate-400 block font-semibold">적용환율</span><div class="font-mono text-slate-700">${Number(o.inrate) > 0 ? `₩${Number(o.inrate).toLocaleString()}` : '-'}</div></div>
+              ${o.remark ? `<div class="col-span-2 text-[10px] text-slate-500 truncate">💬 ${o.remark}</div>` : ''}
+            </div>
+            <div class="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
+              <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${(o.part_no || '').replace(/'/g, "\\'")}')" 
+                      class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 font-bold text-[11px] cursor-pointer">
+                📈 단가이력
+              </button>
+              <div class="flex items-center gap-1">
+                ${(isPending && canEdit) ? `
+                  <button type="button" onclick="window.receivePoByIdx && window.receivePoByIdx(${idx})"
+                          class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] cursor-pointer">
+                    📦 입고완료
+                  </button>
+                ` : ''}
+                ${(isWebApproval && canEdit) ? `
+                  <button type="button" onclick="window.editWebPoByIdx && window.editWebPoByIdx(${idx})"
+                          class="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg font-bold text-[11px] cursor-pointer">✏️</button>
+                  <button type="button" onclick="window.deleteWebPurchaseOrder && window.deleteWebPurchaseOrder('${o.po_no}', '${(o.part_no || '').replace(/'/g, "\\'")}')"
+                          class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-300 rounded-lg font-bold text-[11px] cursor-pointer">✕</button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+    const scrollWrap = document.getElementById('poListScrollWrap');
+    if (scrollWrap) scrollWrap.scrollTop = 0;
+    renderPoPagination(orders.length, totalPages);
+    return;
+  }
+
+  if (mobileWrap) mobileWrap.innerHTML = '';
 
   tbody.innerHTML = pageItems.map((o, idx) => {
     const rowNo = startIdx + idx + 1;
@@ -668,56 +752,6 @@ function renderPoTable(orders) {
     const amtStr = isForeign
       ? `$${(o.foreign_amount || o.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : `₩${Math.round(o.amount).toLocaleString()}`;
-
-    // 모바일 카드 HTML 축적
-    mobileCardsHtml.push(`
-      <div class="bg-white rounded-xl border ${isWebApproval ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-slate-200'} p-3 shadow-2xs space-y-2 text-xs">
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1.5 flex-wrap">
-              <span class="text-[10px] font-mono text-slate-400">#${rowNo}</span>
-              ${statusBadge}
-              <span class="text-[10px] font-mono text-slate-500">${o.po_dt || '-'}</span>
-            </div>
-            <div class="font-black text-sm text-slate-900 font-mono mt-1 break-all">${o.part_no || '-'}</div>
-            <div class="text-[11px] text-slate-500 font-semibold">${o.maker || '-'} · PO: <span class="font-mono text-slate-700">${o.po_no || '-'}</span></div>
-          </div>
-          <div class="text-right shrink-0">
-            <div class="font-black text-sm text-blue-700 font-mono">${amtStr}</div>
-            <div class="text-[10px] text-slate-500 font-mono">${Number(o.qty || 0).toLocaleString()} EA · ${upStr}</div>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px]">
-          <div><span class="text-[9px] text-slate-400 block font-semibold">입고예정 (ETA)</span><div class="font-mono">${etaDisplay}</div></div>
-          <div><span class="text-[9px] text-slate-400 block font-semibold">담당 영업</span><div class="font-bold text-slate-800">${o.sales_rep || '-'}</div></div>
-          <div><span class="text-[9px] text-slate-400 block font-semibold">매입처 (공급사)</span><div class="truncate text-slate-700">${o.supplier_name || '-'}</div></div>
-          <div><span class="text-[9px] text-slate-400 block font-semibold">실수요처</span><div class="truncate font-bold text-indigo-900">${o.real_cust || o.end_cust || '-'}</div></div>
-          <div><span class="text-[9px] text-slate-400 block font-semibold">결제조건</span><div class="truncate text-slate-700">${o.pay_terms || '-'}</div></div>
-          <div><span class="text-[9px] text-slate-400 block font-semibold">적용환율</span><div class="font-mono text-slate-700">${Number(o.inrate) > 0 ? `₩${Number(o.inrate).toLocaleString()}` : '-'}</div></div>
-          ${o.remark ? `<div class="col-span-2 text-[10px] text-slate-500 truncate">💬 ${o.remark}</div>` : ''}
-        </div>
-        <div class="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
-          <button type="button" onclick="window.openPriceHistoryModal && window.openPriceHistoryModal('${(o.part_no || '').replace(/'/g, "\\'")}')" 
-                  class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 font-bold text-[11px] cursor-pointer">
-            📈 단가이력
-          </button>
-          <div class="flex items-center gap-1">
-            ${(isPending && canEdit) ? `
-              <button type="button" onclick="window.receivePoByIdx && window.receivePoByIdx(${idx})"
-                      class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] cursor-pointer">
-                📦 입고완료
-              </button>
-            ` : ''}
-            ${(isWebApproval && canEdit) ? `
-              <button type="button" onclick="window.editWebPoByIdx && window.editWebPoByIdx(${idx})"
-                      class="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg font-bold text-[11px] cursor-pointer">✏️</button>
-              <button type="button" onclick="window.deleteWebPurchaseOrder && window.deleteWebPurchaseOrder('${o.po_no}', '${(o.part_no || '').replace(/'/g, "\\'")}')"
-                      class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-300 rounded-lg font-bold text-[11px] cursor-pointer">✕</button>
-            ` : ''}
-          </div>
-        </div>
-      </div>
-    `);
 
     return `
       <tr class="hover:bg-blue-50/60 transition-colors border-b border-slate-200 text-[11px] ${isWebApproval ? 'bg-indigo-50/40 border-l-4 border-l-indigo-600' : (isPending ? 'bg-blue-50/20' : '')}">
@@ -790,9 +824,6 @@ function renderPoTable(orders) {
     `;
   }).join('');
 
-  if (mobileWrap) {
-    mobileWrap.innerHTML = mobileCardsHtml.join('');
-  }
   const scrollWrap = document.getElementById('poListScrollWrap');
   if (scrollWrap) scrollWrap.scrollTop = 0;
 
@@ -1074,6 +1105,14 @@ window.openDirectPoCrudModal = function(poItem = null) {
           <input type="text" id="poCrudSales" value="${esc(poItem?.sales_rep)}" placeholder="예: WILLIAM, ERIC" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
         </div>
         <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">결제조건 (PAY TERMS)</label>
+          <input type="text" id="poCrudPayTerms" value="${esc(poItem?.pay_terms)}" placeholder="예: 당월말 결제(VAT 별도), T/T" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">적용환율 (INRATE, ₩)</label>
+          <input type="number" step="0.1" id="poCrudInrate" value="${Number(poItem?.inrate || (typeof window.getLiveFxRate === 'function' && window.getLiveFxRate() > 0 ? window.getLiveFxRate() : 1350))}" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono outline-none focus:border-blue-500">
+        </div>
+        <div>
           <label class="block text-[11px] font-bold text-slate-600 mb-1">비고 (REMARK)</label>
           <input type="text" id="poCrudRemark" value="${esc(poItem?.remark)}" placeholder="특이사항 / 납기 메모" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
         </div>
@@ -1094,6 +1133,7 @@ async function saveDirectPoCrudForm() {
   if (!part_no) return alert('품번(PART NO)을 입력해 주세요.');
 
   const liveFx = (typeof window.getLiveFxRate === 'function' && window.getLiveFxRate() > 0) ? window.getLiveFxRate() : 1350;
+  const inrateVal = parseFloat(document.getElementById('poCrudInrate')?.value || '0') || liveFx;
   const payload = {
     po_no: document.getElementById('poCrudNo')?.value.trim() || '',
     part_no,
@@ -1101,7 +1141,9 @@ async function saveDirectPoCrudForm() {
     qty: parseInt(document.getElementById('poCrudQty')?.value || '1', 10) || 1,
     unit_price: parseFloat(document.getElementById('poCrudPrice')?.value || '0') || 0,
     currency: document.getElementById('poCrudCurr')?.value || 'USD',
-    fx_rate: liveFx,
+    fx_rate: inrateVal,
+    inrate: inrateVal,
+    pay_terms: document.getElementById('poCrudPayTerms')?.value.trim() || '',
     eta_date: document.getElementById('poCrudEta')?.value || new Date().toISOString().slice(0, 10),
     supplier_name: document.getElementById('poCrudSupplier')?.value.trim() || '',
     real_cust: document.getElementById('poCrudCust')?.value.trim() || '',
