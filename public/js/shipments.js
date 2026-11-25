@@ -250,7 +250,7 @@ function getMergedLedgerShipments() {
     if (currentCommStatus === 'UNPAID' && !(item.biz_type === 'COMMISSION' && item.comm_status === '미입금')) return false;
     if (currentCommStatus === 'PAID' && !(item.biz_type === 'COMMISSION' && item.comm_status !== '미입금')) return false;
     if (q) {
-      const hay = `${item.part_no || ''} ${item.customer || ''} ${item.real_cust || ''} ${item.po_no || ''} ${item.app || ''} ${item.maker || ''} ${item.sales_rep || ''}`.toLowerCase();
+      const hay = `${item.part_no || ''} ${item.customer || ''} ${item.real_cust || ''} ${item.po_no || ''} ${item.file_no || ''} ${item.app || ''} ${item.maker || ''} ${item.sales_rep || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -497,7 +497,7 @@ export function renderShipmentsView(containerId = "shipmentsSection") {
               <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">구분</th>
               <th class="py-2.5 px-2 text-left min-w-[115px]">CUSTOMER</th>
               <th class="py-2.5 px-2 text-left min-w-[100px]">REALCUST</th>
-              <th class="py-2.5 px-2 text-left min-w-[115px]">PONO</th>
+              <th class="py-2.5 px-2 text-left min-w-[115px]">PONO / 관리번호</th>
               <th class="py-2.5 px-2 text-left min-w-[150px]">PARTNO</th>
               <th class="py-2.5 px-2 text-center whitespace-nowrap w-22">SHIP_DATE</th>
               <th class="py-2.5 px-2 text-right whitespace-nowrap w-20">SHIP_QTY</th>
@@ -873,6 +873,7 @@ function bindShipmentToolbarEvents() {
         (item.customer && item.customer.toLowerCase().includes(q)) ||
         (item.real_cust && item.real_cust.toLowerCase().includes(q)) ||
         (item.po_no && item.po_no.toLowerCase().includes(q)) ||
+        (item.file_no && item.file_no.toLowerCase().includes(q)) ||
         (item.app && item.app.toLowerCase().includes(q)) ||
         (item.maker && item.maker.toLowerCase().includes(q))
       );
@@ -1052,9 +1053,10 @@ function generateTableRows(items) {
           ${item.real_cust ? `<span class="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">${item.real_cust}</span>` : '-'}
         </td>
 
-        <!-- PONO -->
-        <td class="py-2 px-2 font-mono text-slate-600 text-[10px] truncate max-w-[140px]" title="${item.po_no || '-'}">
-          ${item.po_no || '-'}
+        <!-- PONO / FILE_NO -->
+        <td class="py-2 px-2 font-mono text-slate-600 text-[10px] max-w-[140px]">
+          <div class="truncate" title="${item.po_no || '-'}">${item.po_no || '-'}</div>
+          ${item.file_no ? `<div class="text-[9px] text-slate-400 truncate" title="관리번호: ${item.file_no}">📁 ${item.file_no}</div>` : ''}
         </td>
 
         <!-- PARTNO + [이력] 버튼 -->
@@ -1181,8 +1183,8 @@ function generateShipmentMobileCards(items) {
             <span class="text-[10px] text-blue-700 font-mono font-bold">$${(Number(item.net_up) || 0).toFixed(4)}</span>
           </div>
           <div>
-            <span class="text-[9px] text-slate-400 block font-semibold">발주번호 / 용도</span>
-            <div class="font-bold text-slate-800 text-[10px] font-mono truncate" title="${item.po_no || '-'}">${item.po_no || '-'}</div>
+            <span class="text-[9px] text-slate-400 block font-semibold">발주·관리번호 / 용도</span>
+            <div class="font-bold text-slate-800 text-[10px] font-mono truncate" title="${item.po_no || '-'}">${item.po_no || '-'}${item.file_no ? ` <span class="text-slate-400 font-normal">(${item.file_no})</span>` : ''}</div>
             <div class="text-[9px] text-amber-800 font-bold truncate">${item.app || '-'}</div>
           </div>
         </div>

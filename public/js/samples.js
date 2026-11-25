@@ -365,9 +365,19 @@ function renderTrackingSubTab() {
             </div>
             <div class="grid grid-cols-2 gap-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px]">
               <div><span class="text-[9px] text-slate-400 block">어플리케이션 / 모델</span><span class="font-bold text-slate-800">${escSm([t.app, t.prj_model].filter(Boolean).join(' · ') || '-')}</span></div>
-              <div><span class="text-[9px] text-slate-400 block">예상물량 / 샘플수량</span><span class="font-mono font-black text-emerald-700">${(t.volume || 0).toLocaleString()} EA</span> <span class="text-[10px] text-slate-500">(샘플 ${t.sample_qty || 0})</span></div>
-              <div><span class="text-[9px] text-slate-400 block">메인 칩셋 / 경쟁사</span><span class="text-slate-700">${escSm([t.chipset_vendor, t.chipset_partno].filter(Boolean).join(' ') || '-')} / ${escSm(t.competitor || '-')}</span></div>
-              <div><span class="text-[9px] text-slate-400 block">PP / MP 양산일정</span><span class="font-mono text-slate-700">${escSm(t.pp_date || '-')} ~ ${escSm(t.mp_date || '-')}</span></div>
+              <div>
+                <span class="text-[9px] text-slate-400 block">예상물량 / 견적·샘플</span>
+                <span class="font-mono font-black text-emerald-700">${(t.volume || 0).toLocaleString()} EA</span>
+                <span class="text-[10px] text-slate-500">(${Number(t.quote_qty) > 0 ? `견적 ${Number(t.quote_qty).toLocaleString()} · ` : ''}샘플 ${t.sample_qty || 0})</span>
+              </div>
+              <div>
+                <span class="text-[9px] text-slate-400 block">메인 칩셋 / 경쟁사(단가)</span>
+                <span class="text-slate-700">${escSm([t.chipset_vendor, t.chipset_partno].filter(Boolean).join(' ') || '-')} / ${escSm(t.competitor || '-')}${Number(t.comp_price) > 0 ? ` <strong class="font-mono text-rose-700">($${Number(t.comp_price).toFixed(4)})</strong>` : ''}</span>
+              </div>
+              <div>
+                <span class="text-[9px] text-slate-400 block">진행일 / PP~MP 양산일정</span>
+                <span class="font-mono text-slate-700">${t.sample_date ? `<span class="text-slate-500">${escSm(t.sample_date.slice(0, 10))}</span> · ` : ''}${escSm(t.pp_date || '-')} ~ ${escSm(t.mp_date || '-')}</span>
+              </div>
             </div>
             ${t.remark ? `<div class="text-[11px] text-slate-600 bg-amber-50/60 px-2.5 py-1.5 rounded border border-amber-200/70">💬 ${escSm(t.remark)}</div>` : ''}
             ${isCloud ? `
@@ -393,9 +403,9 @@ function renderTrackingSubTab() {
             <th class="py-2.5 px-2.5 text-left min-w-[140px]">고객사명</th>
             <th class="py-2.5 px-2.5 text-left min-w-[165px]">품번 (Part#) / 제조사</th>
             <th class="py-2.5 px-2.5 text-left min-w-[150px]">어플리케이션 / 모델</th>
-            <th class="py-2.5 px-2.5 text-right w-24">예상물량(EA)</th>
-            <th class="py-2.5 px-2.5 text-left min-w-[130px]">칩셋 / 경쟁사</th>
-            <th class="py-2.5 px-2 text-center w-24">PP / MP 일정</th>
+            <th class="py-2.5 px-2.5 text-right w-28">예상 / 견적물량</th>
+            <th class="py-2.5 px-2.5 text-left min-w-[140px]">칩셋 / 경쟁사(단가)</th>
+            <th class="py-2.5 px-2 text-center w-28">진행 / PP·MP</th>
             <th class="py-2.5 px-2 text-center w-16">담당</th>
             <th class="py-2.5 px-2.5 text-left min-w-[160px]">진행 비고 (Remark)</th>
           </tr>
@@ -421,12 +431,18 @@ function renderTrackingSubTab() {
                   <div class="font-bold text-slate-800 truncate max-w-[160px]" title="${escSm(t.app)}">${escSm(t.app || '-')}</div>
                   ${t.prj_model && t.prj_model !== 'NA' ? `<div class="text-[10px] text-teal-700 font-semibold truncate max-w-[160px]">모델: ${escSm(t.prj_model)}</div>` : ''}
                 </td>
-                <td class="py-2 px-2.5 text-right font-mono font-black text-emerald-700 whitespace-nowrap">${(t.volume || 0).toLocaleString()}</td>
+                <td class="py-2 px-2.5 text-right font-mono whitespace-nowrap">
+                  <div class="font-black text-emerald-700">${(t.volume || 0).toLocaleString()}</div>
+                  ${Number(t.quote_qty) > 0 ? `<div class="text-[9px] text-slate-500">견적: ${Number(t.quote_qty).toLocaleString()}</div>` : ''}
+                </td>
                 <td class="py-2 px-2.5 text-[10px]">
-                  <div class="font-semibold text-slate-700 truncate max-w-[140px]">칩셋: ${escSm([t.chipset_vendor, t.chipset_partno].filter(x => x && x !== 'NA').join(' ') || '-')}</div>
-                  <div class="text-slate-500 truncate max-w-[140px]">경쟁: ${escSm(t.competitor || '-')}</div>
+                  <div class="font-semibold text-slate-700 truncate max-w-[145px]">칩셋: ${escSm([t.chipset_vendor, t.chipset_partno].filter(x => x && x !== 'NA').join(' ') || '-')}</div>
+                  <div class="text-slate-500 truncate max-w-[145px]">
+                    경쟁: ${escSm(t.competitor || '-')}${Number(t.comp_price) > 0 ? ` <span class="font-mono font-bold text-rose-700">($${Number(t.comp_price).toFixed(4)})</span>` : ''}
+                  </div>
                 </td>
                 <td class="py-2 px-2 text-center font-mono text-[10px] text-slate-600 whitespace-nowrap">
+                  ${t.sample_date ? `<div class="text-[9px] text-slate-400">진행: ${escSm(t.sample_date.slice(0, 10))}</div>` : ''}
                   <div>PP: ${escSm((t.pp_date || '-').slice(0, 7))}</div>
                   <div class="font-bold text-indigo-900">MP: ${escSm((t.mp_date || '-').slice(0, 7))}</div>
                 </td>

@@ -234,6 +234,7 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
               <th class="py-2.5 px-2.5 text-right whitespace-nowrap min-w-[95px]">발주금액</th>
               <th class="py-2.5 px-2.5 text-center whitespace-nowrap w-24">입고예정(CRD/ETA)</th>
               <th class="py-2.5 px-3 text-left min-w-[120px]">매입처(공급사)</th>
+              <th class="py-2.5 px-2.5 text-left min-w-[115px]">결제조건 / 환율</th>
               <th class="py-2.5 px-3 text-left min-w-[110px]">실수요처(납품처)</th>
               <th class="py-2.5 px-2 text-center whitespace-nowrap w-16">영업담당</th>
               <th class="py-2.5 px-3 text-left min-w-[120px]">비고</th>
@@ -242,7 +243,7 @@ export async function openPurchaseOrdersModal(initialStatus = 'PO') {
           </thead>
           <tbody id="poTableBody" class="divide-y divide-slate-200">
             <tr>
-              <td colspan="15" class="py-12 text-center text-slate-400">데이터를 불러오는 중입니다...</td>
+              <td colspan="16" class="py-12 text-center text-slate-400">데이터를 불러오는 중입니다...</td>
             </tr>
           </tbody>
         </table>
@@ -691,6 +692,8 @@ function renderPoTable(orders) {
           <div><span class="text-[9px] text-slate-400 block font-semibold">담당 영업</span><div class="font-bold text-slate-800">${o.sales_rep || '-'}</div></div>
           <div><span class="text-[9px] text-slate-400 block font-semibold">매입처 (공급사)</span><div class="truncate text-slate-700">${o.supplier_name || '-'}</div></div>
           <div><span class="text-[9px] text-slate-400 block font-semibold">실수요처</span><div class="truncate font-bold text-indigo-900">${o.real_cust || o.end_cust || '-'}</div></div>
+          <div><span class="text-[9px] text-slate-400 block font-semibold">결제조건</span><div class="truncate text-slate-700">${o.pay_terms || '-'}</div></div>
+          <div><span class="text-[9px] text-slate-400 block font-semibold">적용환율</span><div class="font-mono text-slate-700">${Number(o.inrate) > 0 ? `₩${Number(o.inrate).toLocaleString()}` : '-'}</div></div>
           ${o.remark ? `<div class="col-span-2 text-[10px] text-slate-500 truncate">💬 ${o.remark}</div>` : ''}
         </div>
         <div class="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
@@ -750,6 +753,10 @@ function renderPoTable(orders) {
         <td class="py-2 px-2.5 text-right font-mono font-bold text-blue-700 whitespace-nowrap">${amtStr}</td>
         <td class="py-2 px-2.5 text-center font-mono whitespace-nowrap">${etaDisplay}</td>
         <td class="py-2 px-3 text-slate-800 font-medium truncate max-w-[130px]" title="${o.supplier_name}">${o.supplier_name || '-'}</td>
+        <td class="py-2 px-2.5 text-[10px]">
+          <div class="text-slate-700 font-medium truncate max-w-[130px]" title="${o.pay_terms || '-'}">${o.pay_terms || '-'}</div>
+          ${Number(o.inrate) > 0 ? `<div class="font-mono text-slate-500 text-[9px]">환율: ₩${Number(o.inrate).toLocaleString()}</div>` : ''}
+        </td>
         <td class="py-2 px-3 text-indigo-900 font-bold truncate max-w-[120px]" title="${o.real_cust || o.end_cust}">${o.real_cust || o.end_cust || '-'}</td>
         <td class="py-2 px-2 text-center font-bold text-slate-700 whitespace-nowrap">${o.sales_rep || '-'}</td>
         <td class="py-2 px-3 text-slate-500 truncate max-w-[140px]" title="${o.remark}">${o.remark || '-'}</td>
