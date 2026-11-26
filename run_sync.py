@@ -3,6 +3,8 @@
 
 import os
 import sys
+import time
+import threading
 import datetime
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -52,20 +54,44 @@ def clean_val(v):
             return v.decode("utf-8", errors="ignore").strip()
     return str(v).strip()
 
-def _parallel_sb_write(sb, table: str, records: list, method: str = "upsert", on_conflict: str = None, chunk_size: int = 400, max_workers: int = 4) -> int:
-    """Supabase 대량 청크 적재 병렬 헬퍼 (4스레드 병렬 업로드로 동기화 속도 3~5배 가속)"""
+_THREAD_LOCAL = threading.local()
+
+def _get_thread_sb(fallback_sb):
+    if create_client is None or not KEY:
+        return fallback_sb
+    cli = getattr(_THREAD_LOCAL, "sb", None)
+    if cli is None:
+        cli = create_client(URL, KEY)
+        _THREAD_LOCAL.sb = cli
+    return cli
+
+def _parallel_sb_write(sb, table: str, records: list, method: str = "upsert", on_conflict: str = None, chunk_size: int = 200, max_workers: int = 2) -> int:
+    """Supabase 대량 청크 적재 병렬 헬퍼 (스레드별 독립 클라이언트 + 자동 재시도로 Server disconnected 방지)"""
     if not records:
         return 0
     chunks = [records[i:i + chunk_size] for i in range(0, len(records), chunk_size)]
 
     def _send(idx_chunk):
         idx, chunk = idx_chunk
-        q = sb.table(table)
-        if method == "insert":
-            q.insert(chunk).execute()
-        else:
-            q.upsert(chunk, on_conflict=on_conflict).execute()
-        return len(chunk)
+        last_err = None
+        for attempt in range(3):
+            try:
+                cli = _get_thread_sb(sb)
+                q = cli.table(table)
+                if method == "insert":
+                    q.insert(chunk).execute()
+                else:
+                    q.upsert(chunk, on_conflict=on_conflict).execute()
+                return len(chunk)
+            except Exception as e:
+                last_err = e
+                err_msg = str(e)
+                if table in err_msg or "PGRST205" in err_msg:
+                    raise
+                # 연결 끊김 시 스레드 로컬 클라이언트 초기화 후 재시도
+                _THREAD_LOCAL.sb = None
+                time.sleep(0.4 * (attempt + 1))
+        raise last_err
 
     success = 0
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
