@@ -93,7 +93,7 @@ function executeQuotationPrint() {
     if (typeof window.saveCurrentQuotationToSupabase === 'function') {
       window.saveCurrentQuotationToSupabase();
     }
-  } catch(e) {}
+  } catch (e) { }
   window.print();
 }
 window.executeQuotationPrint = executeQuotationPrint;
@@ -117,7 +117,7 @@ function openQuotationModal() {
   }
 
   window.quoteItemsData = [];
-  
+
   // 1. 체크박스로 선택된 항목들 수집
   const checkedBoxes = document.querySelectorAll('.quote-select-checkbox:checked');
   let selectedItems = [];
@@ -146,7 +146,7 @@ function openQuotationModal() {
     selectedItems.forEach(it => {
       if (!defaultCust && it.customer && it.customer !== "-") defaultCust = it.customer;
       if (!defaultSales && it.owner && it.owner !== "-" && it.owner !== "본사 일반재고") defaultSales = it.owner;
-      
+
       const stock = Number(it.stock) || 1;
       const shipFx = Number(it.shipFx || it.ship_fx) || 1350;
       let unitKrw = 0;
@@ -171,7 +171,7 @@ function openQuotationModal() {
     const partName = document.getElementById("inputPartName")?.value.trim() || "-";
     const maker = document.getElementById("selectMaker")?.value || "-";
     const stock = parseMaskedNumber(document.getElementById("inputStock")?.value) || 0;
-    
+
     let unitKrw = 0;
     const rawKrwText = document.getElementById("minSaleUnitReplaceKrw")?.innerText || "";
     const match = rawKrwText.match(/₩([0-9,]+)/);
@@ -258,7 +258,7 @@ function updateQuoteRowItem(idx, key, val) {
     window.quoteItemsData[idx][key] = val;
   }
   recalculateQuoteTotals();
-  
+
   // AMOUNT 셀만 실시간 갱신
   const rowEl = document.querySelector(`tr[data-quote-row-idx="${idx}"]`);
   if (rowEl) {
@@ -321,7 +321,7 @@ window.recalculateQuoteTotals = recalculateQuoteTotals;
 // --- ⚡ 성능 최적화: 디바운스 (Debounce) 함수 ---
 function debounce(func, delay = 250) {
   let timer = null;
-  return function(...args) {
+  return function (...args) {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       func.apply(this, args);
@@ -342,9 +342,9 @@ let selectedStockItem = null;
 let currentPricingMode = 'margin'; // 'margin' (마진율 %) | 'markup' (배수율 x)
 let currentTargetMarginRate = 0.20;
 let currentTargetMultiplier = 1.25;
-let renderPricingPresets = () => {};
-let updatePricingUI = () => {};
-let setPricingMode = () => {};
+let renderPricingPresets = () => { };
+let updatePricingUI = () => { };
+let setPricingMode = () => { };
 
 function callRenderInventoryHeaders(tab) {
   const fn = InventoryModule.renderInventoryHeaders || InventoryModule.default?.renderInventoryHeaders;
@@ -354,8 +354,8 @@ function callRenderInventoryHeaders(tab) {
 function callRenderInventoryList(items) {
   const fn = InventoryModule.renderInventoryList || InventoryModule.renderInventoryTable || InventoryModule.default;
   if (typeof fn === 'function') {
-    const canEdit = (typeof window.isCsOrAdminUser === 'function') 
-      ? window.isCsOrAdminUser() 
+    const canEdit = (typeof window.isCsOrAdminUser === 'function')
+      ? window.isCsOrAdminUser()
       : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
     fn(items, activeTab, loadFormFromItem, handleDeleteItem, handleOpenSplitModal, canEdit);
   }
@@ -412,7 +412,7 @@ async function deleteInventoryItem(id) {
   if (error) throw error;
   try {
     await supabase.from('legacy_shipments').delete().eq('inventory_item_id', String(id));
-  } catch(e) {}
+  } catch (e) { }
   return true;
 }
 
@@ -942,7 +942,7 @@ function bindTabSwitch() {
 }
 
 // 📦 수주등록 폼 접이식(Accordion) 토글
-window.toggleFormSection = function(forceOpen = null) {
+window.toggleFormSection = function (forceOpen = null) {
   const body = document.getElementById('formSectionBody');
   const icon = document.getElementById('formToggleIcon');
   const text = document.getElementById('toggleFormBtnText');
@@ -1099,7 +1099,7 @@ function updateSalesFilterCounts(items) {
 
   list.forEach(it => {
     const owner = String(it.owner || '').trim().toLowerCase();
-    const matched = SALES_MASTER.find(s => 
+    const matched = SALES_MASTER.find(s =>
       s.key.toLowerCase() === owner || s.match.some(m => m.toLowerCase() === owner)
     );
     if (matched) {
@@ -1118,10 +1118,10 @@ function updateSalesFilterCounts(items) {
   const matchedOpt = Array.from(salesFilter.options).find(o => {
     const ov = o.value.trim().toUpperCase();
     return ov === currentVal ||
-           (currentVal === 'JOYE' && ov === 'JOEY') ||
-           (currentVal === 'JOEY' && ov === 'JOEY') ||
-           (currentVal && ov.includes(currentVal)) ||
-           (currentVal && currentVal.includes(ov));
+      (currentVal === 'JOYE' && ov === 'JOEY') ||
+      (currentVal === 'JOEY' && ov === 'JOEY') ||
+      (currentVal && ov.includes(currentVal)) ||
+      (currentVal && currentVal.includes(ov));
   });
   salesFilter.value = matchedOpt ? matchedOpt.value : 'ALL';
 }
@@ -1171,31 +1171,31 @@ function applyFilters() {
       // Sales / Owner alias and Korean name expansion (e.g., joye -> joey, 조지윤, 김현진 -> paul, 황환 -> steve)
       let matchOwner = owner.includes(q);
       if (!matchOwner) {
-        const matchedSales = SALES_MASTER.find(s => 
+        const matchedSales = SALES_MASTER.find(s =>
           s.key.toLowerCase() === owner || s.match.some(m => m.toLowerCase() === owner)
         );
         if (matchedSales) {
           matchOwner = matchedSales.match.some(m => m.toLowerCase().includes(q) || q.includes(m.toLowerCase())) ||
-                       matchedSales.label.toLowerCase().includes(q) ||
-                       (q === 'joye' && matchedSales.key === 'JOEY');
+            matchedSales.label.toLowerCase().includes(q) ||
+            (q === 'joye' && matchedSales.key === 'JOEY');
         }
       }
 
       return part.includes(q) ||
-             maker.includes(q) ||
-             matchOwner ||
-             cust.includes(q) ||
-             realCust.includes(q) ||
-             dc.includes(q) ||
-             track.includes(q) ||
-             po.includes(q) ||
-             memo.includes(q);
+        maker.includes(q) ||
+        matchOwner ||
+        cust.includes(q) ||
+        realCust.includes(q) ||
+        dc.includes(q) ||
+        track.includes(q) ||
+        po.includes(q) ||
+        memo.includes(q);
     });
   }
 
   if (selectedLine && !['ALL', '전체', '라인 전체', ''].includes(selectedLine)) {
     const target = selectedLine.trim().toLowerCase();
-    
+
     const definedMajorLines = [
       'sst', 's.belling', 'esmt', 'issi', 'icsi', 'ams', 'eon', 'giantec',
       'smi', 'wiznet', 'ait', 'gigadevice', 'plx', 'belfuse', 'lumissil',
@@ -1236,13 +1236,13 @@ function applyFilters() {
     if (target === 'others' || target === '기타') {
       filtered = filtered.filter(item => {
         const owner = String(item.owner || '').trim().toLowerCase();
-        const isMajor = SALES_MASTER.some(s => 
+        const isMajor = SALES_MASTER.some(s =>
           s.key.toLowerCase() === owner || s.match.some(m => m.toLowerCase() === owner)
         );
         return !isMajor;
       });
     } else {
-      const master = SALES_MASTER.find(s => 
+      const master = SALES_MASTER.find(s =>
         s.key.toLowerCase() === target ||
         s.match.some(m => m.toLowerCase() === target) ||
         target.includes(s.key.toLowerCase()) ||
@@ -1279,7 +1279,7 @@ function applyFilters() {
     });
   }
 
-  
+
   // 출하일자 기간 검색 필터링 (shippedDate 기준)
   const shipStart = document.getElementById('filterShipDateStart')?.value;
   const shipEnd = document.getElementById('filterShipDateEnd')?.value;
@@ -1314,11 +1314,11 @@ function setSelectValue(selectId, customInputId, val, customVal) {
   const matchedOpt = Array.from(sel.options).find(opt => {
     const optVal = opt.value.trim().toLowerCase();
     const optText = opt.text.trim().toLowerCase();
-    return optVal === targetLower || 
-           (targetLower && optVal.includes(targetLower)) || 
-           (targetLower && targetLower.includes(optVal)) ||
-           (optText && optText.includes(targetLower)) ||
-           ((targetLower === 'joey' || targetLower === 'joye') && (optVal === 'joey' || optVal === 'joye'));
+    return optVal === targetLower ||
+      (targetLower && optVal.includes(targetLower)) ||
+      (targetLower && targetLower.includes(optVal)) ||
+      (optText && optText.includes(targetLower)) ||
+      ((targetLower === 'joey' || targetLower === 'joye') && (optVal === 'joey' || optVal === 'joye'));
   });
 
   if (matchedOpt && matchedOpt.value !== customVal) {
@@ -1652,7 +1652,7 @@ async function loadSalesPriceGuideBanner(partName, unitUsd, shipFx) {
   }
 }
 
-window.applySuggestedMarginRate = function(marginPct) {
+window.applySuggestedMarginRate = function (marginPct) {
   const pct = Number(marginPct);
   if (isNaN(pct) || pct <= 0 || pct >= 99) return;
   currentPricingMode = 'margin';
@@ -1665,7 +1665,7 @@ window.applySuggestedMarginRate = function(marginPct) {
   runEngine();
 };
 
-window.applySuggestedTargetOffer = function(usdPrice) {
+window.applySuggestedTargetOffer = function (usdPrice) {
   const val = Number(usdPrice);
   if (isNaN(val) || val <= 0) return;
   const targetInp = document.getElementById('inputTargetOffer');
@@ -1758,7 +1758,7 @@ function setupSalesCalculatorControls() {
     { val: 3.0, label: '3.0x' }
   ];
 
-  renderPricingPresets = function() {
+  renderPricingPresets = function () {
     const container = document.getElementById('pricingPresetContainer');
     if (!container) return;
     const presets = currentPricingMode === 'margin' ? marginPresets : markupPresets;
@@ -1793,7 +1793,7 @@ function setupSalesCalculatorControls() {
     });
   };
 
-  updatePricingUI = function() {
+  updatePricingUI = function () {
     const customInp = document.getElementById('inputCustomMargin');
     const hintEl = document.getElementById('pricingConversionHint');
     const btnMargin = document.getElementById('btnModeMargin');
@@ -1863,7 +1863,7 @@ function setupSalesCalculatorControls() {
     }
   };
 
-  setPricingMode = function(mode) {
+  setPricingMode = function (mode) {
     if (currentPricingMode === mode) return;
     currentPricingMode = mode;
     const customInp = document.getElementById('inputCustomMargin');
@@ -1930,6 +1930,17 @@ window.renderSelectedStockCard = renderSelectedStockCard;
 window.clearSelectedStockCard = clearSelectedStockCard;
 window.setupSalesCalculatorControls = setupSalesCalculatorControls;
 
+window.toggleSalesCalculator = function(forceOpen = null) {
+  const body = document.getElementById('salesQuotationBody');
+  const badge = document.getElementById('salesCalcCollapseBadge');
+  if (!body) return;
+  const shouldOpen = forceOpen !== null ? !!forceOpen : body.classList.contains('hidden');
+  body.classList.toggle('hidden', !shouldOpen);
+  if (badge) {
+    badge.textContent = shouldOpen ? '▾ 접기' : '▸ 펼치기';
+  }
+};
+
 function loadFormFromItem(id) {
   const item = getCachedItem(id);
   if (!item) return;
@@ -1937,6 +1948,7 @@ function loadFormFromItem(id) {
 
   // 1) 영업 견적 탭: 선택 재고 카드 표시 & 계산기 즉시 반영 후 최상단으로 부드럽게 스크롤
   if (activeTab === 'sales') {
+    window.toggleSalesCalculator(true);
     renderSelectedStockCard(item);
     runEngine();
 
@@ -2146,9 +2158,9 @@ function bindInputs() {
   bindCustomSelect('selectOwner', 'inputCustomOwner', '__CUSTOM_OWNER__');
 
   const filterElementIds = [
-    'searchQuery', 'searchInput', 
-    'filterLine', 'filterMaker', 'selectLine', 
-    'filterSales', 'filterOwner', 'selectSales', 
+    'searchQuery', 'searchInput',
+    'filterLine', 'filterMaker', 'selectLine',
+    'filterSales', 'filterOwner', 'selectSales',
     'filterStatus', 'filterPayment', 'selectStatus'
   ];
   const debouncedApplyFilters = debounce(applyFilters, 200);
@@ -2179,8 +2191,8 @@ function bindInputs() {
 
   safeAddListener('excelExportBtn', 'click', () => {
     try {
-      const filtered = (typeof InventoryModule.getLastFilteredItems === 'function') 
-        ? InventoryModule.getLastFilteredItems() 
+      const filtered = (typeof InventoryModule.getLastFilteredItems === 'function')
+        ? InventoryModule.getLastFilteredItems()
         : (window.getLastFilteredItems ? window.getLastFilteredItems() : null);
       const itemsToExport = (filtered && filtered.length > 0) ? filtered : cachedItems;
       exportToExcel(itemsToExport);
@@ -2345,7 +2357,7 @@ function bindCustomSelect(selectId, inputId, customVal) {
 }
 
 function bindModals() {
-  window.fillLandedCostFromChargeRecord = function(c) {
+  window.fillLandedCostFromChargeRecord = function (c) {
     if (!c) return;
     const rate = Number(c.rate) > 500 ? Number(c.rate) : 1350;
     const freightKrw = (Number(c.awb_fee) || 0) + (Number(c.freight) || 0);
@@ -2371,7 +2383,7 @@ function bindModals() {
     }
   };
 
-  window.populateLandedCostPicker = async function() {
+  window.populateLandedCostPicker = async function () {
     const picker = document.getElementById('lcImportChargePicker');
     if (!picker) return;
     if (!picker.dataset.bound) {
@@ -2392,7 +2404,7 @@ function bindModals() {
       window._lcChargeList = items;
       picker.innerHTML = `<option value="">-- 최근 통관 B/L · 인보이스 실비 선택 (${items.length}건) --</option>` +
         items.map((c, i) => `<option value="${i}">[${c.in_date || '-'}] ${c.supp} | ${c.forwarder || '특송'} B/L:${c.bl_no || '-'} | ₩${Math.round(c.charge || 0).toLocaleString()} (+${c.overhead_pct || 0}%)</option>`).join('');
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const landedCostForm = document.getElementById('landedCostForm');
@@ -2402,7 +2414,7 @@ function bindModals() {
       const totalGoods = parseFloat(document.getElementById('lcTotalGoodsUsd')?.value) || 0;
       const baseFreight = parseFloat(document.getElementById('lcFreightUsd')?.value) || 0;
       const totalCustomsKrw = parseFloat(document.getElementById('lcCustomsKrw')?.value) || 0;
-      
+
       const courierType = document.getElementById('lcCourierType')?.value || 'dhl';
       const fuelSurchargeRate = courierType === 'dhl' ? (parseFloat(document.getElementById('lcFuelSurcharge')?.value) || 0) / 100 : 0;
       const effectiveFreight = baseFreight * (1 + fuelSurchargeRate);
@@ -2419,8 +2431,8 @@ function bindModals() {
 
       document.getElementById('landedCostModal')?.classList.add('hidden');
       runEngine();
-      
-      const surchargeInfo = courierType === 'dhl' ? ` (DHL 유류할증료 ${(fuelSurchargeRate*100).toFixed(1)}% 포함)` : '';
+
+      const surchargeInfo = courierType === 'dhl' ? ` (DHL 유류할증료 ${(fuelSurchargeRate * 100).toFixed(1)}% 포함)` : '';
       alert(`[배부 완료${surchargeInfo}] 부대비용 가산율 +${calculatedOverheadRate.toFixed(2)}%가 적용되었습니다.`);
     };
   }
@@ -2457,11 +2469,11 @@ function runEngine() {
 
   setText('minSaleUnitActualUsd', `$${result.unitMinPriceActualUsd.toFixed(4)}`);
   setText('minSaleUnitActualKrw', `(₩${Math.round(result.unitMinPriceActualKrw).toLocaleString()} / @${Math.round(shipFx).toLocaleString()})`);
-  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(result.totalMinPriceActualUsd * shipFx).toLocaleString()})`);
+  setText('minSaleTotalActual', `$${result.totalMinPriceActualUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (₩${Math.round(result.totalMinPriceActualUsd * shipFx).toLocaleString()})`);
 
   setText('minSaleUnitReplaceUsd', `$${result.unitMinPriceReplaceUsd.toFixed(4)}`);
   setText('minSaleUnitReplaceKrw', `(₩${Math.round(result.unitMinPriceReplaceKrw).toLocaleString()} / @${Math.round(appliedFxRate).toLocaleString()})`);
-  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} (₩${Math.round(result.totalMinPriceReplaceUsd * appliedFxRate).toLocaleString()})`);
+  setText('minSaleTotalReplace', `$${result.totalMinPriceReplaceUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (₩${Math.round(result.totalMinPriceReplaceUsd * appliedFxRate).toLocaleString()})`);
 
   const cardCurrentFx = document.getElementById('salesCardCurrentFx');
   if (cardCurrentFx) cardCurrentFx.innerText = `₩${Math.round(appliedFxRate).toLocaleString()}`;
@@ -2526,7 +2538,7 @@ function renderTierTable(unitUsd, unitKrw, currentQty) {
       <td class="py-1 px-1">${t.label}</td>
       <td class="py-1 px-1 text-indigo-950 font-black text-xs">$${unitUsd.toFixed(4)}</td>
       <td class="py-1 px-1 text-slate-600 font-semibold text-[11px]">₩${Math.round(unitKrw).toLocaleString()}</td>
-      <td class="py-1 px-1 text-slate-800 font-bold">$${(unitUsd * t.qty).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</td>
+      <td class="py-1 px-1 text-slate-800 font-bold">$${(unitUsd * t.qty).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
     </tr>
   `).join('');
 }
@@ -2584,7 +2596,7 @@ async function saveCurrentForm() {
   try {
     const actionType = editingItemId ? 'UPDATE' : 'CREATE';
     let changeDetails = '정보 수정';
-    
+
     if (editingItemId) {
       const orig = getCachedItem(editingItemId);
       if (orig) {
@@ -2621,7 +2633,8 @@ async function saveCurrentForm() {
         };
 
         const diffs = [];
-        for (const k of Object.keys(payload)) { if (k === 'margin') continue;
+        for (const k of Object.keys(payload)) {
+          if (k === 'margin') continue;
           const camelKey = k.replace(/_([a-z])/g, (_, g) => g.toUpperCase());
           const oVal = orig[k] !== undefined ? orig[k] : (orig[camelKey] !== undefined ? orig[camelKey] : '');
           const nVal = payload[k];
@@ -2660,8 +2673,8 @@ async function saveCurrentForm() {
 }
 
 async function handleDeleteItem(id) {
-  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
-    ? window.isCsOrAdminUser() 
+  const canEdit = (typeof window.isCsOrAdminUser === 'function')
+    ? window.isCsOrAdminUser()
     : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
 
   if (!canEdit) {
@@ -2742,8 +2755,8 @@ window.setCachedItems = (items) => {
 };
 
 function handleOpenSplitModal(itemOrId) {
-  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
-    ? window.isCsOrAdminUser() 
+  const canEdit = (typeof window.isCsOrAdminUser === 'function')
+    ? window.isCsOrAdminUser()
     : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
 
   if (!canEdit) {
@@ -2807,7 +2820,7 @@ window.handleSplitModalOpen = handleOpenSplitModal;
 // 부분 출하 분할 실행 핸들러 (신규 분할건 DB 생성 보장)
 document.getElementById('splitShipmentForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  
+
   const submitBtn = e.target.querySelector('button[type="submit"]');
   if (submitBtn) {
     submitBtn.disabled = true;
@@ -2902,9 +2915,9 @@ document.getElementById('splitShipmentForm')?.addEventListener('submit', async (
     }
 
     alert(`✅ 부분 출하 분할이 성공적으로 완료되었습니다!\n- 기존 잔여 수량: ${remainingStock.toLocaleString()} EA\n- 신규 분할 출하: ${splitQty.toLocaleString()} EA (출하완료)`);
-    
+
     document.getElementById('splitShipmentModal')?.classList.add('hidden');
-    
+
     // 목록 새로고침
     if (typeof loadAndRenderInventory === 'function') {
       await loadAndRenderInventory();
@@ -2932,7 +2945,7 @@ window.handleSplitModalOpen = window.openSplitModal;
 window._currentActiveItemId = null;
 
 // [1] 행 클릭 시 즉시 짙은 강조 (파란색 배경 + 왼쪽 굵은 인디고 인라인 바)
-window.highlightActiveRow = function(itemId) {
+window.highlightActiveRow = function (itemId) {
   window._currentActiveItemId = itemId;
 
   // 이전 선택된 모든 행의 배경 및 테두리 초기화
@@ -2960,14 +2973,14 @@ window.highlightActiveRow = function(itemId) {
 };
 
 // [2] 저장 후 방금 수정한 품목 위치로 부모 스크롤 이동 및 노란색 번쩍임
-window.flashSavedRow = function(itemId) {
+window.flashSavedRow = function (itemId) {
   if (!itemId) return;
 
   let attempts = 0;
   const timer = setInterval(() => {
     attempts++;
     const targetTr = document.getElementById(`row-item-${itemId}`) || document.querySelector(`tr[data-item-id="${itemId}"]`);
-    
+
     if (targetTr) {
       clearInterval(timer);
 
@@ -3010,7 +3023,7 @@ window.flashSavedRow = function(itemId) {
 // ========================================================
 // 📦 플로팅 드로어 4단 서브탭 및 감사로그 단일 통합본
 // ========================================================
-window.switchDrawerTab = function(tabIndex) {
+window.switchDrawerTab = function (tabIndex) {
   for (let i = 1; i <= 4; i++) {
     const btn = document.getElementById(`dTabBtn${i}`);
     const content = document.getElementById(`drawerTabContent${i}`);
@@ -3027,7 +3040,7 @@ window.switchDrawerTab = function(tabIndex) {
   }
 };
 
-window.loadDrawerAuditHistory = async function() {
+window.loadDrawerAuditHistory = async function () {
   const container = document.getElementById('drawerAuditListContainer');
   const id = document.getElementById('drawerItemId')?.value;
   if (!container || !id) return;
@@ -3045,7 +3058,7 @@ window.loadDrawerAuditHistory = async function() {
 
     container.innerHTML = logs.map(log => {
       const d = new Date(log.created_at);
-      const timeStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const timeStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       const userShort = log.user_email ? log.user_email.split('@')[0] : '익명';
 
       let actionBadge = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">정보수정</span>`;
@@ -3070,7 +3083,7 @@ window.loadDrawerAuditHistory = async function() {
   }
 };
 
-window.openItemDrawer = function(item) {
+window.openItemDrawer = function (item) {
   const drawer = document.getElementById('itemDetailDrawer');
   if (!drawer || !item) return;
 
@@ -3128,8 +3141,8 @@ window.openItemDrawer = function(item) {
 
   window.switchDrawerTab(1);
 
-  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
-    ? window.isCsOrAdminUser() 
+  const canEdit = (typeof window.isCsOrAdminUser === 'function')
+    ? window.isCsOrAdminUser()
     : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
 
   const saveBtn = document.getElementById('drawerSaveBtn');
@@ -3138,8 +3151,8 @@ window.openItemDrawer = function(item) {
 
   if (badge) {
     badge.innerText = canEdit ? 'EDIT' : 'READ ONLY';
-    badge.className = canEdit 
-      ? 'text-[10px] bg-indigo-600 px-2 py-0.5 rounded-full font-mono font-bold' 
+    badge.className = canEdit
+      ? 'text-[10px] bg-indigo-600 px-2 py-0.5 rounded-full font-mono font-bold'
       : 'text-[10px] bg-amber-600 px-2 py-0.5 rounded-full font-mono font-bold';
   }
 
@@ -3173,7 +3186,7 @@ window.openItemDrawer = function(item) {
   }
 };
 
-window.loadDrawerLegacyDetail = async function(partNo, invoiceNo) {
+window.loadDrawerLegacyDetail = async function (partNo, invoiceNo) {
   const body = document.getElementById('drawerLegacyDetailBody');
   const badge = document.getElementById('drawerLegacyDetailBadge');
   if (!body || !partNo) return;
@@ -3274,7 +3287,7 @@ window.loadDrawerLegacyDetail = async function(partNo, invoiceNo) {
   }
 };
 
-window.closeItemDrawer = function() {
+window.closeItemDrawer = function () {
   const drawer = document.getElementById('itemDetailDrawer');
   if (drawer) {
     drawer.classList.add('translate-x-full');
@@ -3282,9 +3295,9 @@ window.closeItemDrawer = function() {
   }
 };
 
-window.saveDrawerItem = async function() {
-  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
-    ? window.isCsOrAdminUser() 
+window.saveDrawerItem = async function () {
+  const canEdit = (typeof window.isCsOrAdminUser === 'function')
+    ? window.isCsOrAdminUser()
     : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
 
   if (!canEdit) {
@@ -3331,7 +3344,7 @@ window.saveDrawerItem = async function() {
     };
 
     const client = (typeof supabase !== 'undefined' && supabase?.from) ? supabase : window.supabase;
-    
+
     // 원본 데이터와 비교하여 상세 변경 내역(Diff) 추출
     const orig = (typeof getCachedItem === 'function') ? getCachedItem(id) : (window.cachedItems?.find(it => String(it.id) === String(id)));
     const labels = {
@@ -3375,7 +3388,7 @@ window.saveDrawerItem = async function() {
       const partDisplay = document.getElementById('drawerPartDisplay')?.innerText || orig?.part_name || orig?.partName || '-';
       const logFn = window.recordAuditLog || (await import('./modules/audit.js')).recordAuditLog;
       await logFn(id, partDisplay, 'UPDATE', changeDetails);
-    } catch(e) {
+    } catch (e) {
       console.warn("감사 로그 저장 예외:", e);
     }
 
@@ -3394,9 +3407,9 @@ window.saveDrawerItem = async function() {
   }
 };
 
-window.deleteDrawerItem = async function() {
-  const canEdit = (typeof window.isCsOrAdminUser === 'function') 
-    ? window.isCsOrAdminUser() 
+window.deleteDrawerItem = async function () {
+  const canEdit = (typeof window.isCsOrAdminUser === 'function')
+    ? window.isCsOrAdminUser()
     : ((typeof isCsOrAdminUser === 'function') ? isCsOrAdminUser() : false);
 
   if (!canEdit) {
@@ -3414,7 +3427,7 @@ window.deleteDrawerItem = async function() {
 // ========================================================
 bootstrap();
 setTimeout(() => {
-  window.refreshActionInboxBadge?.().catch(() => {});
-  window.fetchPurchaseOrdersSummary?.().catch(() => {});
-  window.updatePaymentPendingBadge?.().catch(() => {});
+  window.refreshActionInboxBadge?.().catch(() => { });
+  window.fetchPurchaseOrdersSummary?.().catch(() => { });
+  window.updatePaymentPendingBadge?.().catch(() => { });
 }, 900);

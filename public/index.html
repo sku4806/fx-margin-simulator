@@ -5,6 +5,8 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>BIGSHINE KOREA - 영업 견적 & 수주 및 출하 관리 시스템</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -12,13 +14,26 @@
   <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script defer src="https://unpkg.com/lucide@latest"></script>
   <style>
-    html, body { overflow-x: clip; }
+    html, body {
+      overflow-x: clip;
+      font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    }
+    .font-mono, input[type="number"], td.text-right, th.text-right {
+      font-variant-numeric: tabular-nums;
+    }
     input, select, button { -webkit-tap-highlight-color: transparent; }
     .word-keep { word-break: keep-all; }
-    /* 🚀 대용량 테이블 스크롤 가속 및 브라우저 오프스크린 렌더링 최적화 */
+    /* 🚀 대용량 테이블 스크롤 가속 및 가독성 통일 (은은한 Zebra & 호버) */
     tbody tr {
       content-visibility: auto;
       contain-intrinsic-size: 1px 36px;
+      transition: background-color 0.12s ease;
+    }
+    table tbody tr:nth-child(even) {
+      background-color: rgba(248, 250, 252, 0.55);
+    }
+    table tbody tr:hover {
+      background-color: rgba(238, 242, 255, 0.65) !important;
     }
     /* 모바일/데스크톱 가로 스크롤 탭바의 네이티브 스크롤바 숨김 */
     .scrollbar-none::-webkit-scrollbar { display: none; }
@@ -177,19 +192,24 @@
     <!-- 3. 환율 마진 시뮬레이터 -->
     <div id="salesQuotationPanel" class="bg-white p-3.5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-3 sm:space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-2 pb-1">
-        <div>
-          <h2 class="font-bold text-sm sm:text-base text-slate-900">고객사 제시 권고 견적가 (FX Protection)</h2>
+        <div class="cursor-pointer select-none" onclick="window.toggleSalesCalculator && window.toggleSalesCalculator()">
+          <h2 class="font-bold text-sm sm:text-base text-slate-900 flex items-center gap-1.5">
+            <span>고객사 제시 권고 견적가 (FX Protection)</span>
+            <span id="salesCalcCollapseBadge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">▾ 접기</span>
+          </h2>
           <span class="text-[10px] sm:text-[11px] text-slate-400">달러(USD) 기준 우선 표기 및 원화(@환율) 병기</span>
         </div>
         <div class="flex items-center gap-1.5 w-full sm:w-auto justify-end">
-          <button id="openLandedCostBtn" class="flex-1 sm:flex-none text-[11px] sm:text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg border border-slate-300 flex items-center justify-center gap-1">
+          <button id="openLandedCostBtn" class="flex-1 sm:flex-none text-[11px] sm:text-xs bg-white hover:bg-slate-50 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg border border-slate-300 flex items-center justify-center gap-1 shadow-2xs transition-colors">
             <span>🚢</span> 부대비용 자동배부
           </button>
-          <button id="copyQuoteBtn" class="flex-1 sm:flex-none text-[11px] sm:text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm">
+          <button id="copyQuoteBtn" class="flex-1 sm:flex-none text-[11px] sm:text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors">
             <span>📋</span> 견적 복사
           </button>
         </div>
       </div>
+
+      <div id="salesQuotationBody" class="space-y-3 sm:space-y-4">
 
       <!-- 선택 재고 안내 & 상세 카드 컨테이너 -->
       <div id="salesStockCardContainer">
@@ -415,6 +435,7 @@
           </table>
         </div>
       </div>
+      </div> <!-- salesQuotationBody end -->
     </div>
 
     <!-- 4. 전문화 입력 폼팩터 (접이식 아코디언) -->
@@ -732,19 +753,19 @@
             <span>🚢</span> 발주·입고예정
             <span id="poPendingBadge" class="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full hidden">0</span>
           </button>
-          <button type="button" id="openCustomerMasterBtn" onclick="window.openCustomerMasterModal && window.openCustomerMasterModal()" class="text-[11px] bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap" title="거래처 및 담당자 마스터 조회·등록·수정·삭제">
+          <button type="button" id="openCustomerMasterBtn" onclick="window.openCustomerMasterModal && window.openCustomerMasterModal()" class="text-[11px] bg-white hover:bg-teal-50 text-teal-800 font-bold px-2.5 py-2 sm:py-1.5 rounded-lg border border-teal-300 flex items-center justify-center gap-1 shadow-2xs transition-colors cursor-pointer whitespace-nowrap" title="거래처 및 담당자 마스터 조회·등록·수정·삭제">
             <span>🏢</span> 거래처 관리
           </button>
-          <button type="button" id="openQuickTrackingBtn" onclick="window.openTrackingModal && window.openTrackingModal('')" class="text-[11px] bg-sky-600 hover:bg-sky-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap" title="로젠택배 · CJ대한통운 · DHL/FedEx/SF 실시간 배송 조회">
+          <button type="button" id="openQuickTrackingBtn" onclick="window.openTrackingModal && window.openTrackingModal('')" class="text-[11px] bg-white hover:bg-sky-50 text-sky-800 font-bold px-2.5 py-2 sm:py-1.5 rounded-lg border border-sky-300 flex items-center justify-center gap-1 shadow-2xs transition-colors cursor-pointer whitespace-nowrap" title="로젠택배 · CJ대한통운 · DHL/FedEx/SF 실시간 배송 조회">
             <span>🚚</span> 배송조회
           </button>
-          <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap">
+          <button type="button" id="openQuotationModalBtn" onclick="window.openQuotationModal && window.openQuotationModal()" class="text-[11px] bg-white hover:bg-indigo-50 text-indigo-800 font-bold px-2.5 py-2 sm:py-1.5 rounded-lg border border-indigo-300 flex items-center justify-center gap-1 shadow-2xs transition-colors cursor-pointer whitespace-nowrap">
             <span>📄</span> 공식 견적서
           </button>
           <button type="button" id="batchPurchaseRequisitionBtn" onclick="window.openBatchPurchaseRequisition && window.openBatchPurchaseRequisition()" class="hidden text-[11px] bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer whitespace-nowrap" title="선택한 다중 부품들을 전자결재 구매품의서에 일괄 등록">
             <span>✍️</span> 선택 구매품의 (<span id="batchPurchaseCount">0</span>)
           </button>
-          <button id="excelExportBtn"  class="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-colors whitespace-nowrap">
+          <button id="excelExportBtn"  class="text-[11px] bg-white hover:bg-emerald-50 text-emerald-800 font-bold px-2.5 py-2 sm:py-1.5 rounded-lg border border-emerald-300 flex items-center justify-center gap-1 shadow-2xs transition-colors whitespace-nowrap">
             <span>📥</span> 엑셀 다운로드
           </button>
           
