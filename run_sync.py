@@ -696,6 +696,22 @@ def main():
             print(f"❌ Supabase 클라이언트 연결 실패: {e}")
             return
 
+    def _ensure_conn(c):
+        try:
+            if c is not None:
+                cur = c.cursor()
+                cur.execute("SELECT 1")
+                cur.fetchone()
+                cur.close()
+                return c
+        except Exception:
+            try:
+                c.close()
+            except Exception:
+                pass
+        print("🔄 사내 MS-SQL 연결이 유휴 종료되어 자동 재연결합니다...")
+        return pymssql.connect(**LEGACY_DB_CONFIG)
+
     try:
         conn = pymssql.connect(**LEGACY_DB_CONFIG)
     except Exception as e:
@@ -717,13 +733,20 @@ def main():
             sync_bundled_files(conn)
         else:
             sync_inventory(conn, sb)
+            conn = _ensure_conn(conn)
             min_date = None if args.full_quotations else args.since
             sync_quotations(conn, sb, min_date=min_date)
+            conn = _ensure_conn(conn)
             sync_unpaid(conn, sb, min_date="2010-01-01")
+            conn = _ensure_conn(conn)
             sync_customers(conn, sb)
+            conn = _ensure_conn(conn)
             sync_bundled_files(conn)
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 전체 동기화 정상 종료.")
 
