@@ -747,6 +747,9 @@ def delete_web_order(po_no: str, part_no: Optional[str] = None):
 # ========================================================
 # 📈 품목별 과거 단가 및 마진 이력 추적 (Price History) API
 # ========================================================
+import time as _ph_time
+_PRICE_HISTORY_RESP_CACHE: Dict[str, tuple] = {}
+
 @app.get("/api/price-history")
 def price_history(part_no: str):
     p_clean = part_no.strip() if part_no else ""
@@ -762,6 +765,12 @@ def price_history(part_no: str):
             }
         }
     try:
+        cache_key = p_clean.upper()
+        now_ts = _ph_time.time()
+        cached_entry = _PRICE_HISTORY_RESP_CACHE.get(cache_key)
+        if cached_entry and (now_ts - cached_entry[0]) < 120:
+            return cached_entry[1]
+
         data = None
         try:
             data = legacy_mssql.get_part_price_history(part_no=p_clean)
@@ -800,7 +809,11 @@ def price_history(part_no: str):
         except Exception:
             pass
 
-        return {"status": "success", "data": data}
+        resp_obj = {"status": "success", "data": data}
+        if len(_PRICE_HISTORY_RESP_CACHE) >= 300:
+            _PRICE_HISTORY_RESP_CACHE.clear()
+        _PRICE_HISTORY_RESP_CACHE[cache_key] = (now_ts, resp_obj)
+        return resp_obj
     except Exception as e:
         return {"status": "error", "message": str(e), "data": {}}
 
