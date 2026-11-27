@@ -1453,7 +1453,6 @@ function renderSelectedStockCard(item) {
   }
 
   // 3-B. 동일 품번 전사 다중 Lot 합산 가용량 표시 (FIFO 안내)
-  const cardStockQty = document.getElementById('salesCardStockQty');
   if (cardStockQty && Array.isArray(window.cachedItems) && partName && partName !== '-') {
     const pLow = partName.toLowerCase();
     const samePartLots = window.cachedItems.filter(it => ((it.partName || it.part_name || '').toLowerCase() === pLow) && (Number(it.stock) || 0) > 0);
