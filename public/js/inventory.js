@@ -485,7 +485,7 @@ function generateLegacyMasterRow(item, canEdit) {
       </td>
       <td class="py-2.5 px-2 align-middle">
         ${cname !== '-' ? `<button type="button" onclick="event.stopPropagation(); window.openCustomer360Modal && window.openCustomer360Modal('${cname.replace(/'/g, "\\'")}')" class="font-bold text-slate-800 hover:text-indigo-700 hover:underline truncate max-w-[150px] block text-left cursor-pointer" title="클릭하여 [${cname}] 360° 고객사 통합 브리핑 보기">${cname}</button>` : `<div class="font-bold text-slate-400">-</div>`}
-        <div class="text-[10px] text-slate-400 font-mono mt-0.5">입고: ${entryDate}</div>
+        <div class="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center flex-wrap">입고: ${entryDate}${getFifoAgingBadgeHtml(rawDate, stock)}</div>
       </td>
       <td class="py-2.5 px-2 text-center align-middle whitespace-nowrap">
         <div class="font-bold text-indigo-800">${sales}</div>
@@ -865,6 +865,7 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
               <span class="text-[9px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded whitespace-nowrap">${item.maker}</span>
               <span class="text-[9px] font-mono font-bold text-slate-500 whitespace-nowrap">D/C: ${item.dateCode}</span>
               <span class="text-[9px] font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 whitespace-nowrap">${item.kind || '내자'}</span>
+              ${getFifoAgingBadgeHtml(item.entryDate || item.entry_date, item.stock)}
             </div>
             <div class="font-black text-[13px] text-slate-900 mt-0.5 break-all tracking-tight leading-snug">${partName}</div>
           </div>
@@ -914,6 +915,23 @@ function renderMobileCards(items, activeTab, onEdit, onDelete, onSplit, canEdit)
       </div>
     `;
   }).join('');
+}
+
+function getFifoAgingBadgeHtml(rawDate, stockQty) {
+  if (!rawDate || rawDate === '-' || (Number(stockQty) || 0) <= 0) return '';
+  const dtStr = String(rawDate).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dtStr)) return '';
+  const days = Math.floor((Date.now() - new Date(dtStr).getTime()) / 86400000);
+  if (days >= 365) {
+    return `<span class="ml-1 px-1 py-0.2 rounded text-[9px] font-black bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap" title="입고 후 ${days}일 경과 — 선입선출(FIFO) 최우선 소진 권장">🔥 ${Math.floor(days / 365)}년+ FIFO</span>`;
+  }
+  if (days >= 180) {
+    return `<span class="ml-1 px-1 py-0.2 rounded text-[9px] font-bold bg-orange-100 text-orange-800 border border-orange-300 whitespace-nowrap" title="입고 후 ${days}일 경과 — 선입선출(FIFO) 우선 소진 권장">⏳ ${days}일</span>`;
+  }
+  if (days >= 90) {
+    return `<span class="ml-1 px-1 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-300 whitespace-nowrap" title="입고 후 ${days}일 경과">${days}일</span>`;
+  }
+  return '';
 }
 
 function getStatusBadgeClass(status) {

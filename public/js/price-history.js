@@ -98,6 +98,77 @@ function showPriceHistoryError(msg) {
   }
 }
 
+function buildPriceTrendChartHtml(purchases = [], sales = []) {
+  const buyPts = (purchases || [])
+    .map(p => ({
+      date: (p.in_date || '').slice(0, 10),
+      val: Number(p.in_up) || ((Number(p.sl_up) || 0) * (Number(p.in_rate) || 1350))
+    }))
+    .filter(p => p.date && p.val > 0)
+    .slice(0, 15)
+    .reverse();
+
+  const sellPts = (sales || [])
+    .map(s => ({
+      date: (s.out_date || '').slice(0, 10),
+      val: Number(s.out_up) || 0,
+      mgn: Number(s.mgn_rate) || 0
+    }))
+    .filter(s => s.date && s.val > 0)
+    .slice(0, 15)
+    .reverse();
+
+  if (buyPts.length < 2 && sellPts.length < 2) return '';
+
+  const allDates = Array.from(new Set([...buyPts.map(p => p.date), ...sellPts.map(s => s.date)])).sort();
+  if (allDates.length < 2) return '';
+
+  const allVals = [...buyPts.map(p => p.val), ...sellPts.map(s => s.val)];
+  const minV = Math.min(...allVals) * 0.9;
+  const maxV = Math.max(...allVals) * 1.08 || 1;
+  const spanV = Math.max(1, maxV - minV);
+
+  const W = 640, H = 115, padL = 54, padR = 16, padT = 14, padB = 22;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const xFor = (dt) => {
+    const idx = allDates.indexOf(dt);
+    return padL + (allDates.length > 1 ? (idx / (allDates.length - 1)) * innerW : innerW / 2);
+  };
+  const yFor = (v) => padT + innerH - ((v - minV) / spanV) * innerH;
+
+  const mkPath = (pts) => pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${xFor(p.date).toFixed(1)},${yFor(p.val).toFixed(1)}`).join(' ');
+
+  return `
+    <div class="px-3 sm:px-4 py-2 bg-white border-b border-slate-200 shrink-0">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+        <span class="text-[11px] font-bold text-slate-700">📉 최근 매입·판매 단가 추이 (KRW 기준)</span>
+        <div class="flex items-center gap-3 text-[10px] font-bold">
+          ${buyPts.length >= 2 ? `<span class="flex items-center gap-1 text-slate-600"><span class="inline-block w-3 h-0.5 bg-slate-500"></span>매입단가 (${buyPts.length}건)</span>` : ''}
+          ${sellPts.length >= 2 ? `<span class="flex items-center gap-1 text-blue-700"><span class="inline-block w-3 h-0.5 bg-blue-600"></span>판매단가 (${sellPts.length}건)</span>` : ''}
+        </div>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" class="w-full h-24 sm:h-28 overflow-visible">
+        <line x1="${padL}" y1="${padT}" x2="${W - padR}" y2="${padT}" stroke="#e2e8f0" stroke-dasharray="3,3" />
+        <line x1="${padL}" y1="${padT + innerH / 2}" x2="${W - padR}" y2="${padT + innerH / 2}" stroke="#e2e8f0" stroke-dasharray="3,3" />
+        <line x1="${padL}" y1="${padT + innerH}" x2="${W - padR}" y2="${padT + innerH}" stroke="#cbd5e1" />
+        <text x="${padL - 5}" y="${padT + 4}" text-anchor="end" font-size="9" fill="#64748b">₩${Math.round(maxV).toLocaleString()}</text>
+        <text x="${padL - 5}" y="${padT + innerH + 3}" text-anchor="end" font-size="9" fill="#64748b">₩${Math.round(minV).toLocaleString()}</text>
+        <text x="${padL}" y="${H - 4}" text-anchor="start" font-size="9" fill="#94a3b8">${allDates[0]}</text>
+        <text x="${W - padR}" y="${H - 4}" text-anchor="end" font-size="9" fill="#94a3b8">${allDates[allDates.length - 1]}</text>
+        ${buyPts.length >= 2 ? `
+          <path d="${mkPath(buyPts)}" fill="none" stroke="#64748b" stroke-width="1.8" stroke-dasharray="4,2" />
+          ${buyPts.map(p => `<circle cx="${xFor(p.date).toFixed(1)}" cy="${yFor(p.val).toFixed(1)}" r="2.8" fill="#64748b"><title>[매입] ${p.date}: ₩${Math.round(p.val).toLocaleString()}</title></circle>`).join('')}
+        ` : ''}
+        ${sellPts.length >= 2 ? `
+          <path d="${mkPath(sellPts)}" fill="none" stroke="#2563eb" stroke-width="2.2" />
+          ${sellPts.map(p => `<circle cx="${xFor(p.date).toFixed(1)}" cy="${yFor(p.val).toFixed(1)}" r="3.2" fill="#2563eb"><title>[판매] ${p.date}: ₩${Math.round(p.val).toLocaleString()} (마진 ${p.mgn}%)</title></circle>`).join('')}
+        ` : ''}
+      </svg>
+    </div>
+  `;
+}
+
 function renderPriceHistoryContent(payload) {
   const container = document.getElementById('priceHistoryContent');
   if (!container) return;
@@ -171,6 +242,8 @@ function renderPriceHistoryContent(payload) {
         ` : ''}
       </div>
     </div>
+
+    ${buildPriceTrendChartHtml(purchases, sales)}
 
     <!-- 탭 네비게이션 버튼 (단일 행 가로 스와이프 지원) -->
     <div class="px-3 sm:px-4 pt-1.5 bg-white border-b border-slate-200 flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-none flex-nowrap shrink-0">

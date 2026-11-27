@@ -1452,6 +1452,22 @@ function renderSelectedStockCard(item) {
     btnQuickAvail.style.display = (available > 0 && available !== stock) ? 'inline-block' : 'none';
   }
 
+  // 3-B. 동일 품번 전사 다중 Lot 합산 가용량 표시 (FIFO 안내)
+  const cardStockQty = document.getElementById('salesCardStockQty');
+  if (cardStockQty && Array.isArray(window.cachedItems) && partName && partName !== '-') {
+    const pLow = partName.toLowerCase();
+    const samePartLots = window.cachedItems.filter(it => ((it.partName || it.part_name || '').toLowerCase() === pLow) && (Number(it.stock) || 0) > 0);
+    if (samePartLots.length > 1) {
+      const sumStk = samePartLots.reduce((s, it) => s + (Number(it.stock) || 0), 0);
+      const sumAvail = samePartLots.reduce((s, it) => {
+        const st = Number(it.stock) || 0;
+        const ar = Number(it.arrangedQty ?? it.arranged_qty) || 0;
+        return s + Math.max(0, st - ar);
+      }, 0);
+      cardStockQty.innerHTML = `${stock.toLocaleString()} EA <span class="text-[10px] font-bold text-indigo-600 ml-1" title="동일 품번 전사 ${samePartLots.length}개 Lot 합산">(전사 ${samePartLots.length}Lot: ${sumAvail.toLocaleString()} / ${sumStk.toLocaleString()})</span>`;
+    }
+  }
+
   // 4. Interactive Qty Input
   const interactiveQty = document.getElementById('salesInteractiveQty');
   const initialQty = available > 0 ? available : (stock > 0 ? stock : 1000);
